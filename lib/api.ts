@@ -28,6 +28,11 @@ export const DUMMY = {
     position: "대리",
   },
   attendance: {
+    startTime: "09:02",
+    remaining: {
+      vacation: 12,
+      businessTrip: 5,
+    },
     weeklyData: [
       {
         offset: -2,
