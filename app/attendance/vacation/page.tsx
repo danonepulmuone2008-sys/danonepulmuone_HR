@@ -1,6 +1,6 @@
 "use client";
 import AppBar from "@/components/AppBar";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const VACATION_TYPES = ["연차", "반차(오전)", "반차(오후)", "병가", "경조사"];
 
@@ -11,9 +11,30 @@ export default function VacationPage() {
     type: "연차",
     reason: "",
   });
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const update = (key: string, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    setFiles((prev) => {
+      const existing = prev.map((f) => f.name);
+      const deduped = selected.filter((f) => !existing.includes(f.name));
+      return [...prev, ...deduped];
+    });
+    e.target.value = "";
+  };
+
+  const removeFile = (name: string) =>
+    setFiles((prev) => prev.filter((f) => f.name !== name));
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -39,6 +60,7 @@ export default function VacationPage() {
               ))}
             </div>
           </div>
+
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">시작일</label>
             <input
@@ -48,6 +70,7 @@ export default function VacationPage() {
               className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
             />
           </div>
+
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
             <input
@@ -57,6 +80,7 @@ export default function VacationPage() {
               className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
             />
           </div>
+
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">사유</label>
             <textarea
@@ -66,6 +90,52 @@ export default function VacationPage() {
               rows={4}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 resize-none"
             />
+          </div>
+
+          {/* 첨부파일 */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">증빙서류</label>
+
+            {/* 첨부된 파일 목록 */}
+            {files.length > 0 && (
+              <div className="flex flex-col gap-2 mb-2">
+                {files.map((file) => (
+                  <div
+                    key={file.name}
+                    className="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-200"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-gray-400 text-base flex-shrink-0">📎</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-gray-700 truncate">{file.name}</p>
+                        <p className="text-[10px] text-gray-400">{formatSize(file.size)}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeFile(file.name)}
+                      className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 flex-shrink-0 ml-2 text-lg leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full h-11 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
+            >
+              <span className="text-base">+</span>
+              파일 첨부
+            </button>
           </div>
         </div>
 
