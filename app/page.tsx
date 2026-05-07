@@ -2,7 +2,8 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { DUMMY } from "@/lib/api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -12,8 +13,11 @@ type ModalState =
 type ToastType = "success" | "error";
 
 export default function HomePage() {
-  const { user, attendance, meals } = DUMMY;
-  const mealPercent = Math.round((meals.used / meals.totalLimit) * 100);
+  const { user, attendance } = DUMMY;
+
+  const [mealUsed, setMealUsed] = useState<number>(DUMMY.meals.used);
+  const [mealLimit, setMealLimit] = useState<number>(DUMMY.meals.totalLimit);
+  const mealPercent = Math.round((mealUsed / mealLimit) * 100);
 
   const [clockIn, setClockIn] = useState<string | null>(null);
   const [clockOut, setClockOut] = useState<string | null>(null);
@@ -81,6 +85,21 @@ export default function HomePage() {
     setEditReason("");
     setModal(null);
   };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      fetch("/api/meals/usage", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.used !== undefined) setMealUsed(data.used);
+          if (data.totalLimit !== undefined) setMealLimit(data.totalLimit);
+        })
+        .catch(() => {});
+    });
+  }, []);
 
   const thisWeek = attendance.weeklyData.find((w) => w.offset === 0);
   const weeklyHours = thisWeek ? thisWeek.days.reduce((sum, d) => sum + d.hours, 0) : 0;
@@ -273,7 +292,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 달 사용</span>
-              <span>{meals.used.toLocaleString()}원 / {meals.totalLimit.toLocaleString()}원</span>
+              <span>{mealUsed.toLocaleString()}원 / {mealLimit.toLocaleString()}원</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div

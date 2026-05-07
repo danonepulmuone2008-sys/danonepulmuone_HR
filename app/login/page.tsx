@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
+import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -29,8 +30,12 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      await new Promise((res) => setTimeout(res, 1000));
-      setLoginError("이메일 또는 비밀번호가 틀렸습니다");
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setLoginError("이메일 또는 비밀번호가 틀렸습니다");
+        return;
+      }
+      window.location.href = "/";
     } finally {
       setLoading(false);
     }
