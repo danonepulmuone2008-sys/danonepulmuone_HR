@@ -1,6 +1,26 @@
-"use client";
-import AppBar from "@/components/AppBar";
-import { useState } from "react";
+"use client"
+import AppBar from "@/components/AppBar"
+import { useState } from "react"
+
+const TEAM_MEMBERS = ["선택", "김○○", "이○○", "박○○", "최○○", "정○○"]
+
+type MenuItem = {
+  name: string
+  unitPrice: number
+  qty: number
+  total: number
+  assignee: string
+}
+
+type OcrResult = {
+  storeName: string
+  paidAt: string
+  items: MenuItem[]
+  totalAmount: number
+  isLunchTime: boolean
+}
+
+type Status = "idle" | "loading" | "done" | "error"
 
 const BRAND = "#72BF44";
 
@@ -167,5 +187,5 @@ export default function OcrPage() {
         </button>
       </div>
     </div>
-  );
+  )
 }
