@@ -6,7 +6,7 @@ const BRAND = "#72BF44"
 
 // ─── 더미 데이터 (Supabase 연동 후 교체) ───
 const CURRENT_USER = {
-  id: "user-001",
+  id: "9cb8e877-9d96-4e60-b901-df35868c1349", // TODO: auth 연동 후 세션에서 읽어오도록 교체
   name: "조현희",
   department: "HR",
 }
@@ -82,6 +82,7 @@ export default function OcrPage() {
     try {
       const formData = new FormData()
       formData.append("image", file)
+      formData.append("uploaderId", CURRENT_USER.id)
 
       const res = await fetch("/api/meals/ocr", {
         method: "POST",
