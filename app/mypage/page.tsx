@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import BottomNav from "@/components/BottomNav";
-import { DUMMY } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 const BRAND_BLUE = "#72BF44";
 const BRAND_GREEN = "#4A9A25";
@@ -228,12 +228,24 @@ const AlarmModal = ({
 
 /* ───────────────────── 메인 ───────────────────── */
 export default function MyPage() {
-  const { user } = DUMMY;
-
   /* 프로필 */
   const [showEdit, setShowEdit] = useState(false);
-  const [form, setForm] = useState({ name: user.name, department: user.department, position: user.position, phone: "", email: "" });
+  const [form, setForm] = useState({ name: "", department: "", position: "", phone: "", email: "" });
   const [saved, setSaved] = useState({ ...form });
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+      if (data) {
+        const profile = { name: data.name ?? "", department: data.department ?? "", position: data.position ?? "", phone: data.phone ?? "", email: data.email ?? user.email ?? "" };
+        setForm(profile);
+        setSaved(profile);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   /* 로그아웃 확인 */
   const [showLogout, setShowLogout] = useState(false);
@@ -290,6 +302,23 @@ export default function MyPage() {
   const [mealAlarmTime, setMealAlarmTime] = useState("12:00");
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
+  useEffect(() => {
+    const fetchAlarm = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("alarm_settings").select("*").eq("id", user.id).single();
+      if (data) {
+        setAlarmOn(data.alarm_on ?? false);
+        setAlarmTime(data.alarm_time ?? "09:00");
+        setAlarmDays(data.alarm_days ?? ["월","화","수","목","금"]);
+        setMealAlarmOn(data.meal_alarm_on ?? false);
+        setMealAlarmTime(data.meal_alarm_time ?? "12:00");
+        setMealAlarmDays(data.meal_alarm_days ?? ["월","화","수","목","금"]);
+      }
+    };
+    fetchAlarm();
+  }, []);
+
   /* 알람 모달 임시값 */
   const [activeAlarm, setActiveAlarm] = useState<"근태" | "식대" | null>(null);
   const [tempTime, setTempTime] = useState("09:00");
@@ -300,9 +329,25 @@ export default function MyPage() {
     setTempDays(type === "근태" ? alarmDays : mealAlarmDays);
     setActiveAlarm(type);
   };
-  const saveAlarm = () => {
+  const saveAlarm = async () => {
+    const newAlarmTime = activeAlarm === "근태" ? tempTime : alarmTime;
+    const newAlarmDays = activeAlarm === "근태" ? tempDays : alarmDays;
+    const newMealTime = activeAlarm === "식대" ? tempTime : mealAlarmTime;
+    const newMealDays = activeAlarm === "식대" ? tempDays : mealAlarmDays;
     if (activeAlarm === "근태") { setAlarmTime(tempTime); setAlarmDays(tempDays); }
     else { setMealAlarmTime(tempTime); setMealAlarmDays(tempDays); }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("alarm_settings").upsert({
+        id: user.id,
+        alarm_on: alarmOn,
+        alarm_time: newAlarmTime,
+        alarm_days: newAlarmDays,
+        meal_alarm_on: mealAlarmOn,
+        meal_alarm_time: newMealTime,
+        meal_alarm_days: newMealDays,
+      });
+    }
     setActiveAlarm(null);
   };
 
@@ -399,7 +444,13 @@ export default function MyPage() {
             </div>
             <div className="px-5 pb-8 pt-1">
               <button
-                onClick={() => { setSaved({ ...form }); setShowEdit(false); }}
+                onClick={async () => {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (!user) return;
+                  await supabase.from("profiles").upsert({ id: user.id, ...form });
+                  setSaved({ ...form });
+                  setShowEdit(false);
+                }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: BRAND_BLUE }}
               >
@@ -460,7 +511,13 @@ export default function MyPage() {
             </div>
             <div className="px-5 pb-8 pt-1">
               <button
-                onClick={() => { setPw({ current: "", next: "", confirm: "" }); setShowPwChange(false); }}
+                onClick={async () => {
+                  const { error } = await supabase.auth.updateUser({ password: pw.next });
+                  if (error) { alert("비밀번호 변경에 실패했습니다."); return; }
+                  alert("비밀번호가 변경되었습니다.");
+                  setPw({ current: "", next: "", confirm: "" });
+                  setShowPwChange(false);
+                }}
                 disabled={
                   !pw.current || pw.next.length < 9 ||
                   !/[a-zA-Z]/.test(pw.next) || !/[0-9]/.test(pw.next) ||
@@ -492,7 +549,11 @@ export default function MyPage() {
                 취소
               </button>
               <button
-                onClick={() => { setShowLogout(false); window.location.href = "/"; }}
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  setShowLogout(false);
+                  window.location.href = "/login";
+                }}
                 className="flex-1 py-3.5 text-sm font-semibold active:bg-red-50 transition-colors"
                 style={{ color: "#EF4444" }}
               >
@@ -723,7 +784,14 @@ export default function MyPage() {
                   </button>
                   <button
                     disabled={!withdrawPw || !withdrawAgree}
-                    onClick={() => { closeWithdraw(); window.location.href = "/"; }}
+                    onClick={async () => {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) return;
+                      await supabase.from("profiles").update({ is_active: false }).eq("id", user.id);
+                      await supabase.auth.signOut();
+                      closeWithdraw();
+                      window.location.href = "/login";
+                    }}
                     className="flex-1 py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
                     style={{ background: "#EF4444" }}>
                     탈퇴하기
