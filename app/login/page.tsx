@@ -1,9 +1,12 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -12,7 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
 
     setEmailError("");
@@ -33,9 +36,9 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setLoginError("이메일 또는 비밀번호가 틀렸습니다");
-        return;
+      } else {
+        router.push("/");
       }
-      window.location.href = "/";
     } finally {
       setLoading(false);
     }
@@ -149,6 +152,22 @@ export default function LoginPage() {
               "로그인"
             )}
           </button>
+
+          <div className="flex items-center justify-center gap-4 mt-1">
+            <a
+              href="/signup"
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              회원가입
+            </a>
+            <span className="text-gray-300">|</span>
+            <a
+              href="/login/forgot-password"
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              비밀번호 찾기
+            </a>
+          </div>
         </form>
       </div>
     </div>

@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server"
-import { createAuthClient } from "@/lib/supabase"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { createClient } from "@/lib/supabase/client"
 
 export async function POST(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const client = createAuthClient(token)
-    const { data: { user } } = await client.auth.getUser()
+    const userClient = createClient()
+    const { data: { user } } = await userClient.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const formData = await req.formData()
@@ -18,7 +19,8 @@ export async function POST(req: Request) {
     const ext = file.name.split(".").pop() ?? "jpg"
     const storagePath = `${user.id}/${Date.now()}.${ext}`
 
-    const { error: uploadError } = await client.storage
+    const admin = createAdminClient()
+    const { error: uploadError } = await admin.storage
       .from("receipts")
       .upload(storagePath, buffer, { contentType: file.type })
     if (uploadError) throw new Error(`Storage 업로드 실패: ${uploadError.message}`)
