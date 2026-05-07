@@ -13,6 +13,7 @@ export default function SignupPage() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("");
+  const [position, setPosition] = useState("");
   const [securityQuestion, setSecurityQuestion] = useState("");
   const [securityAnswer, setSecurityAnswer] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,7 +52,7 @@ export default function SignupPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name, department, securityQuestion, securityAnswer } },
+        options: { data: { name, department, position, securityQuestion, securityAnswer } },
       });
 
       if (error) {
@@ -68,8 +69,7 @@ export default function SignupPage() {
       }
 
       if (data.session) {
-        router.push("/");
-        router.refresh();
+        router.push("/login");
       } else {
         alert("이메일 인증 후 로그인해주세요");
         router.push("/login");
@@ -125,6 +125,14 @@ export default function SignupPage() {
             value={department}
             onChange={(e) => setDepartment(e.target.value)}
             placeholder="부서"
+            className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
+          />
+          <input
+            type="text"
+            required
+            value={position}
+            onChange={(e) => setPosition(e.target.value)}
+            placeholder="직급"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
           <input
