@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "다농 풀무원 HR",
+  title: "다논 풀무원 HR",
   description: "HR 관리 시스템",
 };
 
