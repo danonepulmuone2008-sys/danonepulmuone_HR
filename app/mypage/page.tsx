@@ -302,6 +302,23 @@ export default function MyPage() {
   const [mealAlarmTime, setMealAlarmTime] = useState("12:00");
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
+  useEffect(() => {
+    const fetchAlarm = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("alarm_settings").select("*").eq("id", user.id).single();
+      if (data) {
+        setAlarmOn(data.alarm_on ?? false);
+        setAlarmTime(data.alarm_time ?? "09:00");
+        setAlarmDays(data.alarm_days ?? ["월","화","수","목","금"]);
+        setMealAlarmOn(data.meal_alarm_on ?? false);
+        setMealAlarmTime(data.meal_alarm_time ?? "12:00");
+        setMealAlarmDays(data.meal_alarm_days ?? ["월","화","수","목","금"]);
+      }
+    };
+    fetchAlarm();
+  }, []);
+
   /* 알람 모달 임시값 */
   const [activeAlarm, setActiveAlarm] = useState<"근태" | "식대" | null>(null);
   const [tempTime, setTempTime] = useState("09:00");
@@ -312,9 +329,25 @@ export default function MyPage() {
     setTempDays(type === "근태" ? alarmDays : mealAlarmDays);
     setActiveAlarm(type);
   };
-  const saveAlarm = () => {
+  const saveAlarm = async () => {
+    const newAlarmTime = activeAlarm === "근태" ? tempTime : alarmTime;
+    const newAlarmDays = activeAlarm === "근태" ? tempDays : alarmDays;
+    const newMealTime = activeAlarm === "식대" ? tempTime : mealAlarmTime;
+    const newMealDays = activeAlarm === "식대" ? tempDays : mealAlarmDays;
     if (activeAlarm === "근태") { setAlarmTime(tempTime); setAlarmDays(tempDays); }
     else { setMealAlarmTime(tempTime); setMealAlarmDays(tempDays); }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("alarm_settings").upsert({
+        id: user.id,
+        alarm_on: alarmOn,
+        alarm_time: newAlarmTime,
+        alarm_days: newAlarmDays,
+        meal_alarm_on: mealAlarmOn,
+        meal_alarm_time: newMealTime,
+        meal_alarm_days: newMealDays,
+      });
+    }
     setActiveAlarm(null);
   };
 
