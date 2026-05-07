@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/client"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 interface ReceiptItemPayload {
   name: string
@@ -25,8 +24,7 @@ export async function POST(req: Request) {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const userClient = createClient()
-    const { data: { user } } = await userClient.auth.getUser(token)
+    const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const body: SaveReceiptPayload = await req.json()
@@ -36,9 +34,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "필수 데이터가 누락됐습니다" }, { status: 400 })
     }
 
-    const admin = createAdminClient()
-
-    const { data: receipt, error: receiptError } = await admin
+    const { data: receipt, error: receiptError } = await supabaseAdmin
       .from("receipts")
       .insert({
         uploader_id: user.id,
@@ -53,7 +49,7 @@ export async function POST(req: Request) {
       .single()
     if (receiptError) throw new Error(`영수증 저장 실패: ${receiptError.message}`)
 
-    const { error: itemsError } = await admin.from("receipt_items").insert(
+    const { error: itemsError } = await supabaseAdmin.from("receipt_items").insert(
       items.map((item) => ({
         receipt_id: receipt.id,
         assigned_user_id: item.assigneeId || user.id,
