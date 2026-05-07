@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { createClient } from "@supabase/supabase-js"
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const PROMPT = `이 영수증 이미지를 분석해서 아래 JSON 형식으로만 응답해. 다른 텍스트는 절대 포함하지 마.
 
@@ -49,11 +55,21 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData()
     const file = formData.get("image") as File
+    const uploaderId = formData.get("uploaderId") as string
     if (!file) return NextResponse.json({ error: "이미지가 없습니다" }, { status: 400 })
+    if (!uploaderId) return NextResponse.json({ error: "사용자 정보가 없습니다" }, { status: 400 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
     const base64 = buffer.toString("base64")
     const mimeType = file.type as "image/jpeg" | "image/png" | "image/webp"
+
+    // Storage 업로드
+    const ext = file.name.split(".").pop() ?? "jpg"
+    const storagePath = `${uploaderId}/${Date.now()}.${ext}`
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("receipts")
+      .upload(storagePath, buffer, { contentType: mimeType })
+    if (uploadError) throw new Error(`Storage 업로드 실패: ${uploadError.message}`)
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
 
@@ -87,7 +103,7 @@ export async function POST(req: Request) {
       isLunchTime: checkLunchTime(parsed.paidAt),
     }
 
-    return NextResponse.json(response)
+    return NextResponse.json({ ...response, storagePath })
   } catch (err) {
     console.error("[Gemini OCR]", err)
     return NextResponse.json({ error: "영수증 인식에 실패했습니다" }, { status: 500 })
