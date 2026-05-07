@@ -2,7 +2,8 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { DUMMY } from "@/lib/api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -12,7 +13,7 @@ type ModalState =
 type ToastType = "success" | "error";
 
 export default function HomePage() {
-  const { user, attendance, meals } = DUMMY;
+  const { user, meals } = DUMMY;
   const mealPercent = Math.round((meals.used / meals.totalLimit) * 100);
 
   const [clockIn, setClockIn] = useState<string | null>(null);
@@ -21,6 +22,59 @@ export default function HomePage() {
   const [editReason, setEditReason] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
+  const [weeklyHours, setWeeklyHours] = useState(0);
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const weeklyGoal = 25;
+  const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
+
+  // 오늘 출퇴근 기록 및 이번 주 근무시간 불러오기
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const uid = session.user.id;
+
+      // 오늘 기록
+      const { data: today } = await supabase
+        .from("attendance_records")
+        .select("clock_in, clock_out")
+        .eq("user_id", uid)
+        .eq("date", todayStr)
+        .maybeSingle();
+
+      if (today?.clock_in) {
+        const t = new Date(today.clock_in);
+        setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+      }
+      if (today?.clock_out) {
+        const t = new Date(today.clock_out);
+        setClockOut(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+      }
+
+      // 이번 주 근무시간
+      const monday = new Date();
+      const day = monday.getDay();
+      monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+      monday.setHours(0, 0, 0, 0);
+      const friday = new Date(monday);
+      friday.setDate(friday.getDate() + 4);
+      const fmt = (d: Date) => d.toISOString().split("T")[0];
+
+      const { data: weekRecords } = await supabase
+        .from("attendance_records")
+        .select("clock_in, clock_out")
+        .eq("user_id", uid)
+        .gte("date", fmt(monday))
+        .lte("date", fmt(friday));
+
+      const total = (weekRecords ?? []).reduce((sum, r) => {
+        if (!r.clock_in || !r.clock_out) return sum;
+        return sum + (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
+      }, 0);
+      setWeeklyHours(Math.round(total * 10) / 10);
+    })();
+  }, [todayStr]);
 
   const getNow = () => {
     const now = new Date();
@@ -62,8 +116,23 @@ export default function HomePage() {
     setModal({ type: "confirm", direction, time: getNow() });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!modal || modal.type !== "confirm") return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const now = new Date().toISOString();
+      if (modal.direction === "in") {
+        await supabase.from("attendance_records").upsert(
+          { user_id: session.user.id, date: todayStr, clock_in: now, updated_at: now },
+          { onConflict: "user_id,date" }
+        );
+      } else {
+        await supabase.from("attendance_records")
+          .update({ clock_out: now, updated_at: now })
+          .eq("user_id", session.user.id)
+          .eq("date", todayStr);
+      }
+    }
     if (modal.direction === "in") {
       setClockIn(modal.time);
       showToast(`출근시간이 ${modal.time}로 기록되었습니다.`);
@@ -82,10 +151,6 @@ export default function HomePage() {
     setModal(null);
   };
 
-  const thisWeek = attendance.weeklyData.find((w) => w.offset === 0);
-  const weeklyHours = thisWeek ? thisWeek.days.reduce((sum, d) => sum + d.hours, 0) : 0;
-  const weeklyGoal = 25;
-  const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
