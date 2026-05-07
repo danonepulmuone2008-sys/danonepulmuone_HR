@@ -278,7 +278,11 @@ export default function MyPage() {
   const [inquiry, setInquiry] = useState({ subject: "", content: "" });
   const [inquirySent, setInquirySent] = useState(false);
 
-  const handleSendInquiry = () => {
+  const handleSendInquiry = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("inquiries").insert({ user_id: user.id, subject: inquiry.subject, content: inquiry.content });
+    }
     const mailto = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(`[인턴 문의] ${inquiry.subject}`)}&body=${encodeURIComponent(`보내는 사람: ${saved.name} (${saved.department} · ${saved.position})\n\n${inquiry.content}`)}`;
     window.location.href = mailto;
     setInquirySent(true);
