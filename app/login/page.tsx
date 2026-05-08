@@ -33,11 +33,15 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setLoginError("이메일 또는 비밀번호가 틀렸습니다");
       } else {
-        router.push("/");
+        if (data.user?.email === "danone.hradmin@pulmuone.com") {
+          router.push("/admin");
+        } else {
+          router.push("/");
+        }
       }
     } finally {
       setLoading(false);
