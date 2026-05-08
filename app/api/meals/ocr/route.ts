@@ -48,7 +48,6 @@ function checkLunchTime(isoString: string | null): boolean {
 
 export async function POST(req: Request) {
   try {
-    // 사용자 인증 확인
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 

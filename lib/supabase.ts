@@ -12,3 +12,7 @@ export const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? supabaseAnonKey
 );
 
+export function createAdminClient() {
+  return supabaseAdmin;
+}
+
