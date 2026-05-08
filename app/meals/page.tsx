@@ -74,7 +74,7 @@ export default function MealsPage() {
       <div className="flex flex-col gap-3 px-4 pt-3">
         {/* 한도 시각화 */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-          <p className="text-xl font-extrabold bg-gradient-to-r from-blue-500 to-indigo-500 bg-clip-text text-transparent mb-0.5">
+          <p className="text-xl font-extrabold text-blue-500 mb-0.5">
             {year}년 {month}월
           </p>
           <p className="text-xs text-gray-900 mb-4">한도 {totalLimit.toLocaleString()}원</p>
