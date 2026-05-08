@@ -230,7 +230,6 @@ export default function AttendancePage() {
       </header>
 
       <div className="flex flex-col gap-4 px-4 pt-4">
-
         {/* 주간 근로시간 카드 */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-3">
@@ -253,40 +252,24 @@ export default function AttendancePage() {
               </button>
             </div>
           </div>
-
           <div className="mb-4">
             <div className="flex justify-between items-baseline mb-2">
               <div className="flex items-baseline gap-1.5">
-                <span className={`text-2xl font-bold ${isGoalMet ? "text-green-600" : "text-blue-600"}`}>
-                  {totalHours.toFixed(1)}h
-                </span>
-                <span className="text-xs text-gray-400">/ {GOAL_HOURS}시간</span>
+                <span className={`text-2xl font-bold ${isGoalMet ? "text-green-600" : "text-blue-600"}`}>{fmtHM(totalHours)}</span>
+                <span className="text-xs text-gray-400">/ {goalHours}시간</span>
               </div>
-              {isGoalMet ? (
-                <span className="text-xs text-green-600 font-medium">목표 달성</span>
-              ) : (
-                <span className="text-xs text-gray-400">{(GOAL_HOURS - totalHours).toFixed(1)}h 남음</span>
-              )}
+              {isGoalMet ? <span className="text-xs text-green-600 font-medium">목표 달성</span> : <span className="text-xs text-gray-400">{fmtHM(goalHours - totalHours)} 남음</span>}
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${isGoalMet ? "bg-green-500" : "bg-blue-600"}`}
-                style={{ width: `${progressPct}%` }}
-              />
+              <div className={`h-full rounded-full transition-all duration-500 ${isGoalMet ? "bg-green-500" : "bg-blue-600"}`} style={{ width: `${progressPct}%` }} />
             </div>
           </div>
-
           <div className="flex justify-between items-end gap-2">
             {weekDays.map(d => (
               <div key={d.day} className="flex flex-col items-center flex-1 gap-1.5">
-                <span className="text-xs text-gray-500 font-medium h-4 flex items-center">
-                  {d.hours > 0 ? `${d.hours}h` : ""}
-                </span>
+                <span className="text-xs text-gray-500 font-medium h-4 flex items-center">{d.hours > 0 ? fmtHM(d.hours) : ""}</span>
                 <div className="w-full h-16 bg-gray-100 rounded-lg flex items-end overflow-hidden">
-                  <div
-                    className={`w-full rounded-lg transition-all duration-500 ${d.hours > 0 ? "bg-blue-500" : ""}`}
-                    style={{ height: d.hours > 0 ? `${(d.hours / MAX_DAY_HOURS) * 100}%` : "0%" }}
-                  />
+                  <div className={`w-full rounded-lg transition-all duration-500 ${d.hours > 0 ? "bg-blue-500" : ""}`} style={{ height: d.hours > 0 ? `${(d.hours / MAX_DAY_HOURS) * 100}%` : "0%" }} />
                 </div>
                 <span className="text-xs text-gray-400">{d.day}</span>
               </div>
@@ -319,13 +302,11 @@ export default function AttendancePage() {
               </label>
             </div>
           </div>
-
           <div className="grid grid-cols-7 text-center mb-1">
             {CALENDAR_DAYS.map(d => (
               <span key={d} className="text-xs text-gray-400 font-medium py-1">{d}</span>
             ))}
           </div>
-
           <div className="flex flex-col gap-0.5">
             {weeks.map((week, wi) => (
               <div key={wi} className="grid grid-cols-7">
@@ -469,21 +450,15 @@ export default function AttendancePage() {
           </div>
           <div className="flex gap-3">
             <Link href="/attendance/business-trip" className="flex-1">
-              <button className="w-full py-4 rounded-2xl bg-blue-600 text-white text-sm font-semibold active:scale-95 transition-all shadow-sm">
-                출장 신청
-              </button>
+              <button className="w-full py-4 rounded-2xl bg-blue-600 text-white text-sm font-semibold active:scale-95 transition-all shadow-sm">출장 신청</button>
             </Link>
             <Link href="/attendance/vacation" className="flex-1">
-              <button className="w-full py-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-semibold active:scale-95 transition-all shadow-sm">
-                휴가 신청
-              </button>
+              <button className="w-full py-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-semibold active:scale-95 transition-all shadow-sm">휴가 신청</button>
             </Link>
           </div>
         </div>
-
       </div>
 
-      {/* 날짜 상세 바텀시트 */}
       {selectedDay !== null && (() => {
         const dayEvents = eventMap[selectedDay] ?? [];
         const dayFlex = flexMap[selectedDay] ?? [];
@@ -491,7 +466,6 @@ export default function AttendancePage() {
         const dateStr = `${currentYear}-${mm}-${String(selectedDay).padStart(2, "0")}`;
         const myFlexForDay = myFlexSchedules.find(s => s.date === dateStr);
         const closeModal = () => { setSelectedDay(null); setModalMode("detail"); setFlexInput({ startTime: "", endTime: "" }); };
-
         return (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={closeModal}>
             <div className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10" onClick={e => e.stopPropagation()}>
@@ -511,7 +485,6 @@ export default function AttendancePage() {
                 </div>
                 <button onClick={closeModal} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600">×</button>
               </div>
-
               {modalMode === "detail" ? (
                 <div className="px-5 pt-4">
                   {dayFlex.length > 0 && (
@@ -581,13 +554,7 @@ export default function AttendancePage() {
                       />
                     </div>
                   </div>
-                  <button
-                    onClick={handleFlexSubmit}
-                    disabled={!flexInput.startTime || !flexInput.endTime}
-                    className="w-full py-4 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    등록하기
-                  </button>
+                  <button onClick={handleFlexSubmit} disabled={!flexInput.startTime || !flexInput.endTime} className="w-full py-4 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">등록하기</button>
                 </div>
               )}
             </div>

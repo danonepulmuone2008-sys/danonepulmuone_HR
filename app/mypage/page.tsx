@@ -1,23 +1,29 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import BottomNav from "@/components/BottomNav";
-import { DUMMY } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
+import type { LucideIcon } from "lucide-react";
+import {
+  Pencil, User, Bell, AlarmClock, Utensils,
+  Lock, KeyRound, MessageCircle, Phone, LogOut, Trash2,
+} from "lucide-react";
 
-const BRAND_BLUE = "#72BF44";
-const BRAND_GREEN = "#4A9A25";
+const BRAND_BLUE = "#72bf44";
+const BRAND_GREEN = "#62a83a";
 
 const MenuItem = ({
-  icon, label, danger = false, onClick,
+  Icon, label, danger = false, onClick,
 }: {
-  icon: string; label: string; danger?: boolean; onClick?: () => void;
+  Icon: LucideIcon; label: string; danger?: boolean; onClick?: () => void;
 }) => (
   <button
     onClick={onClick}
     className="w-full flex justify-between items-center px-4 py-2.5 border-t border-gray-50 active:bg-gray-50 transition-colors"
   >
     <div className="flex items-center gap-3">
-      <span className="text-sm">{icon}</span>
+      <Icon size={16} className={danger ? "text-red-400" : "text-gray-400"} strokeWidth={1.8} />
       <span className={`text-sm ${danger ? "text-red-500 font-semibold" : "text-gray-700"}`}>{label}</span>
     </div>
     <svg className="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -26,9 +32,9 @@ const MenuItem = ({
   </button>
 );
 
-const SectionLabel = ({ icon, label, color }: { icon: string; label: string; color: string }) => (
+const SectionLabel = ({ Icon, label, color }: { Icon: LucideIcon; label: string; color: string }) => (
   <div className="flex items-center gap-2 px-4 pt-3 pb-1.5">
-    <span className="text-xs" style={{ color }}>{icon}</span>
+    <Icon size={13} style={{ color }} strokeWidth={2} />
     <p className="text-xs font-semibold text-gray-400 tracking-wide">{label}</p>
   </div>
 );
@@ -75,9 +81,9 @@ const daysLabel = (days: string[]) => {
 
 /* 알람 행 (목록) */
 const AlarmRow = ({
-  icon, label, on, time, days, onToggle, onOpenDetail,
+  Icon, label, on, time, days, onToggle, onOpenDetail,
 }: {
-  icon: string; label: string; on: boolean; time: string; days: string[];
+  Icon: LucideIcon; label: string; on: boolean; time: string; days: string[];
   onToggle: () => void; onOpenDetail: () => void;
 }) => {
   const [h, m] = time.split(":").map(Number);
@@ -91,7 +97,7 @@ const AlarmRow = ({
         onClick={onOpenDetail}
         className="flex-1 flex items-center gap-3 px-4 py-2.5 active:bg-gray-50 transition-colors text-left"
       >
-        <span className="text-sm">{icon}</span>
+        <Icon size={16} className="text-gray-400" strokeWidth={1.8} />
         <div>
           <p className="text-sm text-gray-700">{label}</p>
           <p className="text-xs mt-0.5" style={{ color: on ? BRAND_BLUE : "#9CA3AF" }}>
@@ -228,12 +234,29 @@ const AlarmModal = ({
 
 /* ───────────────────── 메인 ───────────────────── */
 export default function MyPage() {
-  const { user } = DUMMY;
+  const { user: authUser } = useAuth();
 
   /* 프로필 */
   const [showEdit, setShowEdit] = useState(false);
-  const [form, setForm] = useState({ name: user.name, department: user.department, position: user.position, phone: "", email: "" });
+  const [form, setForm] = useState({ name: "", department: "", position: "", phone: "", email: "" });
   const [saved, setSaved] = useState({ ...form });
+
+  useEffect(() => {
+    if (!authUser) return;
+    const fetchProfile = async () => {
+      const { data } = await supabase.from("users").select("*").eq("id", authUser.id).single();
+      const profile = {
+        name: data?.name ?? authUser.name,
+        department: data?.department ?? authUser.department,
+        position: data?.position ?? authUser.position,
+        phone: data?.phone ?? "",
+        email: data?.email ?? authUser.email,
+      };
+      setForm(profile);
+      setSaved(profile);
+    };
+    fetchProfile();
+  }, [authUser]);
 
   /* 로그아웃 확인 */
   const [showLogout, setShowLogout] = useState(false);
@@ -266,7 +289,10 @@ export default function MyPage() {
   const [inquiry, setInquiry] = useState({ subject: "", content: "" });
   const [inquirySent, setInquirySent] = useState(false);
 
-  const handleSendInquiry = () => {
+  const handleSendInquiry = async () => {
+    if (authUser) {
+      await supabase.from("inquiries").insert({ user_id: authUser.id, subject: inquiry.subject, content: inquiry.content });
+    }
     const mailto = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(`[인턴 문의] ${inquiry.subject}`)}&body=${encodeURIComponent(`보내는 사람: ${saved.name} (${saved.department} · ${saved.position})\n\n${inquiry.content}`)}`;
     window.location.href = mailto;
     setInquirySent(true);
@@ -290,6 +316,22 @@ export default function MyPage() {
   const [mealAlarmTime, setMealAlarmTime] = useState("12:00");
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
+  useEffect(() => {
+    const fetchAlarm = async () => {
+      if (!authUser) return;
+      const { data } = await supabase.from("alarm_settings").select("*").eq("id", authUser.id).single();
+      if (data) {
+        setAlarmOn(data.alarm_on ?? false);
+        setAlarmTime(data.alarm_time ?? "09:00");
+        setAlarmDays(data.alarm_days ?? ["월","화","수","목","금"]);
+        setMealAlarmOn(data.meal_alarm_on ?? false);
+        setMealAlarmTime(data.meal_alarm_time ?? "12:00");
+        setMealAlarmDays(data.meal_alarm_days ?? ["월","화","수","목","금"]);
+      }
+    };
+    fetchAlarm();
+  }, [authUser]);
+
   /* 알람 모달 임시값 */
   const [activeAlarm, setActiveAlarm] = useState<"근태" | "식대" | null>(null);
   const [tempTime, setTempTime] = useState("09:00");
@@ -300,9 +342,24 @@ export default function MyPage() {
     setTempDays(type === "근태" ? alarmDays : mealAlarmDays);
     setActiveAlarm(type);
   };
-  const saveAlarm = () => {
+  const saveAlarm = async () => {
+    const newAlarmTime = activeAlarm === "근태" ? tempTime : alarmTime;
+    const newAlarmDays = activeAlarm === "근태" ? tempDays : alarmDays;
+    const newMealTime = activeAlarm === "식대" ? tempTime : mealAlarmTime;
+    const newMealDays = activeAlarm === "식대" ? tempDays : mealAlarmDays;
     if (activeAlarm === "근태") { setAlarmTime(tempTime); setAlarmDays(tempDays); }
     else { setMealAlarmTime(tempTime); setMealAlarmDays(tempDays); }
+    if (authUser) {
+      await supabase.from("alarm_settings").upsert({
+        id: authUser.id,
+        alarm_on: alarmOn,
+        alarm_time: newAlarmTime,
+        alarm_days: newAlarmDays,
+        meal_alarm_on: mealAlarmOn,
+        meal_alarm_time: newMealTime,
+        meal_alarm_days: newMealDays,
+      });
+    }
     setActiveAlarm(null);
   };
 
@@ -332,33 +389,33 @@ export default function MyPage() {
 
         {/* 내 계정 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
-          <SectionLabel icon="✏️" label="내 계정" color={BRAND_BLUE} />
-          <MenuItem icon="👤" label="프로필 수정" onClick={() => setShowEdit(true)} />
+          <SectionLabel Icon={Pencil} label="내 계정" color={BRAND_BLUE} />
+          <MenuItem Icon={User} label="프로필 수정" onClick={() => setShowEdit(true)} />
         </section>
 
         {/* 알림 설정 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
-          <SectionLabel icon="🔔" label="알림 설정" color={BRAND_BLUE} />
-          <AlarmRow icon="⏰" label="근태" on={alarmOn} time={alarmTime} days={alarmDays} onToggle={() => setAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("근태")} />
-          <AlarmRow icon="🍽️" label="식대" on={mealAlarmOn} time={mealAlarmTime} days={mealAlarmDays} onToggle={() => setMealAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("식대")} />
+          <SectionLabel Icon={Bell} label="알림 설정" color={BRAND_BLUE} />
+          <AlarmRow Icon={AlarmClock} label="근태" on={alarmOn} time={alarmTime} days={alarmDays} onToggle={() => setAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("근태")} />
+          <AlarmRow Icon={Utensils} label="식대" on={mealAlarmOn} time={mealAlarmTime} days={mealAlarmDays} onToggle={() => setMealAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("식대")} />
         </section>
 
         {/* 보안 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
-          <SectionLabel icon="🔒" label="보안" color={BRAND_GREEN} />
-          <MenuItem icon="🔑" label="비밀번호 변경" onClick={() => setShowPwChange(true)} />
+          <SectionLabel Icon={Lock} label="보안" color={BRAND_GREEN} />
+          <MenuItem Icon={KeyRound} label="비밀번호 변경" onClick={() => setShowPwChange(true)} />
         </section>
 
         {/* 문의 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
-          <SectionLabel icon="💬" label="문의" color={BRAND_BLUE} />
-          <MenuItem icon="📞" label="관리자 문의" onClick={() => setShowInquiry(true)} />
+          <SectionLabel Icon={MessageCircle} label="문의" color={BRAND_BLUE} />
+          <MenuItem Icon={Phone} label="관리자 문의" onClick={() => setShowInquiry(true)} />
         </section>
 
         {/* 로그아웃 + 회원탈퇴 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
-          <MenuItem icon="🚪" label="로그아웃" danger onClick={() => setShowLogout(true)} />
-          <MenuItem icon="🗑️" label="회원 탈퇴" danger onClick={() => setShowWithdraw(true)} />
+          <MenuItem Icon={LogOut} label="로그아웃" danger onClick={() => setShowLogout(true)} />
+          <MenuItem Icon={Trash2} label="회원 탈퇴" danger onClick={() => setShowWithdraw(true)} />
         </section>
 
       </div>
@@ -399,7 +456,12 @@ export default function MyPage() {
             </div>
             <div className="px-5 pb-8 pt-1">
               <button
-                onClick={() => { setSaved({ ...form }); setShowEdit(false); }}
+                onClick={async () => {
+                  if (!authUser) return;
+                  await supabase.from("users").upsert({ id: authUser.id, ...form });
+                  setSaved({ ...form });
+                  setShowEdit(false);
+                }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: BRAND_BLUE }}
               >
@@ -460,7 +522,13 @@ export default function MyPage() {
             </div>
             <div className="px-5 pb-8 pt-1">
               <button
-                onClick={() => { setPw({ current: "", next: "", confirm: "" }); setShowPwChange(false); }}
+                onClick={async () => {
+                  const { error } = await supabase.auth.updateUser({ password: pw.next });
+                  if (error) { alert("비밀번호 변경에 실패했습니다."); return; }
+                  alert("비밀번호가 변경되었습니다.");
+                  setPw({ current: "", next: "", confirm: "" });
+                  setShowPwChange(false);
+                }}
                 disabled={
                   !pw.current || pw.next.length < 9 ||
                   !/[a-zA-Z]/.test(pw.next) || !/[0-9]/.test(pw.next) ||
@@ -492,7 +560,11 @@ export default function MyPage() {
                 취소
               </button>
               <button
-                onClick={() => { setShowLogout(false); window.location.href = "/"; }}
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  setShowLogout(false);
+                  window.location.href = "/login";
+                }}
                 className="flex-1 py-3.5 text-sm font-semibold active:bg-red-50 transition-colors"
                 style={{ color: "#EF4444" }}
               >
@@ -723,7 +795,13 @@ export default function MyPage() {
                   </button>
                   <button
                     disabled={!withdrawPw || !withdrawAgree}
-                    onClick={() => { closeWithdraw(); window.location.href = "/"; }}
+                    onClick={async () => {
+                      if (!authUser) return;
+                      await supabase.from("users").update({ is_active: false }).eq("id", authUser.id);
+                      await supabase.auth.signOut();
+                      closeWithdraw();
+                      window.location.href = "/login";
+                    }}
                     className="flex-1 py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
                     style={{ background: "#EF4444" }}>
                     탈퇴하기

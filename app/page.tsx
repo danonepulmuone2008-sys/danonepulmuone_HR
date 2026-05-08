@@ -242,9 +242,9 @@ export default function HomePage() {
       {/* 헤더 */}
       <header className="bg-blue-600 px-5 pt-12 pb-6">
         <p className="text-blue-200 text-sm">안녕하세요 👋</p>
-        <h2 className="text-white text-xl font-bold mt-0.5">{user.name}님</h2>
+        <h2 className="text-white text-xl font-bold mt-0.5">{userProfile.name || "로딩 중"}님</h2>
         <p className="text-blue-200 text-xs mt-1">
-          {user.department} · {user.position}
+          {userProfile.department} · {userProfile.position}
         </p>
       </header>
 
@@ -272,7 +272,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 주 근무</span>
-              <span>{weeklyHours}h / {weeklyGoal}h</span>
+              <span>{fmtHM(weeklyHours)} / {weeklyGoal}h</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
@@ -338,7 +338,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 달 사용</span>
-              <span>{meals.used.toLocaleString()}원 / {meals.totalLimit.toLocaleString()}원</span>
+              <span>{mealUsed.toLocaleString()}원 / {mealLimit.toLocaleString()}원</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
@@ -349,8 +349,9 @@ export default function HomePage() {
             <p className="text-right text-xs text-gray-400 mt-1">{mealPercent}% 사용</p>
           </div>
           <Link href="/meals/ocr">
-            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all">
-              📷 영수증 등록 (OCR)
+            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all flex items-center justify-center gap-2">
+              <Camera size={16} />
+              영수증 등록 (OCR)
             </button>
           </Link>
         </div>

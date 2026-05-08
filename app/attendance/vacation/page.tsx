@@ -105,7 +105,6 @@ export default function VacationPage() {
               ))}
             </div>
           </div>
-
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">시작일</label>
             <input
@@ -115,7 +114,6 @@ export default function VacationPage() {
               className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
             />
           </div>
-
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
             <input
@@ -125,7 +123,6 @@ export default function VacationPage() {
               className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
             />
           </div>
-
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">사유</label>
             <textarea
@@ -150,12 +147,7 @@ export default function VacationPage() {
                         <p className="text-[10px] text-gray-400">{formatSize(file.size)}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => removeFile(file.name)}
-                      className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 flex-shrink-0 ml-2 text-lg leading-none"
-                    >
-                      ×
-                    </button>
+                    <button onClick={() => removeFile(file.name)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 flex-shrink-0 ml-2 text-lg leading-none">×</button>
                   </div>
                 ))}
               </div>

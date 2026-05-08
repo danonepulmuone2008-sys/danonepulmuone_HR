@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { supabaseAdmin } from "@/lib/supabase"
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -47,6 +48,12 @@ function checkLunchTime(isoString: string | null): boolean {
 
 export async function POST(req: Request) {
   try {
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
     const formData = await req.formData()
     const file = formData.get("image") as File
     if (!file) return NextResponse.json({ error: "이미지가 없습니다" }, { status: 400 })
@@ -55,15 +62,20 @@ export async function POST(req: Request) {
     const base64 = buffer.toString("base64")
     const mimeType = file.type as "image/jpeg" | "image/png" | "image/webp"
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+    const ext = file.name.split(".").pop() ?? "jpg"
+    const storagePath = `${user.id}/${Date.now()}.${ext}`
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from("receipts")
+      .upload(storagePath, buffer, { contentType: mimeType })
+    if (uploadError) throw new Error(`Storage 업로드 실패: ${uploadError.message}`)
 
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
     const result = await model.generateContent([
       { inlineData: { data: base64, mimeType } },
       PROMPT,
     ])
 
     const text = result.response.text().trim()
-    // 마크다운 코드블록 제거
     const json = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
     const parsed = JSON.parse(json)
 
@@ -87,7 +99,7 @@ export async function POST(req: Request) {
       isLunchTime: checkLunchTime(parsed.paidAt),
     }
 
-    return NextResponse.json(response)
+    return NextResponse.json({ ...response, storagePath })
   } catch (err) {
     console.error("[Gemini OCR]", err)
     return NextResponse.json({ error: "영수증 인식에 실패했습니다" }, { status: 500 })
