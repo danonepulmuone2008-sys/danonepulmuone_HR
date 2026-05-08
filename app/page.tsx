@@ -26,7 +26,8 @@ export default function HomePage() {
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
-  const todayStr = new Date().toISOString().split("T")[0];
+  const _now = new Date();
+  const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
   const weeklyGoal = 25;
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
@@ -133,7 +134,7 @@ export default function HomePage() {
       monday.setHours(0, 0, 0, 0);
       const friday = new Date(monday);
       friday.setDate(friday.getDate() + 4);
-      const fmt = (d: Date) => d.toISOString().split("T")[0];
+      const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
       const { data: weekRecords } = await supabase
         .from("attendance_records")

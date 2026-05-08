@@ -84,7 +84,7 @@ export default function AttendancePage() {
   const fetchWeekData = useCallback(async (uid: string, offset: number) => {
     const monday = getMondayOfWeek(new Date());
     monday.setDate(monday.getDate() + offset * 7);
-    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
     const days = await Promise.all(
       DAY_LABELS.map(async (day, i) => {
