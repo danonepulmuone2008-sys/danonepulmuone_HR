@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
-import { DUMMY } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
+import { Camera } from "lucide-react";
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -13,8 +14,12 @@ type ModalState =
 type ToastType = "success" | "error";
 
 export default function HomePage() {
-  const { user, meals } = DUMMY;
-  const mealPercent = Math.round((meals.used / meals.totalLimit) * 100);
+  const { user } = useAuth();
+  const userProfile = { name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" };
+
+  const [mealUsed, setMealUsed] = useState(0);
+  const [mealLimit, setMealLimit] = useState(100000);
+  const mealPercent = Math.round((mealUsed / mealLimit) * 100);
 
   const [clockIn, setClockIn] = useState<string | null>(null);
   const [clockOut, setClockOut] = useState<string | null>(null);
@@ -24,57 +29,10 @@ export default function HomePage() {
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const _now = new Date();
+  const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
   const weeklyGoal = 25;
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
-
-  // 오늘 출퇴근 기록 및 이번 주 근무시간 불러오기
-  useEffect(() => {
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const uid = session.user.id;
-
-      // 오늘 기록
-      const { data: today } = await supabase
-        .from("attendance_records")
-        .select("clock_in, clock_out")
-        .eq("user_id", uid)
-        .eq("date", todayStr)
-        .maybeSingle();
-
-      if (today?.clock_in) {
-        const t = new Date(today.clock_in);
-        setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
-      }
-      if (today?.clock_out) {
-        const t = new Date(today.clock_out);
-        setClockOut(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
-      }
-
-      // 이번 주 근무시간
-      const monday = new Date();
-      const day = monday.getDay();
-      monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
-      monday.setHours(0, 0, 0, 0);
-      const friday = new Date(monday);
-      friday.setDate(friday.getDate() + 4);
-      const fmt = (d: Date) => d.toISOString().split("T")[0];
-
-      const { data: weekRecords } = await supabase
-        .from("attendance_records")
-        .select("clock_in, clock_out")
-        .eq("user_id", uid)
-        .gte("date", fmt(monday))
-        .lte("date", fmt(friday));
-
-      const total = (weekRecords ?? []).reduce((sum, r) => {
-        if (!r.clock_in || !r.clock_out) return sum;
-        return sum + (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
-      }, 0);
-      setWeeklyHours(Math.round(total * 10) / 10);
-    })();
-  }, [todayStr]);
 
   const getNow = () => {
     const now = new Date();
@@ -118,18 +76,17 @@ export default function HomePage() {
 
   const handleConfirm = async () => {
     if (!modal || modal.type !== "confirm") return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
+    if (user) {
       const now = new Date().toISOString();
       if (modal.direction === "in") {
         await supabase.from("attendance_records").upsert(
-          { user_id: session.user.id, date: todayStr, clock_in: now, updated_at: now },
+          { user_id: user.id, date: todayStr, clock_in: now, updated_at: now },
           { onConflict: "user_id,date" }
         );
       } else {
         await supabase.from("attendance_records")
           .update({ clock_out: now, updated_at: now })
-          .eq("user_id", session.user.id)
+          .eq("user_id", user.id)
           .eq("date", todayStr);
       }
     }
@@ -151,6 +108,62 @@ export default function HomePage() {
     setModal(null);
   };
 
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const uid = user.id;
+
+      const { data: today } = await supabase
+        .from("attendance_records")
+        .select("clock_in, clock_out")
+        .eq("user_id", uid)
+        .eq("date", todayStr)
+        .maybeSingle();
+
+      if (today?.clock_in) {
+        const t = new Date(today.clock_in);
+        setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+      }
+      if (today?.clock_out) {
+        const t = new Date(today.clock_out);
+        setClockOut(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+      }
+
+      const monday = new Date();
+      const day = monday.getDay();
+      monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+      const friday = new Date(monday);
+      friday.setDate(friday.getDate() + 4);
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+      const { data: weekRecords } = await supabase
+        .from("attendance_records")
+        .select("clock_in, clock_out")
+        .eq("user_id", uid)
+        .gte("date", fmt(monday))
+        .lte("date", fmt(friday));
+
+      const total = (weekRecords ?? []).reduce((sum, r) => {
+        if (!r.clock_in || !r.clock_out) return sum;
+        return sum + (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
+      }, 0);
+      setWeeklyHours(Math.round(total * 10) / 10);
+    })();
+  }, [user, todayStr]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/meals/usage", {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.used !== undefined) setMealUsed(data.used);
+        if (data.totalLimit !== undefined) setMealLimit(data.totalLimit);
+      })
+      .catch(() => {});
+  }, [user]);
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
@@ -272,7 +285,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 주 근무</span>
-              <span>{fmtHM(weeklyHours)} / {weeklyGoal}h</span>
+              <span>{weeklyHours}h / {weeklyGoal}h</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
