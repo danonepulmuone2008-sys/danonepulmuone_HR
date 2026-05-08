@@ -70,7 +70,6 @@ export default function AttendancePage() {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
   const todayDate = now.getDate();
-  const mm = String(currentMonth + 1).padStart(2, "0");
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [showTeam, setShowTeam] = useState(false);
@@ -83,11 +82,23 @@ export default function AttendancePage() {
   const [flexMap, setFlexMap] = useState<Record<number, FlexEntry[]>>({});
   const [teamMap, setTeamMap] = useState<Record<number, TeamCalEntry[]>>({});
   const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [calYear, setCalYear] = useState(currentYear);
+  const [calMonth, setCalMonth] = useState(currentMonth);
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const weeks = getWeeksForMonth(currentYear, currentMonth);
-  const monthLabel = `${currentYear}년 ${currentMonth + 1}월`;
+  const calMm = String(calMonth + 1).padStart(2, "0");
+  const weeks = getWeeksForMonth(calYear, calMonth);
+  const monthLabel = `${calYear}년 ${calMonth + 1}월`;
+
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  };
 
   const fetchWeekData = useCallback(async (uid: string, offset: number) => {
     const monday = getMondayOfWeek(new Date());
@@ -100,7 +111,7 @@ export default function AttendancePage() {
         date.setDate(date.getDate() + i);
         const { data } = await supabase
           .from("attendance_records")
-          .select("clock_in, clock_out")
+          .select("clock_in, clock_out, lunch_break")
           .eq("user_id", uid)
           .eq("date", fmt(date))
           .maybeSingle();
@@ -108,6 +119,7 @@ export default function AttendancePage() {
         if (data?.clock_in && data?.clock_out) {
           const diff = new Date(data.clock_out).getTime() - new Date(data.clock_in).getTime();
           hours = Math.round(diff / 36000) / 100;
+          if (data.lunch_break) hours = Math.max(0, hours - 1);
         }
         return { day, hours };
       })
@@ -116,10 +128,10 @@ export default function AttendancePage() {
   }, []);
 
   const fetchMonthData = useCallback(async (uid: string) => {
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const m = String(currentMonth + 1).padStart(2, "0");
-    const startDate = `${currentYear}-${m}-01`;
-    const endDate = `${currentYear}-${m}-${String(daysInMonth).padStart(2, "0")}`;
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const m = String(calMonth + 1).padStart(2, "0");
+    const startDate = `${calYear}-${m}-01`;
+    const endDate = `${calYear}-${m}-${String(daysInMonth).padStart(2, "0")}`;
 
     const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status")
@@ -137,11 +149,10 @@ export default function AttendancePage() {
 
     const nameMap = Object.fromEntries((usersRes.data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
 
-    // 내 휴가/출장
     const map: Record<number, CalEvent[]> = {};
     myVacRes.data?.forEach(v => {
       for (let d = new Date(v.start_date + "T00:00:00"); d <= new Date(v.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
-        if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!map[day]) map[day] = [];
           map[day].push({ type: "vacation", label: v.type, status: v.status });
@@ -150,7 +161,7 @@ export default function AttendancePage() {
     });
     myTripRes.data?.forEach(t => {
       for (let d = new Date(t.start_date + "T00:00:00"); d <= new Date(t.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
-        if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!map[day]) map[day] = [];
           map[day].push({ type: "business_trip", label: t.destination, status: t.status });
@@ -159,12 +170,11 @@ export default function AttendancePage() {
     });
     setEventMap(map);
 
-    // 팀원 휴가/출장 (팀 일정 체크 시 표시)
     const newTeamMap: Record<number, TeamCalEntry[]> = {};
     allVacRes.data?.forEach(v => {
       const name = nameMap[v.user_id] ?? "팀원";
       for (let d = new Date(v.start_date + "T00:00:00"); d <= new Date(v.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
-        if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!newTeamMap[day]) newTeamMap[day] = [];
           newTeamMap[day].push({ userId: v.user_id, userName: name, type: "vacation", label: v.type });
@@ -174,7 +184,7 @@ export default function AttendancePage() {
     allTripRes.data?.forEach(t => {
       const name = nameMap[t.user_id] ?? "팀원";
       for (let d = new Date(t.start_date + "T00:00:00"); d <= new Date(t.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
-        if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!newTeamMap[day]) newTeamMap[day] = [];
           newTeamMap[day].push({ userId: t.user_id, userName: name, type: "business_trip", label: t.destination });
@@ -183,7 +193,6 @@ export default function AttendancePage() {
     });
     setTeamMap(newTeamMap);
 
-    // 유연근무
     const newFlexMap: Record<number, FlexEntry[]> = {};
     flexRes.data?.forEach(f => {
       const day = parseInt(f.date.split("-")[2]);
@@ -192,13 +201,12 @@ export default function AttendancePage() {
     });
     setFlexMap(newFlexMap);
 
-    // 신청 현황 (내 것만)
     const reqList: RequestItem[] = [
       ...(myVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status) })),
       ...(myTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status) })),
     ].sort((a, b) => b.date.localeCompare(a.date));
     setRequests(reqList);
-  }, [currentYear, currentMonth]);
+  }, [calYear, calMonth]);
 
   useEffect(() => {
     if (!userId) return;
@@ -219,7 +227,7 @@ export default function AttendancePage() {
 
   const handleFlexSubmit = async () => {
     if (!selectedDay || !flexInput.startTime || !flexInput.endTime || !userId || !user) return;
-    const dateStr = `${currentYear}-${mm}-${String(selectedDay).padStart(2, "0")}`;
+    const dateStr = `${calYear}-${calMm}-${String(selectedDay).padStart(2, "0")}`;
     await supabase.from("flex_schedules").upsert(
       { user_id: userId, user_name: user.name, date: dateStr, start_time: flexInput.startTime, end_time: flexInput.endTime },
       { onConflict: "user_id,date" }
@@ -280,7 +288,11 @@ export default function AttendancePage() {
         {/* 캘린더 카드 */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 overflow-visible">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-medium text-gray-400">{monthLabel}</p>
+            <div className="flex items-center gap-1">
+              <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-base leading-none">‹</button>
+              <span className="text-xs font-medium text-gray-700 min-w-[72px] text-center">{monthLabel}</span>
+              <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-base leading-none">›</button>
+            </div>
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-1.5 cursor-pointer select-none">
                 <input type="checkbox" checked={showFlex} onChange={e => setShowFlex(e.target.checked)} className="w-3.5 h-3.5 accent-purple-600" />
@@ -288,7 +300,7 @@ export default function AttendancePage() {
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer select-none">
                 <input type="checkbox" checked={showTeam} onChange={e => setShowTeam(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" />
-                <span className="text-xs text-gray-500">팀 일정</span>
+                <span className="text-xs text-gray-500">출장/휴가</span>
               </label>
             </div>
           </div>
@@ -301,19 +313,20 @@ export default function AttendancePage() {
             {weeks.map((week, wi) => (
               <div key={wi} className="grid grid-cols-7">
                 {week.map((day, di) => {
-                  const dayStr = day ? `${currentYear}-${mm}-${String(day).padStart(2, "0")}` : "";
+                  const dayStr = day ? `${calYear}-${calMm}-${String(day).padStart(2, "0")}` : "";
                   const holiday = day ? isHoliday(dayStr) : false;
                   const isSunday = di === 0;
                   const isSaturday = di === 6;
                   const events = day ? (eventMap[day] ?? []) : [];
                   const flexEntries = day ? (flexMap[day] ?? []) : [];
                   const teamEntries = day ? (teamMap[day] ?? []) : [];
+                  const isToday = calYear === currentYear && calMonth === currentMonth && day === todayDate;
                   const hasTooltip = events.length > 0 || (showFlex && flexEntries.length > 0) || (showTeam && teamEntries.length > 0);
                   const tooltipAlign = di <= 1 ? "left-0" : di >= 5 ? "right-0" : "left-1/2 -translate-x-1/2";
-                  const dayColor = day === todayDate ? "" : (holiday || isSunday) ? "text-red-500" : isSaturday ? "text-blue-400" : "text-gray-700";
+                  const dayColor = isToday ? "" : (holiday || isSunday) ? "text-red-500" : isSaturday ? "text-blue-400" : "text-gray-700";
                   return (
                     <div key={di} className="relative flex flex-col items-center py-0.5 group" onClick={() => { if (day) { setSelectedDay(day); setModalMode("detail"); } }}>
-                      <div className={`text-sm rounded-full w-7 h-7 flex items-center justify-center ${day === todayDate ? "bg-blue-600 text-white font-bold" : day ? `${dayColor} hover:bg-gray-100 cursor-pointer` : ""}`}>
+                      <div className={`text-sm rounded-full w-7 h-7 flex items-center justify-center ${isToday ? "bg-blue-600 text-white font-bold" : day ? `${dayColor} hover:bg-gray-100 cursor-pointer` : ""}`}>
                         {day ?? ""}
                       </div>
                       <div className="flex gap-0.5 mt-0.5 h-2 items-center justify-center flex-wrap">
@@ -337,7 +350,7 @@ export default function AttendancePage() {
                       )}
                       {hasTooltip && (
                         <div className={`absolute bottom-full ${tooltipAlign} mb-2 z-50 hidden group-hover:block bg-gray-900 text-white rounded-xl shadow-xl w-52 p-3 pointer-events-none`}>
-                          <p className="text-[10px] text-gray-400 font-medium mb-2">{currentMonth + 1}월 {day}일</p>
+                          <p className="text-[10px] text-gray-400 font-medium mb-2">{calMonth + 1}월 {day}일</p>
                           {showFlex && flexEntries.length > 0 && (
                             <div className={events.length > 0 || (showTeam && teamEntries.length > 0) ? "mb-2 pb-2 border-b border-gray-700" : ""}>
                               <p className="text-[9px] text-purple-400 font-semibold uppercase tracking-wide mb-1.5">유연근무</p>
@@ -352,7 +365,7 @@ export default function AttendancePage() {
                           )}
                           {showTeam && teamEntries.length > 0 && (
                             <div className={events.length > 0 ? "mb-2 pb-2 border-b border-gray-700" : ""}>
-                              <p className="text-[9px] text-orange-400 font-semibold uppercase tracking-wide mb-1.5">팀 일정</p>
+                              <p className="text-[9px] text-orange-400 font-semibold uppercase tracking-wide mb-1.5">출장/휴가</p>
                               {teamEntries.map((te, ti) => (
                                 <div key={ti} className="flex items-center gap-1.5">
                                   <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />
@@ -385,7 +398,7 @@ export default function AttendancePage() {
             <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /><span className="text-xs text-gray-400">내 휴가</span></div>
             <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /><span className="text-xs text-gray-400">내 출장</span></div>
             {showFlex && <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block" /><span className="text-xs text-gray-400">유연근무</span></div>}
-            {showTeam && <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" /><span className="text-xs text-gray-400">팀 일정</span></div>}
+            {showTeam && <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" /><span className="text-xs text-gray-400">출장/휴가</span></div>}
           </div>
         </div>
 
@@ -437,7 +450,7 @@ export default function AttendancePage() {
         };
         const modalTitle = modalMode === "flex-add"
           ? (myFlexForDay ? "유연근무 수정" : "유연근무 등록")
-          : `${currentMonth + 1}월 ${selectedDay}일`;
+          : `${calMonth + 1}월 ${selectedDay}일`;
         const modalSub = modalMode === "flex-add" ? "나의 근무 시간을 입력하세요" : "해당 날의 전체 일정";
         return (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={closeModal}>
@@ -478,7 +491,7 @@ export default function AttendancePage() {
                   )}
                   {showTeam && dayTeam.length > 0 && (
                     <div className="mb-4">
-                      <p className="text-xs font-semibold text-orange-500 mb-2">팀 일정</p>
+                      <p className="text-xs font-semibold text-orange-500 mb-2">출장/휴가</p>
                       <div className="flex flex-col gap-2">
                         {dayTeam.map((te, i) => (
                           <div key={i} className="flex items-center gap-2 py-2 px-3 bg-orange-50 rounded-xl">

@@ -7,6 +7,15 @@ import { useAuth } from "@/components/AuthProvider";
 import { Camera } from "lucide-react";
 import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
 
+function fmtHM(h: number): string {
+  const totalMin = Math.round(h * 60);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (hrs === 0) return `${mins}m`;
+  if (mins === 0) return `${hrs}h`;
+  return `${hrs}h ${mins}m`;
+}
+
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
   | { type: "edit"; direction: "in" | "out"; time: string }
@@ -29,6 +38,7 @@ export default function HomePage() {
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
+  const [lunchBreak, setLunchBreak] = useState(true);
 
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
@@ -86,7 +96,7 @@ export default function HomePage() {
         );
       } else {
         await supabase.from("attendance_records")
-          .update({ clock_out: now, updated_at: now })
+          .update({ clock_out: now, lunch_break: lunchBreak, updated_at: now })
           .eq("user_id", user.id)
           .eq("date", todayStr);
       }
@@ -96,7 +106,8 @@ export default function HomePage() {
       showToast(`출근시간이 ${modal.time}로 기록되었습니다.`);
     } else {
       setClockOut(modal.time);
-      showToast(`퇴근시간이 ${modal.time}로 기록되었습니다.`);
+      showToast(`퇴근시간이 ${modal.time}로 기록되었습니다.${lunchBreak ? " (점심 1시간 차감)" : ""}`);
+      setLunchBreak(true);
     }
     setModal(null);
   };
@@ -140,14 +151,15 @@ export default function HomePage() {
 
       const { data: weekRecords } = await supabase
         .from("attendance_records")
-        .select("clock_in, clock_out")
+        .select("clock_in, clock_out, lunch_break")
         .eq("user_id", uid)
         .gte("date", fmt(monday))
         .lte("date", fmt(friday));
 
       const total = (weekRecords ?? []).reduce((sum, r) => {
         if (!r.clock_in || !r.clock_out) return sum;
-        return sum + (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
+        const h = (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
+        return sum + h - (r.lunch_break ? 1 : 0);
       }, 0);
       setWeeklyHours(Math.round(total * 10) / 10);
     })();
@@ -199,9 +211,15 @@ export default function HomePage() {
                   {modal.direction === "in" ? "출근" : "퇴근"}
                 </p>
                 <p className="text-4xl font-extrabold text-blue-600 text-center mb-1">{modal.time}</p>
-                <p className="text-sm text-gray-500 text-center mb-6">
+                <p className="text-sm text-gray-500 text-center mb-4">
                   {modal.direction === "in" ? "출근" : "퇴근"}하시겠습니까?
                 </p>
+                {modal.direction === "out" && (
+                  <label className="flex items-center justify-center gap-2 mb-5 cursor-pointer select-none">
+                    <input type="checkbox" checked={lunchBreak} onChange={e => setLunchBreak(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                    <span className="text-sm text-gray-600">점심식사 (근무시간 1시간 차감)</span>
+                  </label>
+                )}
                 <div className="flex gap-2">
                   <button
                     onClick={() => setModal(null)}
@@ -286,7 +304,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 주 근무</span>
-              <span>{weeklyHours}h / {weeklyGoal}h</span>
+              <span>{fmtHM(weeklyHours)} / {weeklyGoal}h</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
