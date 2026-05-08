@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const VACATION_TYPES = ["연차", "반차(오전)", "반차(오후)", "병가", "경조사"];
+const VACATION_TYPES = ["연차", "반차(오전)", "반차(오후)", "병가", "경조사", "면접"];
 
 export default function VacationPage() {
   const router = useRouter();

@@ -74,6 +74,11 @@ export function getMealLimit(year: number, month: number): number {
   return getMonthlyBusinessDays(year, month) * 10000;
 }
 
+export function isHoliday(dateStr: string): boolean {
+  const year = parseInt(dateStr.substring(0, 4));
+  return getHolidaySet(year).has(dateStr);
+}
+
 export function fmtDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

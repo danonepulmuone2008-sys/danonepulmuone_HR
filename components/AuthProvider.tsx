@@ -56,7 +56,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         id: session.user.id,
         name: profile?.name ?? meta.name ?? "",
         department: profile?.department ?? meta.department ?? "",
-        position: profile?.role ?? meta.position ?? "",
+        position: meta.position ?? profile?.role ?? "",
         email: session.user.email ?? "",
         token: session.access_token,
       });
