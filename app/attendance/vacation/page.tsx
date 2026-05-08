@@ -39,13 +39,22 @@ export default function VacationPage() {
   };
 
   const handleSubmit = async () => {
-    if (!form.startDate || !form.endDate) { showToast("시작일과 종료일을 입력해주세요.", true); return; }
-    if (form.startDate > form.endDate) { showToast("종료일이 시작일보다 빠를 수 없습니다.", true); return; }
+    if (!form.startDate || !form.endDate) {
+      showToast("시작일과 종료일을 입력해주세요.", true);
+      return;
+    }
+    if (form.startDate > form.endDate) {
+      showToast("종료일이 시작일보다 빠를 수 없습니다.", true);
+      return;
+    }
 
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { showToast("로그인이 필요합니다.", true); return; }
+      if (!session) {
+        showToast("로그인이 필요합니다.", true);
+        return;
+      }
 
       const { error } = await supabase.from("vacation_requests").insert({
         user_id: session.user.id,
@@ -82,8 +91,15 @@ export default function VacationPage() {
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">휴가 종류</label>
             <div className="flex flex-wrap gap-2">
               {VACATION_TYPES.map(type => (
-                <button key={type} onClick={() => update("type", type)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${form.type === type ? "bg-blue-600 text-white border-blue-600" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                <button
+                  key={type}
+                  onClick={() => update("type", type)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    form.type === type
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-gray-50 text-gray-600 border-gray-200"
+                  }`}
+                >
                   {type}
                 </button>
               ))}
@@ -91,16 +107,33 @@ export default function VacationPage() {
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">시작일</label>
-            <input type="date" value={form.startDate} onChange={e => update("startDate", e.target.value)} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50" />
+            <input
+              type="date"
+              value={form.startDate}
+              onChange={e => update("startDate", e.target.value)}
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
-            <input type="date" value={form.endDate} onChange={e => update("endDate", e.target.value)} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50" />
+            <input
+              type="date"
+              value={form.endDate}
+              onChange={e => update("endDate", e.target.value)}
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">사유</label>
-            <textarea value={form.reason} onChange={e => update("reason", e.target.value)} placeholder="휴가 사유를 입력하세요" rows={4} className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 resize-none" />
+            <textarea
+              value={form.reason}
+              onChange={e => update("reason", e.target.value)}
+              placeholder="휴가 사유를 입력하세요"
+              rows={4}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 resize-none"
+            />
           </div>
+
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">증빙서류</label>
             {files.length > 0 && (
@@ -120,13 +153,24 @@ export default function VacationPage() {
               </div>
             )}
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
-            <button onClick={() => fileInputRef.current?.click()} className="w-full h-11 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-all flex items-center justify-center gap-2">
-              <span className="text-base">+</span>파일 첨부
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full h-11 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
+            >
+              <span className="text-base">+</span>
+              파일 첨부
             </button>
           </div>
         </div>
-        <button onClick={handleSubmit} disabled={loading} className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm disabled:opacity-60 flex items-center justify-center">
-          {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "신청하기"}
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm disabled:opacity-60 flex items-center justify-center"
+        >
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : "신청하기"}
         </button>
       </div>
     </div>
