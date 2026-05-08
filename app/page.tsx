@@ -4,6 +4,7 @@ import BottomNav from "@/components/BottomNav";
 import { DUMMY } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -13,8 +14,8 @@ type ModalState =
 type ToastType = "success" | "error";
 
 export default function HomePage() {
-  const { user } = DUMMY;
-
+  const { user } = useAuth();
+  const userProfile = { name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" };
   const [mealUsed, setMealUsed] = useState<number>(DUMMY.meals.used);
   const [mealLimit, setMealLimit] = useState<number>(DUMMY.meals.totalLimit);
   const mealPercent = Math.round((mealUsed / mealLimit) * 100);
@@ -26,7 +27,8 @@ export default function HomePage() {
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
-  const todayStr = new Date().toISOString().split("T")[0];
+  const now2 = new Date();
+  const todayStr = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, "0")}-${String(now2.getDate()).padStart(2, "0")}`;
   const weeklyGoal = 25;
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
@@ -72,18 +74,17 @@ export default function HomePage() {
 
   const handleConfirm = async () => {
     if (!modal || modal.type !== "confirm") return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
+    if (user) {
       const now = new Date().toISOString();
       if (modal.direction === "in") {
         await supabase.from("attendance_records").upsert(
-          { user_id: session.user.id, date: todayStr, clock_in: now, updated_at: now },
+          { user_id: user.id, date: todayStr, clock_in: now, updated_at: now },
           { onConflict: "user_id,date" }
         );
       } else {
         await supabase.from("attendance_records")
           .update({ clock_out: now, updated_at: now })
-          .eq("user_id", session.user.id)
+          .eq("user_id", user.id)
           .eq("date", todayStr);
       }
     }
@@ -106,10 +107,9 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    if (!user) return;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const uid = session.user.id;
+      const uid = user.id;
 
       const { data: today } = await supabase
         .from("attendance_records")
@@ -148,22 +148,20 @@ export default function HomePage() {
       }, 0);
       setWeeklyHours(Math.round(total * 10) / 10);
     })();
-  }, [todayStr]);
+  }, [user, todayStr]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return;
-      fetch("/api/meals/usage", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+    if (!user) return;
+    fetch("/api/meals/usage", {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.used !== undefined) setMealUsed(data.used);
+        if (data.totalLimit !== undefined) setMealLimit(data.totalLimit);
       })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.used !== undefined) setMealUsed(data.used);
-          if (data.totalLimit !== undefined) setMealLimit(data.totalLimit);
-        })
-        .catch(() => {});
-    });
-  }, []);
+      .catch(() => {});
+  }, [user]);
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
@@ -255,9 +253,9 @@ export default function HomePage() {
       {/* 헤더 */}
       <header className="bg-blue-600 px-5 pt-12 pb-6">
         <p className="text-blue-200 text-sm">안녕하세요 👋</p>
-        <h2 className="text-white text-xl font-bold mt-0.5">{user.name}님</h2>
+        <h2 className="text-white text-xl font-bold mt-0.5">{userProfile.name || "로딩 중"}님</h2>
         <p className="text-blue-200 text-xs mt-1">
-          {user.department} · {user.position}
+          {userProfile.department} · {userProfile.position}
         </p>
       </header>
 

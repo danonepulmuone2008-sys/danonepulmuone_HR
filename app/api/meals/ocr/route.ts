@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/client"
+import { supabaseAdmin } from "@/lib/supabase"
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -53,8 +52,7 @@ export async function POST(req: Request) {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const userClient = createClient()
-    const { data: { user } } = await userClient.auth.getUser(token)
+    const { data: { user } } = await supabaseAdmin.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const formData = await req.formData()
@@ -65,11 +63,9 @@ export async function POST(req: Request) {
     const base64 = buffer.toString("base64")
     const mimeType = file.type as "image/jpeg" | "image/png" | "image/webp"
 
-    // Storage 업로드 (admin client로 권한 문제 없이 처리)
-    const admin = createAdminClient()
     const ext = file.name.split(".").pop() ?? "jpg"
     const storagePath = `${user.id}/${Date.now()}.${ext}`
-    const { error: uploadError } = await admin.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from("receipts")
       .upload(storagePath, buffer, { contentType: mimeType })
     if (uploadError) throw new Error(`Storage 업로드 실패: ${uploadError.message}`)

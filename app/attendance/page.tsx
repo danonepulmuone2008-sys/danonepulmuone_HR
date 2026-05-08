@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const GOAL_HOURS = 25;
@@ -70,21 +71,17 @@ export default function AttendancePage() {
   const [weekDays, setWeekDays] = useState<DayData[]>(DAY_LABELS.map(day => ({ day, hours: 0 })));
   const [eventMap, setEventMap] = useState<Record<number, CalEvent[]>>({});
   const [requests, setRequests] = useState<RequestItem[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
 
   const weeks = getWeeksForMonth(currentYear, currentMonth);
   const monthLabel = `${currentYear}년 ${currentMonth + 1}월`;
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) setUserId(data.session.user.id);
-    });
-  }, []);
-
   const fetchWeekData = useCallback(async (uid: string, offset: number) => {
     const monday = getMondayOfWeek(new Date());
     monday.setDate(monday.getDate() + offset * 7);
-    const fmt = (d: Date) => d.toISOString().split("T")[0];
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
     const days = await Promise.all(
       DAY_LABELS.map(async (day, i) => {
@@ -113,12 +110,14 @@ export default function AttendancePage() {
     const startDate = `${currentYear}-${mm}-01`;
     const endDate = `${currentYear}-${mm}-${String(daysInMonth).padStart(2, "0")}`;
 
-    const [{ data: vacations }, { data: trips }] = await Promise.all([
+    const [vacRes, tripRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status")
         .eq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
         .eq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
     ]);
+    const vacations = vacRes.data;
+    const trips = tripRes.data;
 
     const map: Record<number, CalEvent[]> = {};
     vacations?.forEach(v => {

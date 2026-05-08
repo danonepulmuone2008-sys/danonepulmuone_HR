@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   const { password } = await req.json();
@@ -12,8 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "비밀번호는 6자 이상이어야 합니다" }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase.auth.admin.updateUserById(userId, { password });
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
 
   if (error) {
     return NextResponse.json({ error: "비밀번호 변경에 실패했습니다" }, { status: 500 });

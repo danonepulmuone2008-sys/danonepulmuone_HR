@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   const { email, securityQuestion, securityAnswer } = await req.json();
@@ -8,11 +8,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "모든 항목을 입력해주세요" }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
 
   let users;
   try {
-    const result = await supabase.auth.admin.listUsers();
+    const result = await supabaseAdmin.auth.admin.listUsers();
     if (result.error) {
       return NextResponse.json({ error: `Admin API 오류: ${result.error.message}` }, { status: 500 });
     }
