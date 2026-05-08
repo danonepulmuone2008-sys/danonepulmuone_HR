@@ -7,6 +7,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const supabaseAdmin = createClient(
   supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? supabaseAnonKey
 );
+
+export function createAdminClient() {
+  return supabaseAdmin;
+}
 

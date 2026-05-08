@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/client"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 import { getMealLimit } from "@/lib/holidays"
 
 export async function GET(req: Request) {
@@ -8,8 +7,7 @@ export async function GET(req: Request) {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const userClient = createClient()
-    const { data: { user } } = await userClient.auth.getUser(token)
+    const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const now = new Date()
@@ -20,8 +18,7 @@ export async function GET(req: Request) {
       ? `${year + 1}-01-01`
       : `${year}-${String(month + 1).padStart(2, "0")}-01`
 
-    const admin = createAdminClient()
-    const { data, error } = await admin
+    const { data, error } = await supabaseAdmin
       .from("receipts")
       .select("total_amount")
       .eq("uploader_id", user.id)
