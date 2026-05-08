@@ -5,6 +5,16 @@ import { DUMMY } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
+
+function fmtHM(h: number): string {
+  const totalMin = Math.round(h * 60);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (hrs === 0) return `${mins}m`;
+  if (mins === 0) return `${hrs}h`;
+  return `${hrs}h ${mins}m`;
+}
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -29,7 +39,7 @@ export default function HomePage() {
   const [weeklyHours, setWeeklyHours] = useState(0);
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
-  const weeklyGoal = 25;
+  const weeklyGoal = getWorkingDaysInWeek(getMondayOfWeek(_now)) * 5;
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
   const getNow = () => {
@@ -146,7 +156,7 @@ export default function HomePage() {
         if (!r.clock_in || !r.clock_out) return sum;
         return sum + (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
       }, 0);
-      setWeeklyHours(Math.round(total * 10) / 10);
+      setWeeklyHours(Math.round(total * 100) / 100);
     })();
   }, [user, todayStr]);
 
@@ -283,7 +293,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 주 근무</span>
-              <span>{weeklyHours}h / {weeklyGoal}h</span>
+              <span>{fmtHM(weeklyHours)} / {weeklyGoal}h</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div

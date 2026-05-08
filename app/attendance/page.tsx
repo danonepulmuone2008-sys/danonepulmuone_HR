@@ -4,9 +4,9 @@ import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { getWorkingDaysInWeek } from "@/lib/holidays";
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
-const GOAL_HOURS = 25;
 const MAX_DAY_HOURS = 10;
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
@@ -47,6 +47,15 @@ function getWeeksForMonth(year: number, month: number): (number | null)[][] {
     weeks.push(week);
   }
   return weeks;
+}
+
+function fmtHM(h: number): string {
+  const totalMin = Math.round(h * 60);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (hrs === 0) return `${mins}m`;
+  if (mins === 0) return `${hrs}h`;
+  return `${hrs}h ${mins}m`;
 }
 
 function statusKo(status: string): string {
@@ -157,8 +166,11 @@ export default function AttendancePage() {
   }, [userId, fetchMonthData]);
 
   const totalHours = weekDays.reduce((sum, d) => sum + d.hours, 0);
-  const progressPct = Math.min((totalHours / GOAL_HOURS) * 100, 100);
-  const isGoalMet = totalHours >= GOAL_HOURS;
+  const goalMonday = getMondayOfWeek(new Date());
+  goalMonday.setDate(goalMonday.getDate() + weekOffset * 7);
+  const goalHours = getWorkingDaysInWeek(goalMonday) * 5;
+  const progressPct = Math.min((totalHours / goalHours) * 100, 100);
+  const isGoalMet = totalHours >= goalHours;
 
   const flexMap: Record<number, { member: string; startTime: string; endTime: string; isSelf?: boolean }[]> = {};
   myFlexSchedules.forEach(f => {
@@ -199,10 +211,10 @@ export default function AttendancePage() {
           <div className="mb-4">
             <div className="flex justify-between items-baseline mb-2">
               <div className="flex items-baseline gap-1.5">
-                <span className={`text-2xl font-bold ${isGoalMet ? "text-green-600" : "text-blue-600"}`}>{totalHours.toFixed(1)}h</span>
-                <span className="text-xs text-gray-400">/ {GOAL_HOURS}시간</span>
+                <span className={`text-2xl font-bold ${isGoalMet ? "text-green-600" : "text-blue-600"}`}>{fmtHM(totalHours)}</span>
+                <span className="text-xs text-gray-400">/ {goalHours}시간</span>
               </div>
-              {isGoalMet ? <span className="text-xs text-green-600 font-medium">목표 달성</span> : <span className="text-xs text-gray-400">{(GOAL_HOURS - totalHours).toFixed(1)}h 남음</span>}
+              {isGoalMet ? <span className="text-xs text-green-600 font-medium">목표 달성</span> : <span className="text-xs text-gray-400">{fmtHM(goalHours - totalHours)} 남음</span>}
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div className={`h-full rounded-full transition-all duration-500 ${isGoalMet ? "bg-green-500" : "bg-blue-600"}`} style={{ width: `${progressPct}%` }} />
@@ -211,7 +223,7 @@ export default function AttendancePage() {
           <div className="flex justify-between items-end gap-2">
             {weekDays.map(d => (
               <div key={d.day} className="flex flex-col items-center flex-1 gap-1.5">
-                <span className="text-xs text-gray-500 font-medium h-4 flex items-center">{d.hours > 0 ? `${d.hours}h` : ""}</span>
+                <span className="text-xs text-gray-500 font-medium h-4 flex items-center">{d.hours > 0 ? fmtHM(d.hours) : ""}</span>
                 <div className="w-full h-16 bg-gray-100 rounded-lg flex items-end overflow-hidden">
                   <div className={`w-full rounded-lg transition-all duration-500 ${d.hours > 0 ? "bg-blue-500" : ""}`} style={{ height: d.hours > 0 ? `${(d.hours / MAX_DAY_HOURS) * 100}%` : "0%" }} />
                 </div>
