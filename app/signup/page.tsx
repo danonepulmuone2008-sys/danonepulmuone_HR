@@ -11,6 +11,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [department, setDepartment] = useState("");
   const [position, setPosition] = useState("");
   const [securityQuestion, setSecurityQuestion] = useState("");
@@ -51,7 +52,7 @@ export default function SignupPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name, department, position, securityQuestion, securityAnswer } },
+        options: { data: { name, phone, department, position, securityQuestion, securityAnswer } },
       });
 
       if (error) {
@@ -116,6 +117,14 @@ export default function SignupPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="이름"
+            className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
+          />
+          <input
+            type="tel"
+            required
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="전화번호"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
           <input
