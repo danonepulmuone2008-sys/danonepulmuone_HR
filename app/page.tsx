@@ -1,8 +1,10 @@
 "use client";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
-import { DUMMY } from "@/lib/api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
+import { Camera } from "lucide-react";
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -12,8 +14,12 @@ type ModalState =
 type ToastType = "success" | "error";
 
 export default function HomePage() {
-  const { user, attendance, meals } = DUMMY;
-  const mealPercent = Math.round((meals.used / meals.totalLimit) * 100);
+  const { user } = useAuth();
+  const userProfile = { name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" };
+
+  const [mealUsed, setMealUsed] = useState(0);
+  const [mealLimit, setMealLimit] = useState(100000);
+  const mealPercent = Math.round((mealUsed / mealLimit) * 100);
 
   const [clockIn, setClockIn] = useState<string | null>(null);
   const [clockOut, setClockOut] = useState<string | null>(null);
@@ -21,6 +27,12 @@ export default function HomePage() {
   const [editReason, setEditReason] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
+  const [weeklyHours, setWeeklyHours] = useState(0);
+
+  const _now = new Date();
+  const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
+  const weeklyGoal = 25;
+  const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
   const getNow = () => {
     const now = new Date();
@@ -62,8 +74,22 @@ export default function HomePage() {
     setModal({ type: "confirm", direction, time: getNow() });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!modal || modal.type !== "confirm") return;
+    if (user) {
+      const now = new Date().toISOString();
+      if (modal.direction === "in") {
+        await supabase.from("attendance_records").upsert(
+          { user_id: user.id, date: todayStr, clock_in: now, updated_at: now },
+          { onConflict: "user_id,date" }
+        );
+      } else {
+        await supabase.from("attendance_records")
+          .update({ clock_out: now, updated_at: now })
+          .eq("user_id", user.id)
+          .eq("date", todayStr);
+      }
+    }
     if (modal.direction === "in") {
       setClockIn(modal.time);
       showToast(`출근시간이 ${modal.time}로 기록되었습니다.`);
@@ -82,10 +108,62 @@ export default function HomePage() {
     setModal(null);
   };
 
-  const thisWeek = attendance.weeklyData.find((w) => w.offset === 0);
-  const weeklyHours = thisWeek ? thisWeek.days.reduce((sum, d) => sum + d.hours, 0) : 0;
-  const weeklyGoal = 25;
-  const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const uid = user.id;
+
+      const { data: today } = await supabase
+        .from("attendance_records")
+        .select("clock_in, clock_out")
+        .eq("user_id", uid)
+        .eq("date", todayStr)
+        .maybeSingle();
+
+      if (today?.clock_in) {
+        const t = new Date(today.clock_in);
+        setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+      }
+      if (today?.clock_out) {
+        const t = new Date(today.clock_out);
+        setClockOut(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+      }
+
+      const monday = new Date();
+      const day = monday.getDay();
+      monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+      const friday = new Date(monday);
+      friday.setDate(friday.getDate() + 4);
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+      const { data: weekRecords } = await supabase
+        .from("attendance_records")
+        .select("clock_in, clock_out")
+        .eq("user_id", uid)
+        .gte("date", fmt(monday))
+        .lte("date", fmt(friday));
+
+      const total = (weekRecords ?? []).reduce((sum, r) => {
+        if (!r.clock_in || !r.clock_out) return sum;
+        return sum + (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
+      }, 0);
+      setWeeklyHours(Math.round(total * 10) / 10);
+    })();
+  }, [user, todayStr]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/meals/usage", {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.used !== undefined) setMealUsed(data.used);
+        if (data.totalLimit !== undefined) setMealLimit(data.totalLimit);
+      })
+      .catch(() => {});
+  }, [user]);
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
@@ -177,9 +255,9 @@ export default function HomePage() {
       {/* 헤더 */}
       <header className="bg-blue-600 px-5 pt-12 pb-6">
         <p className="text-blue-200 text-sm">안녕하세요 👋</p>
-        <h2 className="text-white text-xl font-bold mt-0.5">{user.name}님</h2>
+        <h2 className="text-white text-xl font-bold mt-0.5">{userProfile.name || "로딩 중"}님</h2>
         <p className="text-blue-200 text-xs mt-1">
-          {user.department} · {user.position}
+          {userProfile.department} · {userProfile.position}
         </p>
       </header>
 
@@ -273,7 +351,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 달 사용</span>
-              <span>{meals.used.toLocaleString()}원 / {meals.totalLimit.toLocaleString()}원</span>
+              <span>{mealUsed.toLocaleString()}원 / {mealLimit.toLocaleString()}원</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
@@ -284,8 +362,9 @@ export default function HomePage() {
             <p className="text-right text-xs text-gray-400 mt-1">{mealPercent}% 사용</p>
           </div>
           <Link href="/meals/ocr">
-            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all">
-              📷 영수증 등록 (OCR)
+            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all flex items-center justify-center gap-2">
+              <Camera size={16} />
+              영수증 등록 (OCR)
             </button>
           </Link>
         </div>

@@ -34,12 +34,14 @@ const KOREAN_HOLIDAYS: Record<number, string[]> = {
     "2026-05-25", // 부처님오신날 대체공휴일
     "2026-06-03", // 지방선거일
     "2026-06-06", // 현충일
-    "2026-08-15", // 광복절
+    "2026-08-15", // 광복절 (토요일)
+    "2026-08-17", // 광복절 대체공휴일 (월)
     "2026-09-24", // 추석연휴
     "2026-09-25", // 추석
     "2026-09-26", // 추석연휴 (토요일)
     "2026-09-28", // 추석 대체공휴일
     "2026-10-03", // 개천절 (토요일)
+    "2026-10-05", // 개천절 대체공휴일 (월)
     "2026-10-09", // 한글날
     "2026-12-25", // 크리스마스
   ],
@@ -70,4 +72,35 @@ export function getMonthlyBusinessDays(year: number, month: number): number {
 // 영업일 * 10,000원
 export function getMealLimit(year: number, month: number): number {
   return getMonthlyBusinessDays(year, month) * 10000;
+}
+
+export function isHoliday(dateStr: string): boolean {
+  const year = parseInt(dateStr.substring(0, 4));
+  return getHolidaySet(year).has(dateStr);
+}
+
+export function fmtDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function getMondayOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// 해당 주(monday 기준)의 영업일 수 반환 — 공휴일 제외한 월~금
+export function getWorkingDaysInWeek(monday: Date): number {
+  const yearSet = new Map<number, Set<string>>();
+  let count = 0;
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + i);
+    const yr = d.getFullYear();
+    if (!yearSet.has(yr)) yearSet.set(yr, getHolidaySet(yr));
+    if (!yearSet.get(yr)!.has(fmtDate(d))) count++;
+  }
+  return count;
 }

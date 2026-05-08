@@ -1,23 +1,19 @@
 "use client"
 import AppBar from "@/components/AppBar"
 import { useState } from "react"
+import { useAuth } from "@/components/AuthProvider"
 
 const BRAND = "#72BF44"
 
-// ─── 더미 데이터 (Supabase 연동 후 교체) ───
-const CURRENT_USER = {
-  id: "9cb8e877-9d96-4e60-b901-df35868c1349", // TODO: auth 연동 후 세션에서 읽어오도록 교체
-  name: "조현희",
-  department: "HR",
-}
-
 const TEAM_MEMBERS = [
-  { id: "user-001", name: "조현희", department: "HR" },        // 본인
+  { id: "user-001", name: "조현희", department: "HR" },
   { id: "user-002", name: "김풀무", department: "인사팀" },
   { id: "user-003", name: "이무원", department: "개발팀" },
   { id: "user-004", name: "박팀장", department: "개발팀" },
   { id: "user-005", name: "최이사", department: "경영지원" },
 ]
+
+type CurrentUser = { id: string; name: string; department: string; token: string }
 
 type MenuItem = {
   name: string
@@ -33,6 +29,7 @@ type OcrResult = {
   items: MenuItem[]
   totalAmount: number
   isLunchTime: boolean
+  storagePath: string
 }
 
 type ManualForm = {
@@ -45,6 +42,11 @@ type Mode = "ocr" | "manual"
 type Status = "idle" | "loading" | "done" | "error"
 
 export default function OcrPage() {
+  const { user } = useAuth()
+  const currentUser: CurrentUser | null = user
+    ? { id: user.id, name: user.name, department: user.department, token: user.token }
+    : null
+
   // 사진
   const [photo, setPhoto] = useState<string | null>(null)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -82,10 +84,10 @@ export default function OcrPage() {
     try {
       const formData = new FormData()
       formData.append("image", file)
-      formData.append("uploaderId", CURRENT_USER.id)
 
       const res = await fetch("/api/meals/ocr", {
         method: "POST",
+        headers: { Authorization: `Bearer ${currentUser?.token ?? ""}` },
         body: formData,
       })
 
@@ -174,8 +176,8 @@ export default function OcrPage() {
 
   const canSubmit = canSubmitOcr || canSubmitManual
 
-  // ─── 저장 (현재는 콘솔 출력만) ───
   const handleSubmit = async () => {
+    if (!currentUser) { alert("로그인이 필요합니다."); return }
     setSubmitting(true)
 
     try {
@@ -184,58 +186,49 @@ export default function OcrPage() {
         if (!manual.date) throw new Error("날짜를 입력해주세요.")
         if (!manual.storeName) throw new Error("식당명을 입력해주세요.")
         if (!manual.amount) throw new Error("금액을 입력해주세요.")
-
-        const payload = {
-          mode: "manual",
-          uploader: CURRENT_USER,
-          photoName: photoFile.name,
-          photoSize: photoFile.size,
-          ...manual,
-          totalAmount: Number(manual.amount),
-        }
-
-        console.log("[수기 입력 저장]", payload)
         alert(`수기 입력 저장 완료!\n\n${manual.storeName}\n${Number(manual.amount).toLocaleString()}원\n${manual.date}`)
       } else {
         if (!result) throw new Error("OCR 결과 없음")
 
-        // 대상자별 합계 계산 (테스트용 디버깅)
+        const res = await fetch("/api/meals/receipts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${currentUser.token}`,
+          },
+          body: JSON.stringify({
+            storagePath: result.storagePath,
+            storeName: result.storeName,
+            paidAt: result.paidAt,
+            totalAmount: result.totalAmount,
+            isLunchTime: result.isLunchTime,
+            ocrRaw: null,
+            items: result.items.map((item) => ({
+              name: item.name,
+              unitPrice: item.unitPrice,
+              qty: item.qty,
+              total: item.total,
+              assigneeId: item.assigneeId,
+            })),
+          }),
+        })
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "저장 실패" }))
+          throw new Error(err.error)
+        }
+
         const byAssignee = result.items.reduce((acc, item) => {
-          const id = item.assigneeId
-          if (!acc[id]) acc[id] = 0
-          acc[id] += item.total
+          if (!acc[item.assigneeId]) acc[item.assigneeId] = 0
+          acc[item.assigneeId] += item.total
           return acc
         }, {} as Record<string, number>)
 
-        const payload = {
-          mode: "ocr",
-          uploader: CURRENT_USER,
-          photoName: photoFile?.name,
-          storeName: result.storeName,
-          paidAt: result.paidAt,
-          totalAmount: result.totalAmount,
-          isLunchTime: result.isLunchTime,
-          items: result.items.map((item) => ({
-            ...item,
-            assigneeName: getAssigneeName(item.assigneeId),
-          })),
-          summaryByAssignee: Object.entries(byAssignee).map(([id, amount]) => ({
-            assigneeId: id,
-            assigneeName: getAssigneeName(id),
-            amount,
-          })),
-        }
-
-        console.log("[OCR 저장]", payload)
-
-        // 알림 메시지 (대상자별 차감 금액 보여주기)
-        const summary = payload.summaryByAssignee
-          .map((s) => `• ${s.assigneeName}: ${s.amount.toLocaleString()}원`)
+        const summary = Object.entries(byAssignee)
+          .map(([id, amt]) => `• ${getAssigneeName(id) || id}: ${amt.toLocaleString()}원`)
           .join("\n")
 
-        alert(
-          `OCR 저장 완료!\n\n${result.storeName} ${result.totalAmount.toLocaleString()}원\n\n승인 요청 발송:\n${summary}`
-        )
+        alert(`저장 완료!\n\n${result.storeName} ${result.totalAmount.toLocaleString()}원\n\n승인 요청 발송:\n${summary}`)
       }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "저장 실패")
@@ -380,7 +373,7 @@ export default function OcrPage() {
                     {TEAM_MEMBERS.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
-                        {m.id === CURRENT_USER.id ? " (나)" : ""}
+                        {m.id === currentUser?.id ? " (나)" : ""}
                       </option>
                     ))}
                   </select>

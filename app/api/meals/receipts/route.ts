@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 interface ReceiptItemPayload {
   name: string
@@ -15,29 +10,34 @@ interface ReceiptItemPayload {
 }
 
 interface SaveReceiptPayload {
-  uploaderId: string
   storagePath: string
   storeName: string
   paidAt: string
   totalAmount: number
   isLunchTime: boolean
-  ocrRaw: object
+  ocrRaw: object | null
   items: ReceiptItemPayload[]
 }
 
 export async function POST(req: Request) {
   try {
-    const body: SaveReceiptPayload = await req.json()
-    const { uploaderId, storagePath, storeName, paidAt, totalAmount, isLunchTime, ocrRaw, items } = body
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    if (!uploaderId || !storagePath || !items?.length) {
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const body: SaveReceiptPayload = await req.json()
+    const { storagePath, storeName, paidAt, totalAmount, isLunchTime, ocrRaw, items } = body
+
+    if (!storagePath || !items?.length) {
       return NextResponse.json({ error: "필수 데이터가 누락됐습니다" }, { status: 400 })
     }
 
     const { data: receipt, error: receiptError } = await supabaseAdmin
       .from("receipts")
       .insert({
-        uploader_id: uploaderId,
+        uploader_id: user.id,
         image_path: storagePath,
         store_name: storeName || null,
         paid_at: paidAt,
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     const { error: itemsError } = await supabaseAdmin.from("receipt_items").insert(
       items.map((item) => ({
         receipt_id: receipt.id,
-        assigned_user_id: item.assigneeId,
+        assigned_user_id: item.assigneeId || user.id,
         item_name: item.name,
         unit_price: item.unitPrice,
         qty: item.qty,
