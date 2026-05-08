@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
-import { DUMMY } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { Camera } from "lucide-react";
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -16,8 +16,9 @@ type ToastType = "success" | "error";
 export default function HomePage() {
   const { user } = useAuth();
   const userProfile = { name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" };
-  const [mealUsed, setMealUsed] = useState<number>(DUMMY.meals.used);
-  const [mealLimit, setMealLimit] = useState<number>(DUMMY.meals.totalLimit);
+
+  const [mealUsed, setMealUsed] = useState(0);
+  const [mealLimit, setMealLimit] = useState(100000);
   const mealPercent = Math.round((mealUsed / mealLimit) * 100);
 
   const [clockIn, setClockIn] = useState<string | null>(null);
@@ -27,6 +28,7 @@ export default function HomePage() {
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
+
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
   const weeklyGoal = 25;
@@ -130,10 +132,10 @@ export default function HomePage() {
       const monday = new Date();
       const day = monday.getDay();
       monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
-      monday.setHours(0, 0, 0, 0);
       const friday = new Date(monday);
       friday.setDate(friday.getDate() + 4);
-      const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
       const { data: weekRecords } = await supabase
         .from("attendance_records")
@@ -360,8 +362,9 @@ export default function HomePage() {
             <p className="text-right text-xs text-gray-400 mt-1">{mealPercent}% 사용</p>
           </div>
           <Link href="/meals/ocr">
-            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all">
-              📷 영수증 등록 (OCR)
+            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all flex items-center justify-center gap-2">
+              <Camera size={16} />
+              영수증 등록 (OCR)
             </button>
           </Link>
         </div>

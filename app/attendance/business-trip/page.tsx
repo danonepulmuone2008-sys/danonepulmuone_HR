@@ -18,14 +18,26 @@ export default function BusinessTripPage() {
   };
 
   const handleSubmit = async () => {
-    if (!form.startDate || !form.endDate) { showToast("시작일과 종료일을 입력해주세요.", true); return; }
-    if (!form.destination.trim()) { showToast("목적지를 입력해주세요.", true); return; }
-    if (form.startDate > form.endDate) { showToast("종료일이 시작일보다 빠를 수 없습니다.", true); return; }
+    if (!form.startDate || !form.endDate) {
+      showToast("시작일과 종료일을 입력해주세요.", true);
+      return;
+    }
+    if (!form.destination.trim()) {
+      showToast("목적지를 입력해주세요.", true);
+      return;
+    }
+    if (form.startDate > form.endDate) {
+      showToast("종료일이 시작일보다 빠를 수 없습니다.", true);
+      return;
+    }
 
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { showToast("로그인이 필요합니다.", true); return; }
+      if (!session) {
+        showToast("로그인이 필요합니다.", true);
+        return;
+      }
 
       const { error } = await supabase.from("business_trip_requests").insert({
         user_id: session.user.id,
@@ -60,23 +72,52 @@ export default function BusinessTripPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 시작일</label>
-            <input type="date" value={form.startDate} onChange={e => update("startDate", e.target.value)} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50" />
+            <input
+              type="date"
+              value={form.startDate}
+              onChange={e => update("startDate", e.target.value)}
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 종료일</label>
-            <input type="date" value={form.endDate} onChange={e => update("endDate", e.target.value)} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50" />
+            <input
+              type="date"
+              value={form.endDate}
+              onChange={e => update("endDate", e.target.value)}
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">목적지</label>
-            <input type="text" value={form.destination} onChange={e => update("destination", e.target.value)} placeholder="예) 서울, 부산" className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50" />
+            <input
+              type="text"
+              value={form.destination}
+              onChange={e => update("destination", e.target.value)}
+              placeholder="예) 서울, 부산"
+              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 사유</label>
-            <textarea value={form.reason} onChange={e => update("reason", e.target.value)} placeholder="출장 목적을 입력하세요" rows={4} className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 resize-none" />
+            <textarea
+              value={form.reason}
+              onChange={e => update("reason", e.target.value)}
+              placeholder="출장 목적을 입력하세요"
+              rows={4}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 resize-none"
+            />
           </div>
         </div>
-        <button onClick={handleSubmit} disabled={loading} className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm disabled:opacity-60 flex items-center justify-center">
-          {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "신청하기"}
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm disabled:opacity-60 flex items-center justify-center"
+        >
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : "신청하기"}
         </button>
       </div>
     </div>
