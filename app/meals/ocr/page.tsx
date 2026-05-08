@@ -1,17 +1,13 @@
 "use client"
 import AppBar from "@/components/AppBar"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/components/AuthProvider"
+import { supabase } from "@/lib/supabase"
+import { PenLine, ChevronDown, Check } from "lucide-react"
 
 const BRAND = "#72BF44"
 
-const TEAM_MEMBERS = [
-  { id: "user-001", name: "조현희", department: "HR" },
-  { id: "user-002", name: "김풀무", department: "인사팀" },
-  { id: "user-003", name: "이무원", department: "개발팀" },
-  { id: "user-004", name: "박팀장", department: "개발팀" },
-  { id: "user-005", name: "최이사", department: "경영지원" },
-]
+type TeamMember = { id: string; name: string; department: string }
 
 type CurrentUser = { id: string; name: string; department: string; token: string }
 
@@ -20,7 +16,7 @@ type MenuItem = {
   unitPrice: number
   qty: number
   total: number
-  assigneeId: string  // user_id 저장 (이름 X)
+  assigneeIds: string[]
 }
 
 type OcrResult = {
@@ -32,10 +28,11 @@ type OcrResult = {
   storagePath: string
 }
 
+type ManualItem = { amount: string; assigneeId: string }
 type ManualForm = {
   date: string
   storeName: string
-  amount: string
+  items: ManualItem[]
 }
 
 type Mode = "ocr" | "manual"
@@ -47,9 +44,16 @@ export default function OcrPage() {
     ? { id: user.id, name: user.name, department: user.department, token: user.token }
     : null
 
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+
+  useEffect(() => {
+    supabase.from("users").select("id, name, department").then(({ data }) => {
+      if (data) setTeamMembers(data)
+    })
+  }, [])
+
   // 사진
   const [photo, setPhoto] = useState<string | null>(null)
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
 
   // OCR 상태
   const [status, setStatus] = useState<Status>("idle")
@@ -63,11 +67,29 @@ export default function OcrPage() {
   const [manual, setManual] = useState<ManualForm>({
     date: "",
     storeName: "",
-    amount: "",
+    items: [{ amount: "", assigneeId: "" }],
   })
+
+  // 수기 담당자 바텀시트 (열린 항목 인덱스)
+  const [manualAssigneeIdx, setManualAssigneeIdx] = useState<number | null>(null)
+
+  const updateManualItem = (idx: number, field: keyof ManualItem, value: string) =>
+    setManual((prev) => ({
+      ...prev,
+      items: prev.items.map((it, i) => i === idx ? { ...it, [field]: value } : it),
+    }))
+
+  const addManualItem = () =>
+    setManual((prev) => ({ ...prev, items: [...prev.items, { amount: "", assigneeId: "" }] }))
+
+  const removeManualItem = (idx: number) =>
+    setManual((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))
 
   // 저장 상태
   const [submitting, setSubmitting] = useState(false)
+
+  // 담당자 선택 바텀시트
+  const [selectingItemIdx, setSelectingItemIdx] = useState<number | null>(null)
 
   // ─── 사진 선택 + OCR 시도 ───
   const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,7 +97,6 @@ export default function OcrPage() {
     if (!file) return
 
     setPhoto(URL.createObjectURL(file))
-    setPhotoFile(file)
     setResult(null)
     setStatus("loading")
     setErrorMsg("")
@@ -103,9 +124,9 @@ export default function OcrPage() {
       }
 
       const itemsWithAssignee = data.items.map(
-        (item: Omit<MenuItem, "assigneeId">) => ({
+        (item: Omit<MenuItem, "assigneeIds">) => ({
           ...item,
-          assigneeId: "",
+          assigneeIds: [],
         })
       )
 
@@ -117,12 +138,20 @@ export default function OcrPage() {
     }
   }
 
-  const updateAssignee = (index: number, assigneeId: string) => {
+  const toggleAssignee = (index: number, uid: string) => {
     if (!result) return
-    const items = result.items.map((item, i) =>
-      i === index ? { ...item, assigneeId } : item
-    )
-    setResult({ ...result, items })
+    setResult({
+      ...result,
+      items: result.items.map((item, i) => {
+        if (i !== index) return item
+        const isSelected = item.assigneeIds.includes(uid)
+        if (!isSelected && item.assigneeIds.length >= item.qty) return item
+        const ids = isSelected
+          ? item.assigneeIds.filter((id) => id !== uid)
+          : [...item.assigneeIds, uid]
+        return { ...item, assigneeIds: ids }
+      }),
+    })
   }
 
   const switchToManual = () => {
@@ -131,7 +160,7 @@ export default function OcrPage() {
       setManual({
         date: result.paidAt ? result.paidAt.slice(0, 10) : "",
         storeName: result.storeName ?? "",
-        amount: result.totalAmount ? String(result.totalAmount) : "",
+        items: [{ amount: result.totalAmount ? String(result.totalAmount) : "", assigneeId: "" }],
       })
     }
   }
@@ -157,7 +186,7 @@ export default function OcrPage() {
 
   // 항목 대상자 이름 가져오기 (표시용)
   const getAssigneeName = (id: string): string => {
-    return TEAM_MEMBERS.find((m) => m.id === id)?.name ?? ""
+    return teamMembers.find((m) => m.id === id)?.name ?? ""
   }
 
   const canSubmitOcr =
@@ -165,14 +194,14 @@ export default function OcrPage() {
     status === "done" &&
     result &&
     result.items.length > 0 &&
-    result.items.every((i) => i.assigneeId !== "")
+    result.items.every((i) => i.assigneeIds.length > 0)
 
   const canSubmitManual =
     mode === "manual" &&
-    photo &&
-    manual.date &&
-    manual.storeName &&
-    manual.amount
+    !!manual.date &&
+    !!manual.storeName &&
+    manual.items.length > 0 &&
+    manual.items.every((it) => !!it.amount && !!it.assigneeId)
 
   const canSubmit = canSubmitOcr || canSubmitManual
 
@@ -182,11 +211,13 @@ export default function OcrPage() {
 
     try {
       if (mode === "manual") {
-        if (!photoFile) throw new Error("영수증 사진을 첨부해주세요.")
         if (!manual.date) throw new Error("날짜를 입력해주세요.")
         if (!manual.storeName) throw new Error("식당명을 입력해주세요.")
-        if (!manual.amount) throw new Error("금액을 입력해주세요.")
-        alert(`수기 입력 저장 완료!\n\n${manual.storeName}\n${Number(manual.amount).toLocaleString()}원\n${manual.date}`)
+        if (manual.items.some((it) => !it.amount)) throw new Error("금액을 모두 입력해주세요.")
+        if (manual.items.some((it) => !it.assigneeId)) throw new Error("담당자를 모두 선택해주세요.")
+        const total = manual.items.reduce((s, it) => s + Number(it.amount), 0)
+        const summary = manual.items.map((it) => `• ${getAssigneeName(it.assigneeId)}: ${Number(it.amount).toLocaleString()}원`).join("\n")
+        alert(`수기 입력 저장 완료!\n\n${manual.storeName} | ${manual.date}\n합계 ${total.toLocaleString()}원\n\n${summary}`)
       } else {
         if (!result) throw new Error("OCR 결과 없음")
 
@@ -208,7 +239,7 @@ export default function OcrPage() {
               unitPrice: item.unitPrice,
               qty: item.qty,
               total: item.total,
-              assigneeId: item.assigneeId,
+              assigneeIds: item.assigneeIds,
             })),
           }),
         })
@@ -219,13 +250,16 @@ export default function OcrPage() {
         }
 
         const byAssignee = result.items.reduce((acc, item) => {
-          if (!acc[item.assigneeId]) acc[item.assigneeId] = 0
-          acc[item.assigneeId] += item.total
+          const split = item.total / item.assigneeIds.length
+          item.assigneeIds.forEach((id) => {
+            if (!acc[id]) acc[id] = 0
+            acc[id] += split
+          })
           return acc
         }, {} as Record<string, number>)
 
         const summary = Object.entries(byAssignee)
-          .map(([id, amt]) => `• ${getAssigneeName(id) || id}: ${amt.toLocaleString()}원`)
+          .map(([id, amt]) => `• ${getAssigneeName(id) || id}: ${Math.round(amt).toLocaleString()}원`)
           .join("\n")
 
         alert(`저장 완료!\n\n${result.storeName} ${result.totalAmount.toLocaleString()}원\n\n승인 요청 발송:\n${summary}`)
@@ -268,6 +302,17 @@ export default function OcrPage() {
             )}
           </div>
         </label>
+
+        {/* 수기 입력 버튼 */}
+        {!photo && (
+          <button
+            onClick={switchToManual}
+            className="w-full py-3 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+          >
+            <PenLine size={15} className="text-gray-400" />
+            <p className="text-sm font-medium text-gray-500">수기 입력</p>
+          </button>
+        )}
 
         {/* 로딩 */}
         {status === "loading" && (
@@ -339,12 +384,12 @@ export default function OcrPage() {
               {result.items.map((item, i) => (
                 <div
                   key={i}
-                  className={`flex items-center justify-between px-4 py-3.5 border-b border-gray-50 last:border-b-0 ${
-                    item.assigneeId ? "bg-green-50/40" : ""
+                  className={`px-4 py-3.5 border-b border-gray-50 last:border-b-0 ${
+                    item.assigneeIds.length > 0 ? "bg-green-50/40" : ""
                   }`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">
                         {item.name}
                       </p>
@@ -354,29 +399,28 @@ export default function OcrPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {item.unitPrice.toLocaleString()}원
-                      {item.qty > 1 &&
-                        ` × ${item.qty} = ${item.total.toLocaleString()}원`}
+                    <p className="text-sm font-semibold text-gray-700 ml-2 flex-shrink-0">
+                      {item.total.toLocaleString()}원
                     </p>
                   </div>
-                  <select
-                    value={item.assigneeId}
-                    onChange={(e) => updateAssignee(i, e.target.value)}
-                    className={`text-xs font-medium px-3 py-1.5 rounded-lg border outline-none appearance-none cursor-pointer transition-colors ml-2 ${
-                      item.assigneeId
+                  <button
+                    onClick={() => setSelectingItemIdx(i)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-sm transition-colors ${
+                      item.assigneeIds.length > 0
                         ? "border-green-400 bg-green-50 text-green-700"
-                        : "border-gray-200 bg-gray-50 text-gray-500"
+                        : "border-gray-200 bg-gray-50 text-gray-400"
                     }`}
                   >
-                    <option value="">선택</option>
-                    {TEAM_MEMBERS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                        {m.id === currentUser?.id ? " (나)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                    <span className="truncate text-xs">
+                      {item.assigneeIds.length === 0
+                        ? "담당자 선택"
+                        : item.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                    </span>
+                    <span className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                      <span className="text-xs">{item.assigneeIds.length}/{item.qty}명</span>
+                      <ChevronDown size={13} />
+                    </span>
+                  </button>
                 </div>
               ))}
             </div>
@@ -395,7 +439,9 @@ export default function OcrPage() {
                   {result.isLunchTime ? "점심 시간 검증 통과" : "점심 시간 외 결제"}
                 </p>
                 <p className="text-xs mt-0.5 opacity-70">
-                  11:30~14:00 사이에 결제됨
+                  {result.isLunchTime
+                    ? "11:30~14:00 사이에 결제됨"
+                    : "점심 시간(11:30~14:00) 외에 결제됨"}
                 </p>
               </div>
             </div>
@@ -449,28 +495,62 @@ export default function OcrPage() {
               />
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                금액 <span className="text-red-400">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={manual.amount}
-                  onChange={(e) => setManual({ ...manual, amount: e.target.value })}
-                  placeholder="0"
-                  className="w-full px-4 py-3 pr-10 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">
-                  원
-                </span>
-              </div>
+            {/* 금액 + 담당자 헤더 */}
+            <div className="flex gap-3 px-0.5">
+              <p className="flex-1 text-xs font-medium text-gray-500">금액 <span className="text-red-400">*</span></p>
+              <p className="flex-1 text-xs font-medium text-gray-500">담당자 <span className="text-red-400">*</span></p>
+              <div className="w-7" />
             </div>
+
+            {/* 항목 행 */}
+            {manual.items.map((it, idx) => (
+              <div key={idx} className="flex gap-3 items-center">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={it.amount}
+                    onChange={(e) => updateManualItem(idx, "amount", e.target.value.replace(/\D/g, ""))}
+                    placeholder="0"
+                    className="w-full px-3 py-2.5 pr-7 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">원</span>
+                </div>
+                <div className="flex-1">
+                  <button
+                    onClick={() => setManualAssigneeIdx(idx)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-xs transition-colors ${
+                      it.assigneeId
+                        ? "border-green-400 bg-green-50 text-green-700"
+                        : "border-gray-200 bg-gray-50 text-gray-400"
+                    }`}
+                  >
+                    <span className="truncate">{it.assigneeId ? getAssigneeName(it.assigneeId) : "선택"}</span>
+                    <ChevronDown size={12} className="flex-shrink-0 ml-1" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => removeManualItem(idx)}
+                  disabled={manual.items.length === 1}
+                  className="w-7 h-7 flex items-center justify-center rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-0"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            {/* 항목 추가 버튼 */}
+            <button
+              onClick={addManualItem}
+              className="flex items-center gap-1.5 text-xs font-medium self-start px-3 py-1.5 rounded-lg border border-dashed border-gray-300 text-gray-400 hover:border-green-400 hover:text-green-600 transition-colors"
+            >
+              + 항목 추가
+            </button>
           </div>
         )}
 
         {/* 저장 버튼 */}
-        {photo && (
+        {(photo || mode === "manual") && (
           <button
             disabled={!canSubmit || submitting}
             onClick={handleSubmit}
@@ -481,6 +561,109 @@ export default function OcrPage() {
           </button>
         )}
       </div>
+
+      {/* 수기 입력 담당자 바텀시트 */}
+      {manualAssigneeIdx !== null && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setManualAssigneeIdx(null)} />
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="px-5 py-3 border-b border-gray-100">
+              <p className="text-sm font-bold text-gray-800">담당자 선택</p>
+            </div>
+            <div className="overflow-y-auto max-h-64 py-1">
+              {teamMembers.map((m) => {
+                const selected = manual.items[manualAssigneeIdx]?.assigneeId === m.id
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      updateManualItem(manualAssigneeIdx, "assigneeId", m.id)
+                      setManualAssigneeIdx(null)
+                    }}
+                    className="w-full flex items-center gap-3 px-5 py-3 text-left active:bg-gray-50 transition-colors"
+                  >
+                    <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
+                      selected ? "bg-green-500 border-green-500" : "border-gray-300"
+                    }`}>
+                      {selected && <Check size={11} className="text-white" strokeWidth={3} />}
+                    </span>
+                    <span className={`text-sm ${selected ? "text-green-700 font-semibold" : "text-gray-700"}`}>
+                      {m.name}{m.id === currentUser?.id ? " (나)" : ""}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="px-5 py-4">
+              <button
+                onClick={() => setManualAssigneeIdx(null)}
+                className="w-full py-3 rounded-xl text-white text-sm font-semibold"
+                style={{ background: BRAND }}
+              >
+                완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 담당자 선택 바텀시트 */}
+      {selectingItemIdx !== null && result && (() => {
+        const item = result.items[selectingItemIdx]
+        return (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setSelectingItemIdx(null)} />
+            <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-gray-200" />
+              </div>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                <p className="text-sm font-bold text-gray-800 truncate mr-3">{item.name}</p>
+                <span className="text-xs text-gray-400 flex-shrink-0">
+                  {item.assigneeIds.length}/{item.qty}명 선택
+                </span>
+              </div>
+              <div className="overflow-y-auto max-h-64 py-1">
+                {teamMembers.map((m) => {
+                  const selected = item.assigneeIds.includes(m.id)
+                  const maxReached = item.assigneeIds.length >= item.qty && !selected
+                  return (
+                    <button
+                      key={m.id}
+                      disabled={maxReached}
+                      onClick={() => toggleAssignee(selectingItemIdx, m.id)}
+                      className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${
+                        maxReached ? "opacity-40 cursor-not-allowed" : "active:bg-gray-50"
+                      }`}
+                    >
+                      <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
+                        selected ? "bg-green-500 border-green-500" : "border-gray-300"
+                      }`}>
+                        {selected && <Check size={11} className="text-white" strokeWidth={3} />}
+                      </span>
+                      <span className={`text-sm ${selected ? "text-green-700 font-semibold" : "text-gray-700"}`}>
+                        {m.name}{m.id === currentUser?.id ? " (나)" : ""}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="px-5 py-4">
+                <button
+                  onClick={() => setSelectingItemIdx(null)}
+                  className="w-full py-3 rounded-xl text-white text-sm font-semibold"
+                  style={{ background: BRAND }}
+                >
+                  완료
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
