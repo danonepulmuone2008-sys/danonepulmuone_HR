@@ -1,6 +1,7 @@
 "use client"
 import AppBar from "@/components/AppBar"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/AuthProvider"
 import { supabase } from "@/lib/supabase"
 import { PenLine, ChevronDown, Check } from "lucide-react"
@@ -39,6 +40,7 @@ type Mode = "ocr" | "manual"
 type Status = "idle" | "loading" | "done" | "error"
 
 export default function OcrPage() {
+  const router = useRouter()
   const { user } = useAuth()
   const currentUser: CurrentUser | null = user
     ? { id: user.id, name: user.name, department: user.department, token: user.token }
@@ -87,6 +89,8 @@ export default function OcrPage() {
 
   // 저장 상태
   const [submitting, setSubmitting] = useState(false)
+  const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [savedNeedsApproval, setSavedNeedsApproval] = useState(false)
 
   // 담당자 선택 바텀시트
   const [selectingItemIdx, setSelectingItemIdx] = useState<number | null>(null)
@@ -210,65 +214,137 @@ export default function OcrPage() {
     setSubmitting(true)
 
     try {
+      let payload: {
+        source: "ocr" | "manual"
+        storagePath: string | null
+        storeName: string
+        paidAt: string
+        totalAmount: number
+        isLunchTime: boolean
+        ocrRaw: null
+        items: { name: string; unitPrice: number; qty: number; total: number; assigneeIds: string[] }[]
+      }
+
       if (mode === "manual") {
         if (!manual.date) throw new Error("날짜를 입력해주세요.")
         if (!manual.storeName) throw new Error("식당명을 입력해주세요.")
         if (manual.items.some((it) => !it.amount)) throw new Error("금액을 모두 입력해주세요.")
         if (manual.items.some((it) => !it.assigneeId)) throw new Error("담당자를 모두 선택해주세요.")
-        const total = manual.items.reduce((s, it) => s + Number(it.amount), 0)
-        const summary = manual.items.map((it) => `• ${getAssigneeName(it.assigneeId)}: ${Number(it.amount).toLocaleString()}원`).join("\n")
-        alert(`수기 입력 저장 완료!\n\n${manual.storeName} | ${manual.date}\n합계 ${total.toLocaleString()}원\n\n${summary}`)
+
+        const totalAmount = manual.items.reduce((s, it) => s + Number(it.amount), 0)
+        payload = {
+          source: "manual",
+          storagePath: null,
+          storeName: manual.storeName,
+          paidAt: `${manual.date}T12:00:00`,
+          totalAmount,
+          isLunchTime: false,
+          ocrRaw: null,
+          items: manual.items.map((it) => ({
+            name: "식대",
+            unitPrice: Number(it.amount),
+            qty: 1,
+            total: Number(it.amount),
+            assigneeIds: [it.assigneeId],
+          })),
+        }
       } else {
         if (!result) throw new Error("OCR 결과 없음")
-
-        const res = await fetch("/api/meals/receipts", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${currentUser.token}`,
-          },
-          body: JSON.stringify({
-            storagePath: result.storagePath,
-            storeName: result.storeName,
-            paidAt: result.paidAt,
-            totalAmount: result.totalAmount,
-            isLunchTime: result.isLunchTime,
-            ocrRaw: null,
-            items: result.items.map((item) => ({
-              name: item.name,
-              unitPrice: item.unitPrice,
-              qty: item.qty,
-              total: item.total,
-              assigneeIds: item.assigneeIds,
-            })),
-          }),
-        })
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: "저장 실패" }))
-          throw new Error(err.error)
+        payload = {
+          source: "ocr",
+          storagePath: result.storagePath,
+          storeName: result.storeName,
+          paidAt: result.paidAt,
+          totalAmount: result.totalAmount,
+          isLunchTime: result.isLunchTime,
+          ocrRaw: null,
+          items: result.items.map((item) => ({
+            name: item.name,
+            unitPrice: item.unitPrice,
+            qty: item.qty,
+            total: item.total,
+            assigneeIds: item.assigneeIds,
+          })),
         }
-
-        const byAssignee = result.items.reduce((acc, item) => {
-          const split = item.total / item.assigneeIds.length
-          item.assigneeIds.forEach((id) => {
-            if (!acc[id]) acc[id] = 0
-            acc[id] += split
-          })
-          return acc
-        }, {} as Record<string, number>)
-
-        const summary = Object.entries(byAssignee)
-          .map(([id, amt]) => `• ${getAssigneeName(id) || id}: ${Math.round(amt).toLocaleString()}원`)
-          .join("\n")
-
-        alert(`저장 완료!\n\n${result.storeName} ${result.totalAmount.toLocaleString()}원\n\n승인 요청 발송:\n${summary}`)
       }
+
+      const res = await fetch("/api/meals/receipts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentUser.token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "저장 실패" }))
+        throw new Error(err.error)
+      }
+
+      const data = await res.json()
+      setSavedNeedsApproval(data.needsApproval ?? false)
+      setSubmitSuccess(true)
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "저장 실패")
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (submitSuccess) {
+    const assigneeNames = mode === "manual"
+      ? [...new Set(manual.items.map((it) => getAssigneeName(it.assigneeId)).filter(Boolean))]
+      : result
+        ? [...new Set(result.items.flatMap((i) => i.assigneeIds).map((id) => getAssigneeName(id)).filter(Boolean))]
+        : []
+
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <AppBar title="영수증 등록" />
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center"
+            style={{ background: `${BRAND}20` }}
+          >
+            <Check size={40} style={{ color: BRAND }} strokeWidth={2.5} />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-bold text-gray-900 mb-1">
+              {savedNeedsApproval ? "승인 요청 완료" : "저장 완료"}
+            </p>
+            <p className="text-sm text-gray-500">
+              {savedNeedsApproval
+                ? "담당자에게 승인 요청이 전송됐습니다"
+                : "식대가 바로 저장됐습니다"}
+            </p>
+          </div>
+          {savedNeedsApproval && assigneeNames.length > 0 && (
+            <div className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              <p className="text-xs font-medium text-gray-400 mb-2">승인 요청 대상</p>
+              <div className="flex flex-col gap-1.5">
+                {assigneeNames.map((name) => (
+                  <div key={name} className="flex items-center gap-2">
+                    <span
+                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                      style={{ background: BRAND }}
+                    />
+                    <span className="text-sm text-gray-700">{name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => router.push("/meals")}
+            className="w-full py-4 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm"
+            style={{ background: BRAND }}
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
