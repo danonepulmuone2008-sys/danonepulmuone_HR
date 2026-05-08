@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Camera } from "lucide-react";
+import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
 
 type ModalState =
   | { type: "confirm"; direction: "in" | "out"; time: string }
@@ -31,7 +32,7 @@ export default function HomePage() {
 
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
-  const weeklyGoal = 25;
+  const weeklyGoal = getWorkingDaysInWeek(getMondayOfWeek(_now)) * 5;
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
   const getNow = () => {
