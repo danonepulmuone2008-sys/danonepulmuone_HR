@@ -5,6 +5,7 @@ import { DUMMY } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { Camera } from "lucide-react";
 import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
 
 function fmtHM(h: number): string {
@@ -370,8 +371,9 @@ export default function HomePage() {
             <p className="text-right text-xs text-gray-400 mt-1">{mealPercent}% 사용</p>
           </div>
           <Link href="/meals/ocr">
-            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all">
-              📷 영수증 등록 (OCR)
+            <button className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium active:scale-95 transition-all flex items-center justify-center gap-2">
+              <Camera size={16} />
+              영수증 등록 (OCR)
             </button>
           </Link>
         </div>
