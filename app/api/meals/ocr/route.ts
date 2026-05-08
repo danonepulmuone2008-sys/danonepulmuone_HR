@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { supabase, supabaseAdmin } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase"
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const { data: { user } } = await supabaseAdmin.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const formData = await req.formData()

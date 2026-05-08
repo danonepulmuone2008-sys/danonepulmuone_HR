@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 const BRAND_BLUE = "#72BF44";
 const BRAND_GREEN = "#4A9A25";
@@ -228,24 +229,29 @@ const AlarmModal = ({
 
 /* ───────────────────── 메인 ───────────────────── */
 export default function MyPage() {
+  const { user: authUser } = useAuth();
+
   /* 프로필 */
   const [showEdit, setShowEdit] = useState(false);
   const [form, setForm] = useState({ name: "", department: "", position: "", phone: "", email: "" });
   const [saved, setSaved] = useState({ ...form });
 
   useEffect(() => {
+    if (!authUser) return;
     const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-      if (data) {
-        const profile = { name: data.name ?? "", department: data.department ?? "", position: data.position ?? "", phone: data.phone ?? "", email: data.email ?? user.email ?? "" };
-        setForm(profile);
-        setSaved(profile);
-      }
+      const { data } = await supabase.from("users").select("*").eq("id", authUser.id).single();
+      const profile = {
+        name: data?.name ?? authUser.name,
+        department: data?.department ?? authUser.department,
+        position: data?.position ?? authUser.position,
+        phone: data?.phone ?? "",
+        email: data?.email ?? authUser.email,
+      };
+      setForm(profile);
+      setSaved(profile);
     };
     fetchProfile();
-  }, []);
+  }, [authUser]);
 
   /* 로그아웃 확인 */
   const [showLogout, setShowLogout] = useState(false);
@@ -279,9 +285,8 @@ export default function MyPage() {
   const [inquirySent, setInquirySent] = useState(false);
 
   const handleSendInquiry = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("inquiries").insert({ user_id: user.id, subject: inquiry.subject, content: inquiry.content });
+    if (authUser) {
+      await supabase.from("inquiries").insert({ user_id: authUser.id, subject: inquiry.subject, content: inquiry.content });
     }
     const mailto = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(`[인턴 문의] ${inquiry.subject}`)}&body=${encodeURIComponent(`보내는 사람: ${saved.name} (${saved.department} · ${saved.position})\n\n${inquiry.content}`)}`;
     window.location.href = mailto;
@@ -308,9 +313,8 @@ export default function MyPage() {
 
   useEffect(() => {
     const fetchAlarm = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase.from("alarm_settings").select("*").eq("id", user.id).single();
+      if (!authUser) return;
+      const { data } = await supabase.from("alarm_settings").select("*").eq("id", authUser.id).single();
       if (data) {
         setAlarmOn(data.alarm_on ?? false);
         setAlarmTime(data.alarm_time ?? "09:00");
@@ -321,7 +325,7 @@ export default function MyPage() {
       }
     };
     fetchAlarm();
-  }, []);
+  }, [authUser]);
 
   /* 알람 모달 임시값 */
   const [activeAlarm, setActiveAlarm] = useState<"근태" | "식대" | null>(null);
@@ -340,10 +344,9 @@ export default function MyPage() {
     const newMealDays = activeAlarm === "식대" ? tempDays : mealAlarmDays;
     if (activeAlarm === "근태") { setAlarmTime(tempTime); setAlarmDays(tempDays); }
     else { setMealAlarmTime(tempTime); setMealAlarmDays(tempDays); }
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    if (authUser) {
       await supabase.from("alarm_settings").upsert({
-        id: user.id,
+        id: authUser.id,
         alarm_on: alarmOn,
         alarm_time: newAlarmTime,
         alarm_days: newAlarmDays,
@@ -449,9 +452,8 @@ export default function MyPage() {
             <div className="px-5 pb-8 pt-1">
               <button
                 onClick={async () => {
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (!user) return;
-                  await supabase.from("profiles").upsert({ id: user.id, ...form });
+                  if (!authUser) return;
+                  await supabase.from("users").upsert({ id: authUser.id, ...form });
                   setSaved({ ...form });
                   setShowEdit(false);
                 }}
@@ -789,9 +791,8 @@ export default function MyPage() {
                   <button
                     disabled={!withdrawPw || !withdrawAgree}
                     onClick={async () => {
-                      const { data: { user } } = await supabase.auth.getUser();
-                      if (!user) return;
-                      await supabase.from("profiles").update({ is_active: false }).eq("id", user.id);
+                      if (!authUser) return;
+                      await supabase.from("users").update({ is_active: false }).eq("id", authUser.id);
                       await supabase.auth.signOut();
                       closeWithdraw();
                       window.location.href = "/login";
