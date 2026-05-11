@@ -18,16 +18,13 @@ export default function AdminHomePage() {
 
   const [showLogout, setShowLogout] = useState(false);
   const [editInternId, setEditInternId] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<"attendance" | "meals">("attendance");
   const [editDate, setEditDate] = useState(getTodayStr());
   const [editCheckIn, setEditCheckIn] = useState("");
   const [editCheckOut, setEditCheckOut] = useState("");
-  const [editMealAmount, setEditMealAmount] = useState("");
 
   const [attendanceOverrides, setAttendanceOverrides] = useState<
     Record<string, { checkIn: string; checkOut: string }>
   >({});
-  const [mealOverrides, setMealOverrides] = useState<Record<string, number>>({});
 
   function getAttendanceStatus(internId: string): "출근" | "퇴근" | null {
     const today = getTodayStr();
@@ -42,11 +39,6 @@ export default function AdminHomePage() {
     return record.checkOut ? "퇴근" : "출근";
   }
 
-  function getMealUsed(internId: string): number {
-    if (mealOverrides[internId] !== undefined) return mealOverrides[internId];
-    return ADMIN_DUMMY.internMeals.find((m) => m.internId === internId)?.used ?? 0;
-  }
-
   function openEdit(internId: string) {
     const today = getTodayStr();
     const key = `${internId}_${today}`;
@@ -57,9 +49,7 @@ export default function AdminHomePage() {
     setEditDate(today);
     setEditCheckIn(override?.checkIn ?? record?.checkIn ?? "");
     setEditCheckOut(override?.checkOut ?? record?.checkOut ?? "");
-    setEditMealAmount(String(getMealUsed(internId)));
     setEditInternId(internId);
-    setEditTab("attendance");
   }
 
   function handleDateChange(date: string) {
@@ -80,14 +70,6 @@ export default function AdminHomePage() {
       ...prev,
       [`${editInternId}_${editDate}`]: { checkIn: editCheckIn, checkOut: editCheckOut },
     }));
-    setEditInternId(null);
-  }
-
-  function saveMeals() {
-    if (!editInternId) return;
-    const amount = parseInt(editMealAmount);
-    if (isNaN(amount)) return;
-    setMealOverrides((prev) => ({ ...prev, [editInternId!]: amount }));
     setEditInternId(null);
   }
 
@@ -222,105 +204,45 @@ export default function AdminHomePage() {
               </button>
             </div>
 
-            {/* 탭 */}
-            <div className="flex border-b border-gray-100">
+            {/* 출퇴근 시간 수정 */}
+            <div className="px-5 pt-4">
+              <div className="mb-4">
+                <label className="text-xs text-gray-500 mb-1.5 block">날짜</label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                />
+              </div>
+              <div className="flex gap-3 mb-5">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 mb-1.5 block">출근 시간</label>
+                  <input
+                    type="time"
+                    value={editCheckIn}
+                    onChange={(e) => setEditCheckIn(e.target.value)}
+                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 mb-1.5 block">퇴근 시간</label>
+                  <input
+                    type="time"
+                    value={editCheckOut}
+                    onChange={(e) => setEditCheckOut(e.target.value)}
+                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                  />
+                </div>
+              </div>
               <button
-                onClick={() => setEditTab("attendance")}
-                className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  editTab === "attendance"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-400"
-                }`}
+                onClick={saveAttendance}
+                className="w-full h-12 rounded-xl text-sm font-semibold text-white"
+                style={{ backgroundColor: "#8dc63f" }}
               >
-                출퇴근 시간
-              </button>
-              <button
-                onClick={() => setEditTab("meals")}
-                className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  editTab === "meals"
-                    ? "border-blue-500 text-blue-600"
-                    : "border-transparent text-gray-400"
-                }`}
-              >
-                식대
+                저장
               </button>
             </div>
-
-            {/* 출퇴근 시간 수정 */}
-            {editTab === "attendance" && (
-              <div className="px-5 pt-4">
-                <div className="mb-4">
-                  <label className="text-xs text-gray-500 mb-1.5 block">날짜</label>
-                  <input
-                    type="date"
-                    value={editDate}
-                    onChange={(e) => handleDateChange(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                  />
-                </div>
-                <div className="flex gap-3 mb-5">
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-500 mb-1.5 block">출근 시간</label>
-                    <input
-                      type="time"
-                      value={editCheckIn}
-                      onChange={(e) => setEditCheckIn(e.target.value)}
-                      className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-gray-500 mb-1.5 block">퇴근 시간</label>
-                    <input
-                      type="time"
-                      value={editCheckOut}
-                      onChange={(e) => setEditCheckOut(e.target.value)}
-                      className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={saveAttendance}
-                  className="w-full h-12 rounded-xl text-sm font-semibold text-white"
-                  style={{ backgroundColor: "#8dc63f" }}
-                >
-                  저장
-                </button>
-              </div>
-            )}
-
-            {/* 식대 수정 */}
-            {editTab === "meals" && (
-              <div className="px-5 pt-4">
-                <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
-                  <p className="text-xs text-gray-400">현재 사용 금액</p>
-                  <p className="text-xl font-bold text-gray-900 mt-0.5">
-                    {getMealUsed(editInternId).toLocaleString()}원
-                  </p>
-                </div>
-                <div className="mb-5">
-                  <label className="text-xs text-gray-500 mb-1.5 block">
-                    수정 금액 (원)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={editMealAmount}
-                    onChange={(e) => setEditMealAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                    placeholder="새로운 총 사용 금액 입력"
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                  />
-                </div>
-                <button
-                  onClick={saveMeals}
-                  disabled={!editMealAmount}
-                  className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
-                  style={{ backgroundColor: "#8dc63f" }}
-                >
-                  저장
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
