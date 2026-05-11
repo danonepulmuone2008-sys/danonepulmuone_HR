@@ -159,11 +159,11 @@ const TimePicker = ({ time, onChange }: { time: string; onChange: (t: string) =>
 
         {/* 분 */}
         <div className="flex flex-col items-center">
-          <ArrowBtn onClick={() => setM(m + 5)} up />
+          <ArrowBtn onClick={() => setM(m + 1)} up />
           <span className="text-5xl font-bold w-20 text-center" style={{ color: BRAND_BLUE }}>
             {pad(m)}
           </span>
-          <ArrowBtn onClick={() => setM(m - 5)} up={false} />
+          <ArrowBtn onClick={() => setM(m - 1)} up={false} />
         </div>
       </div>
     </div>
