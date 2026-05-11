@@ -238,6 +238,8 @@ export default function MyPage() {
 
   /* 프로필 */
   const [showEdit, setShowEdit] = useState(false);
+  const [toast, setToast] = useState("");
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
   const [form, setForm] = useState({ name: "", department: "", position: "", phone: "", email: "" });
   const [saved, setSaved] = useState({ ...form });
 
@@ -313,6 +315,27 @@ export default function MyPage() {
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
   useEffect(() => {
+    const registerPush = async () => {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      const existing = await reg.pushManager.getSubscription();
+      const subscription = existing ?? await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      });
+      if (authUser) {
+        await supabase.from('push_subscriptions').upsert({
+          user_id: authUser.id,
+          subscription: JSON.parse(JSON.stringify(subscription)),
+        }, { onConflict: 'user_id' });
+      }
+    };
+    registerPush();
+  }, [authUser]);
+
+  useEffect(() => {
     const fetchAlarm = async () => {
       if (!authUser) return;
       const { data } = await supabase.from("alarm_settings").select("*").eq("id", authUser.id).single();
@@ -361,6 +384,14 @@ export default function MyPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
+      {toast && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className="flex items-center gap-2 bg-white text-gray-800 text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-100">
+            <span className="text-green-500 text-base">✓</span>
+            {toast}
+          </div>
+        </div>
+      )}
 
       {/* 헤더 */}
       <header
@@ -410,8 +441,8 @@ export default function MyPage() {
 
         {/* 로그아웃 + 회원탈퇴 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
-          <MenuItem Icon={LogOut} label="로그아웃" danger onClick={() => setShowLogout(true)} />
-          <MenuItem Icon={Trash2} label="회원 탈퇴" danger onClick={() => setShowWithdraw(true)} />
+          <MenuItem Icon={LogOut} label="로그아웃" onClick={() => setShowLogout(true)} />
+          <MenuItem Icon={Trash2} label="회원탈퇴" onClick={() => setShowWithdraw(true)} />
         </section>
 
       </div>
@@ -457,6 +488,7 @@ export default function MyPage() {
                   await supabase.from("users").upsert({ id: authUser.id, ...form });
                   setSaved({ ...form });
                   setShowEdit(false);
+                  showToast("프로필이 수정되었습니다.");
                 }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: BRAND_BLUE }}
