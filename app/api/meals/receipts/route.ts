@@ -109,6 +109,7 @@ export async function POST(req: Request) {
     if (receiptError) throw new Error(`영수증 저장 실패: ${receiptError.message}`)
 
     // One receipt_item row per assignee per item
+    const now = new Date().toISOString()
     const rows = items.flatMap((item) => {
       const ids = item.assigneeIds.length > 0 ? item.assigneeIds : [user.id]
       const perPrice = Math.round(item.total / ids.length)
@@ -120,6 +121,7 @@ export async function POST(req: Request) {
         qty: item.qty,
         price: perPrice,
         status: assigneeId === user.id ? "approved" : "pending",
+        responded_at: assigneeId === user.id ? now : null,
       }))
     })
 
