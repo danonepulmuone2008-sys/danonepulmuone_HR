@@ -210,9 +210,9 @@ export const ADMIN_DUMMY = {
     { internId: "u-004", date: "2026-05-08", checkIn: "09:00", checkOut: "18:00", hours: 9.0 },
     { internId: "u-005", date: "2026-05-08", checkIn: "08:52", checkOut: "17:52", hours: 9.0 },
     // 5/11 (월)
-    { internId: "u-001", date: "2026-05-11", checkIn: "09:02", checkOut: "18:02", hours: 9.0 },
+    { internId: "u-001", date: "2026-05-11", checkIn: "09:02", checkOut: "", hours: 0 },
     { internId: "u-002", date: "2026-05-11", checkIn: "09:00", checkOut: "18:00", hours: 9.0 },
-    { internId: "u-003", date: "2026-05-11", checkIn: "09:05", checkOut: "18:05", hours: 9.0 },
+    { internId: "u-003", date: "2026-05-11", checkIn: "09:05", checkOut: "", hours: 0 },
     { internId: "u-004", date: "2026-05-11", checkIn: "09:00", checkOut: "18:00", hours: 9.0 },
     { internId: "u-005", date: "2026-05-11", checkIn: "09:00", checkOut: "18:00", hours: 9.0 },
     // 5/12 (화) — 조현희 연차 미출근, 박지호 유연근무

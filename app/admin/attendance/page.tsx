@@ -16,10 +16,14 @@ const TODAY = 7;
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "15:00";
 
-const INTERN_COLORS = ["bg-blue-500", "bg-green-500", "bg-orange-400", "bg-purple-500", "bg-pink-500"];
-const INTERN_DOT_COLORS = ["bg-blue-500", "bg-green-500", "bg-orange-400", "bg-purple-500", "bg-pink-500"];
-const INTERN_TEXT_COLORS = ["text-blue-600", "text-green-600", "text-orange-500", "text-purple-600", "text-pink-500"];
-const INTERN_BG_LIGHT = ["bg-blue-50", "bg-green-50", "bg-orange-50", "bg-purple-50", "bg-pink-50"];
+const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
+const INTERN_BG_RGBA = [
+  "rgba(0,204,255,0.12)",
+  "rgba(124,58,237,0.12)",
+  "rgba(255,212,0,0.12)",
+  "rgba(236,72,153,0.12)",
+  "rgba(220,38,38,0.12)",
+];
 
 // 이번 주 월요일 = 2026-05-04
 const BASE_MONDAY = new Date(2026, 4, 4);
@@ -121,7 +125,7 @@ export default function AdminAttendancePage() {
             <div className="flex flex-wrap gap-3">
               {interns.map((intern, i) => (
                 <div key={intern.id} className="flex items-center gap-1.5">
-                  <span className={`w-2.5 h-2.5 rounded-full ${INTERN_DOT_COLORS[i]}`} />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: INTERN_HEX[i] }} />
                   <span className="text-xs text-gray-600">{intern.name}</span>
                 </div>
               ))}
@@ -165,7 +169,7 @@ export default function AdminAttendancePage() {
                           <div className="flex gap-px mt-0.5 flex-wrap justify-center max-w-full px-0.5">
                             {interns.map((intern, i) =>
                               specials.has(intern.id) ? (
-                                <span key={intern.id} className={`w-1.5 h-1.5 rounded-full ${INTERN_DOT_COLORS[i]}`} />
+                                <span key={intern.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: INTERN_HEX[i] }} />
                               ) : null
                             )}
                           </div>
@@ -180,7 +184,7 @@ export default function AdminAttendancePage() {
                                 const sched = getSchedule(intern.id, day!);
                                 return (
                                   <div key={intern.id} className="flex items-center gap-1.5">
-                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${INTERN_DOT_COLORS[i]}`} />
+                                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }} />
                                     <span className="text-xs font-semibold">{intern.name}</span>
                                     <span className="text-xs text-gray-300">
                                       {sched.type === "event"
@@ -236,20 +240,22 @@ export default function AdminAttendancePage() {
                 className="grid grid-cols-[72px_1fr_1fr_1fr_1fr_1fr_44px] px-3 py-3 border-b border-gray-50 last:border-b-0 items-center"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${INTERN_DOT_COLORS[ci]}`} />
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: INTERN_HEX[ci] }} />
                   <span className="text-xs font-semibold text-gray-800 truncate">{intern.name}</span>
                 </div>
                 {dayHours.map((h, di) => (
                   <span
                     key={di}
-                    className={`text-xs text-center ${
-                      h !== null ? INTERN_TEXT_COLORS[ci] + " font-semibold" : "text-gray-300"
-                    }`}
+                    className={`text-xs text-center ${h !== null ? "font-semibold" : "text-gray-300"}`}
+                    style={h !== null ? { color: INTERN_HEX[ci] } : undefined}
                   >
                     {h !== null ? h : "−"}
                   </span>
                 ))}
-                <span className={`text-xs font-bold text-right ${totalHours > 0 ? INTERN_TEXT_COLORS[ci] : "text-gray-300"}`}>
+                <span
+                  className={`text-xs font-bold text-right ${totalHours === 0 ? "text-gray-300" : ""}`}
+                  style={totalHours > 0 ? { color: INTERN_HEX[ci] } : undefined}
+                >
                   {totalHours > 0 ? `${totalHours}h` : "−"}
                 </span>
               </div>
@@ -282,9 +288,9 @@ export default function AdminAttendancePage() {
               {interns.map((intern, i) => {
                 const sched = getSchedule(intern.id, selectedDay);
                 return (
-                  <div key={intern.id} className={`flex items-center justify-between py-3 px-4 rounded-xl ${INTERN_BG_LIGHT[i]}`}>
+                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: INTERN_BG_RGBA[i] }}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${INTERN_COLORS[i]}`}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }}>
                         {intern.name.slice(0, 1)}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{intern.name}</span>

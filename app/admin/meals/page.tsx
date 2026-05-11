@@ -10,8 +10,7 @@ const now = new Date();
 const year = now.getFullYear();
 const month = now.getMonth() + 1;
 
-const INTERN_COLORS = ["bg-blue-500", "bg-green-500", "bg-orange-400", "bg-purple-500", "bg-pink-500"];
-const INTERN_BAR_COLORS = ["bg-blue-500", "bg-green-500", "bg-orange-400", "bg-purple-500", "bg-pink-500"];
+const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
 
 export default function AdminMealsPage() {
   const { interns, internMeals } = ADMIN_DUMMY;
@@ -24,28 +23,20 @@ export default function AdminMealsPage() {
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
-      <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100">
-        <h1 className="text-lg font-bold text-gray-900">식대 관리</h1>
-        <p className="text-xs text-gray-400 mt-0.5">{year}년 {month}월 · 인턴별 현황</p>
-      </header>
-
-      <div className="flex flex-col gap-3 px-4 pt-3">
-        {/* 영수증 보관함 진입 버튼 */}
+      <header className="bg-white px-5 pt-5 pb-2 border-b border-gray-100 flex items-start justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">식대 관리</h1>
+          <p className="text-xs text-gray-400 mt-0.5">{year}년 {month}월 · 인턴별 현황</p>
+        </div>
         <Link href="/admin/meals/receipts">
-          <div className="bg-white rounded-2xl px-4 py-4 shadow-sm border border-gray-200 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                <span className="text-xl">🧾</span>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">영수증 보관함</p>
-                <p className="text-xs text-gray-400">일자별 전체 영수증 보기</p>
-              </div>
-            </div>
-            <span className="text-gray-300 text-lg">›</span>
+          <div className="mt-1 flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+            <span className="text-base leading-none">🧾</span>
+            <span>영수증 보관함</span>
           </div>
         </Link>
+      </header>
 
+      <div className="flex flex-col gap-2 px-4 pt-2">
         {/* 인턴별 식대 현황 */}
         {interns.map((intern, i) => {
           const mealData = internMeals.find((m) => m.internId === intern.id);
@@ -56,35 +47,35 @@ export default function AdminMealsPage() {
           return (
             <div
               key={intern.id}
-              className="bg-white rounded-2xl px-4 py-4 shadow-sm border border-gray-100 cursor-pointer active:scale-[0.98] transition-all"
+              className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 cursor-pointer active:scale-[0.98] transition-all"
               onClick={() => setSelectedInternId(intern.id)}
             >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${INTERN_COLORS[i]}`}>
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }}>
                     {intern.name.slice(0, 1)}
                   </div>
                   <p className="text-base font-bold text-gray-900">{intern.name}</p>
                 </div>
                 <span className="text-xs text-gray-400">{pct}% 사용</span>
               </div>
-              <div className="flex justify-between items-end mb-2">
+              <div className="flex justify-between items-end">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{used.toLocaleString()}원</p>
                   <p className="text-xs text-gray-400">사용</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-base font-bold text-blue-600">{remaining.toLocaleString()}원</p>
+                  <p className="text-sm font-bold text-blue-600">{remaining.toLocaleString()}원</p>
                   <p className="text-xs text-gray-400">잔여</p>
                 </div>
               </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
                 <div
-                  className={`h-full rounded-full transition-all ${INTERN_BAR_COLORS[i]}`}
-                  style={{ width: `${pct}%` }}
+                  className="h-full rounded-full transition-all"
+                  style={{ backgroundColor: INTERN_HEX[i], width: `${pct}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1.5 text-right">한도 {totalLimit.toLocaleString()}원</p>
+              <p className="text-xs text-gray-400 text-right">한도 {totalLimit.toLocaleString()}원</p>
             </div>
           );
         })}

@@ -11,7 +11,7 @@ const CATEGORY_COLOR: Record<string, string> = {
   "기타 문의": "bg-lime-50 text-lime-600",
 };
 
-const INTERN_COLORS = ["bg-blue-500", "bg-green-500", "bg-orange-400", "bg-purple-500", "bg-pink-500"];
+const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
 
 type InquiryStatus = { id: string; isNew: boolean; isProcessed: boolean };
 
@@ -37,7 +37,7 @@ export default function AdminInquiryPage() {
 
   const internColor = (internId: string) => {
     const idx = interns.findIndex((i) => i.id === internId);
-    return INTERN_COLORS[idx] ?? "bg-gray-400";
+    return INTERN_HEX[idx] ?? "#9CA3AF";
   };
 
   // 카드 클릭: N 뱃지만 제거 (미처리 유지) + 상세 열기
@@ -124,7 +124,7 @@ export default function AdminInquiryPage() {
                     </div>
                     <p className="text-sm font-semibold text-gray-900 truncate mb-1">{q.subject}</p>
                     <div className="flex items-center gap-1.5 mb-1">
-                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 ${internColor(q.internId)}`}>
+                      <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0" style={{ backgroundColor: internColor(q.internId) }}>
                         {q.senderName.slice(0, 1)}
                       </div>
                       <span className="text-xs text-gray-500">{q.senderName}</span>
@@ -164,7 +164,7 @@ export default function AdminInquiryPage() {
                 </div>
                 <h3 className="text-base font-bold text-gray-900">{selected.subject}</h3>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <div className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 ${internColor(selected.internId)}`}>
+                  <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0" style={{ backgroundColor: internColor(selected.internId) }}>
                     {selected.senderName.slice(0, 1)}
                   </div>
                   <p className="text-xs text-gray-400">
