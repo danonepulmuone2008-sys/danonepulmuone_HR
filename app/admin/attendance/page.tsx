@@ -11,6 +11,13 @@ type RealFlexSchedule = {
   end_time: string;
 };
 
+type RealIntern = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+};
+
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const WEEKS = [
   [null, null, null, null, 1, 2, 3],
@@ -73,14 +80,20 @@ export default function AdminAttendancePage() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [flexSchedules, setFlexSchedules] = useState<RealFlexSchedule[]>([]);
+  const [realInterns, setRealInterns] = useState<RealIntern[]>([]);
 
-  const { interns, internEvents, attendanceRecords } = ADMIN_DUMMY;
+  const { interns: dummyInterns, internEvents, attendanceRecords } = ADMIN_DUMMY;
+  const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
 
   useEffect(() => {
     fetch("/api/admin/schedules?month=2026-05")
       .then((res) => res.json())
       .then((json) => { if (json.flexSchedules) setFlexSchedules(json.flexSchedules); })
       .catch((err) => console.error("[schedules fetch]", err));
+    fetch("/api/admin/interns")
+      .then((res) => res.json())
+      .then((json) => { if (json.interns) setRealInterns(json.interns); })
+      .catch((err) => console.error("[interns fetch]", err));
   }, []);
 
   // 날짜별 특별 일정이 있는 인턴 집합 (기본 외 = flex or 휴가/출장)
@@ -91,7 +104,7 @@ export default function AdminAttendancePage() {
     specialMap[day].add(e.internId);
   });
   flexSchedules.forEach((f) => {
-    const intern = interns.find((i) => i.name === f.user_name);
+    const intern = scheduleInterns.find((i: RealIntern) => i.name === f.user_name);
     if (!intern) return;
     const day = parseInt(f.date.split("-")[2]);
     if (!specialMap[day]) specialMap[day] = new Set();
@@ -103,7 +116,7 @@ export default function AdminAttendancePage() {
     const dateKey = `2026-05-${String(day).padStart(2, "0")}`;
     const event = internEvents.find((e) => e.internId === internId && e.date === dateKey);
     if (event) return { type: "event" as const, event };
-    const intern = interns.find((i) => i.id === internId);
+    const intern = scheduleInterns.find((i: RealIntern) => i.id === internId);
     const flex = intern
       ? flexSchedules.find((f) => f.user_name === intern.name && f.date === dateKey)
       : undefined;
@@ -113,7 +126,7 @@ export default function AdminAttendancePage() {
 
   // 주간 근무 기록
   const weekDates = getWeekDates(weekOffset);
-  const weeklyData = interns.map((intern, i) => {
+  const weeklyData = dummyInterns.map((intern, i) => {
     const dayHours = weekDates.map((date) => {
       const rec = attendanceRecords.find((r) => r.internId === intern.id && r.date === date);
       return rec?.hours ?? null;
@@ -150,7 +163,7 @@ export default function AdminAttendancePage() {
           <div className="bg-white rounded-2xl px-4 pt-3 pb-2 shadow-sm border border-gray-100">
             <p className="text-base font-bold mb-2" style={{ color: "#8dc63f" }}>오늘의 근무일정</p>
             <div className="flex flex-col gap-1.5">
-              {interns.map((intern, i) => {
+              {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, TODAY);
                 return (
                   <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: INTERN_BG_RGBA[i] }}>
@@ -232,7 +245,7 @@ export default function AdminAttendancePage() {
                         {/* 특별 일정 있는 인턴 색상 도트 */}
                         {specials.size > 0 && (
                           <div className="flex gap-px mt-0.5 flex-wrap justify-center max-w-full px-0.5">
-                            {interns.map((intern, i) =>
+                            {scheduleInterns.map((intern: RealIntern, i: number) =>
                               specials.has(intern.id) ? (
                                 <span key={intern.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: INTERN_HEX[i] }} />
                               ) : null
@@ -244,7 +257,7 @@ export default function AdminAttendancePage() {
                           <div className={`absolute bottom-full ${tooltipAlign} mb-2 z-50 hidden group-hover:block bg-gray-900 text-white rounded-xl shadow-xl w-52 p-3 pointer-events-none`}>
                             <p className="text-[10px] text-gray-400 font-medium mb-2">5월 {day}일</p>
                             <div className="flex flex-col gap-1.5">
-                              {interns.map((intern, i) => {
+                              {scheduleInterns.map((intern: RealIntern, i: number) => {
                                 if (!specials.has(intern.id)) return null;
                                 const sched = getSchedule(intern.id, day!);
                                 return (
@@ -350,7 +363,7 @@ export default function AdminAttendancePage() {
               <button onClick={() => setSelectedDay(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
             </div>
             <div className="px-5 pt-4 pb-2 flex flex-col gap-2">
-              {interns.map((intern, i) => {
+              {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, selectedDay);
                 return (
                   <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: INTERN_BG_RGBA[i] }}>
