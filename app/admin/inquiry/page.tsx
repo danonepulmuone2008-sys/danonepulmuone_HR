@@ -37,16 +37,24 @@ export default function AdminInquiryPage() {
     const fetchInquiries = async () => {
       const { data } = await supabase
         .from("inquiries")
-        .select("id, user_id, subject, content, created_at, users(name)")
+        .select("id, user_id, subject, content, created_at")
         .order("created_at", { ascending: false });
 
       if (data) {
+        const userIds = [...new Set(data.map((d: any) => d.user_id).filter(Boolean))];
+        const { data: users } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", userIds);
+        const userMap: Record<string, string> = {};
+        (users ?? []).forEach((u: any) => { userMap[u.id] = u.name; });
+
         const items: InquiryItem[] = data.map((d: any) => ({
           id: d.id,
           category: "기타 문의",
           subject: d.subject ?? "",
           internId: d.user_id ?? "",
-          senderName: d.users?.name ?? "알 수 없음",
+          senderName: userMap[d.user_id] ?? "알 수 없음",
           content: d.content ?? "",
           date: (d.created_at ?? "").slice(0, 10),
           time: (d.created_at ?? "").slice(11, 16),

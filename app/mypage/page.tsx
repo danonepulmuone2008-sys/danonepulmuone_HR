@@ -317,8 +317,7 @@ export default function MyPage() {
   useEffect(() => {
     const registerPush = async () => {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
+      if (Notification.permission !== 'granted') return;
       try {
         await navigator.serviceWorker.register('/sw.js');
         const reg = await navigator.serviceWorker.ready;
@@ -490,7 +489,7 @@ export default function MyPage() {
               <button
                 onClick={async () => {
                   if (!authUser) return;
-                  await supabase.from("users").upsert({ id: authUser.id, ...form });
+                  await supabase.from("users").update({ name: form.name, department: form.department, position: form.position, phone: form.phone }).eq("id", authUser.id);
                   setSaved({ ...form });
                   setShowEdit(false);
                   showToast("프로필이 수정되었습니다.");
