@@ -9,7 +9,6 @@ import { PenLine, ChevronDown, Check } from "lucide-react"
 const BRAND = "#72BF44"
 
 type TeamMember = { id: string; name: string; department: string }
-
 type CurrentUser = { id: string; name: string; department: string; token: string }
 
 type MenuItem = {
@@ -48,25 +47,19 @@ export default function OcrPage() {
     : null
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
-
   useEffect(() => {
     supabase.from("users").select("id, name, department").then(({ data }) => {
       if (data) setTeamMembers(data)
     })
   }, [])
 
-  // 사진
   const [photo, setPhoto] = useState<string | null>(null)
-
-  // OCR 상태
   const [status, setStatus] = useState<Status>("idle")
   const [result, setResult] = useState<OcrResult | null>(null)
   const [errorMsg, setErrorMsg] = useState<string>("")
-
-  // 모드
+  const [failedStoragePath, setFailedStoragePath] = useState<string | null>(null)
   const [mode, setMode] = useState<Mode>("ocr")
 
-  // 수기 입력
   const [manual, setManual] = useState<ManualForm>({
     date: "",
     time: "",
@@ -74,8 +67,11 @@ export default function OcrPage() {
     items: [{ amount: "", assigneeId: "" }],
   })
 
-  // 수기 담당자 바텀시트 (열린 항목 인덱스)
   const [manualAssigneeIdx, setManualAssigneeIdx] = useState<number | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [savedNeedsApproval, setSavedNeedsApproval] = useState(false)
+  const [selectingItemIdx, setSelectingItemIdx] = useState<number | null>(null)
 
   const updateManualItem = (idx: number, field: keyof ManualItem, value: string) =>
     setManual((prev) => ({
@@ -89,15 +85,6 @@ export default function OcrPage() {
   const removeManualItem = (idx: number) =>
     setManual((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))
 
-  // 저장 상태
-  const [submitting, setSubmitting] = useState(false)
-  const [submitSuccess, setSubmitSuccess] = useState(false)
-  const [savedNeedsApproval, setSavedNeedsApproval] = useState(false)
-
-  // 담당자 선택 바텀시트
-  const [selectingItemIdx, setSelectingItemIdx] = useState<number | null>(null)
-
-  // ─── 사진 선택 + OCR 시도 ───
   const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -106,42 +93,56 @@ export default function OcrPage() {
     setResult(null)
     setStatus("loading")
     setErrorMsg("")
+    setFailedStoragePath(null)
     setMode("ocr")
 
-    try {
-      const formData = new FormData()
-      formData.append("image", file)
+    const formData = new FormData()
+    formData.append("image", file)
 
-      const res = await fetch("/api/meals/ocr", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${currentUser?.token ?? ""}` },
-        body: formData,
-      })
+    const res = await fetch("/api/meals/ocr", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentUser?.token ?? ""}` },
+      body: formData,
+    })
 
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({ error: "인식 실패" }))
-        throw new Error(error.error)
-      }
+    const data = await res.json()
 
-      const data = await res.json()
-
-      if (!data.items || data.items.length === 0) {
-        throw new Error("영수증에서 메뉴를 인식하지 못했어요")
-      }
-
-      const itemsWithAssignee = data.items.map(
-        (item: Omit<MenuItem, "assigneeIds">) => ({
-          ...item,
-          assigneeIds: [],
-        })
-      )
-
-      setResult({ ...data, items: itemsWithAssignee })
-      setStatus("done")
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "인식에 실패했습니다")
+    if (!res.ok) {
+      // 이미지가 업로드됐다면 storagePath 보존 (422 케이스)
+      setFailedStoragePath(data.storagePath ?? null)
+      setErrorMsg(data.error ?? "인식에 실패했습니다")
       setStatus("error")
+      setMode("manual")
+      // 부분 인식된 정보로 폼 자동 채우기
+      setManual({
+        date: data.paidAt ? data.paidAt.slice(0, 10) : "",
+        time: data.paidAt ? data.paidAt.slice(11, 16) : "",
+        storeName: data.storeName ?? "",
+        items: [{ amount: "", assigneeId: "" }],
+      })
+      return
     }
+
+    if (!data.items || data.items.length === 0) {
+      // 인식됐지만 항목 없음 - storagePath는 있음
+      setFailedStoragePath(data.storagePath ?? null)
+      setErrorMsg("영수증에서 메뉴를 인식하지 못했어요")
+      setStatus("error")
+      setMode("manual")
+      setManual({
+        date: data.paidAt ? data.paidAt.slice(0, 10) : "",
+        time: data.paidAt ? data.paidAt.slice(11, 16) : "",
+        storeName: data.storeName ?? "",
+        items: [{ amount: "", assigneeId: "" }],
+      })
+      return
+    }
+
+    setResult({
+      ...data,
+      items: data.items.map((item: Omit<MenuItem, "assigneeIds">) => ({ ...item, assigneeIds: [] })),
+    })
+    setStatus("done")
   }
 
   const toggleAssignee = (index: number, uid: string) => {
@@ -172,44 +173,27 @@ export default function OcrPage() {
     }
   }
 
-  const switchToOcr = () => {
-    setMode("ocr")
-  }
+  const switchToOcr = () => setMode("ocr")
 
   const formatPaidAt = (iso: string): string => {
     try {
       return new Date(iso).toLocaleString("ko-KR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
       })
-    } catch {
-      return iso
-    }
+    } catch { return iso }
   }
 
-  // 항목 대상자 이름 가져오기 (표시용)
-  const getAssigneeName = (id: string): string => {
-    return teamMembers.find((m) => m.id === id)?.name ?? ""
-  }
+  const getAssigneeName = (id: string): string =>
+    teamMembers.find((m) => m.id === id)?.name ?? ""
 
   const canSubmitOcr =
-    mode === "ocr" &&
-    status === "done" &&
-    result &&
-    result.items.length > 0 &&
-    result.items.every((i) => i.assigneeIds.length > 0)
+    mode === "ocr" && status === "done" && result &&
+    result.items.length > 0 && result.items.every((i) => i.assigneeIds.length > 0)
 
   const canSubmitManual =
-    mode === "manual" &&
-    !!manual.date &&
-    !!manual.time &&
-    !!manual.storeName &&
-    manual.items.length > 0 &&
-    manual.items.every((it) => !!it.amount && !!it.assigneeId)
+    mode === "manual" && !!manual.date && !!manual.time && !!manual.storeName &&
+    manual.items.length > 0 && manual.items.every((it) => !!it.amount && !!it.assigneeId)
 
   const canSubmit = canSubmitOcr || canSubmitManual
 
@@ -230,15 +214,10 @@ export default function OcrPage() {
       }
 
       if (mode === "manual") {
-        if (!manual.date) throw new Error("날짜를 입력해주세요.")
-        if (!manual.storeName) throw new Error("식당명을 입력해주세요.")
-        if (manual.items.some((it) => !it.amount)) throw new Error("금액을 모두 입력해주세요.")
-        if (manual.items.some((it) => !it.assigneeId)) throw new Error("담당자를 모두 선택해주세요.")
-
         const totalAmount = manual.items.reduce((s, it) => s + Number(it.amount), 0)
         payload = {
           source: "manual",
-          storagePath: null,
+          storagePath: result?.storagePath ?? failedStoragePath ?? null,
           storeName: manual.storeName,
           paidAt: `${manual.date}T${manual.time}:00+09:00`,
           totalAmount,
@@ -307,10 +286,7 @@ export default function OcrPage() {
       <div className="flex flex-col min-h-screen bg-gray-50">
         <AppBar title="영수증 등록" />
         <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center"
-            style={{ background: `${BRAND}20` }}
-          >
+          <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: `${BRAND}20` }}>
             <Check size={40} style={{ color: BRAND }} strokeWidth={2.5} />
           </div>
           <div className="text-center">
@@ -318,9 +294,7 @@ export default function OcrPage() {
               {savedNeedsApproval ? "승인 요청 완료" : "저장 완료"}
             </p>
             <p className="text-sm text-gray-500">
-              {savedNeedsApproval
-                ? "담당자에게 승인 요청이 전송됐습니다"
-                : "식대가 바로 저장됐습니다"}
+              {savedNeedsApproval ? "담당자에게 승인 요청이 전송됐습니다" : "식대가 바로 저장됐습니다"}
             </p>
           </div>
           {savedNeedsApproval && assigneeNames.length > 0 && (
@@ -329,10 +303,7 @@ export default function OcrPage() {
               <div className="flex flex-col gap-1.5">
                 {assigneeNames.map((name) => (
                   <div key={name} className="flex items-center gap-2">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{ background: BRAND }}
-                    />
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: BRAND }} />
                     <span className="text-sm text-gray-700">{name}</span>
                   </div>
                 ))}
@@ -358,22 +329,13 @@ export default function OcrPage() {
       <div className="flex flex-col gap-3 px-4 pt-5 pb-8">
         {/* 사진 영역 */}
         <label className="cursor-pointer block">
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handlePhoto}
-          />
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} />
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {photo ? (
               <img src={photo} alt="영수증" className="w-full h-52 object-cover" />
             ) : (
               <div className="h-52 flex flex-col items-center justify-center gap-2">
-                <div
-                  className="w-12 h-12 rounded-full border-2 flex items-center justify-center text-2xl"
-                  style={{ borderColor: BRAND }}
-                >
+                <div className="w-12 h-12 rounded-full border-2 flex items-center justify-center text-2xl" style={{ borderColor: BRAND }}>
                   📷
                 </div>
                 <p className="text-sm font-medium text-gray-700">영수증 사진 촬영</p>
@@ -383,47 +345,12 @@ export default function OcrPage() {
           </div>
         </label>
 
-        {/* 수기 입력 버튼 */}
-        {!photo && (
-          <button
-            onClick={switchToManual}
-            className="w-full py-3 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
-          >
-            <PenLine size={15} className="text-gray-400" />
-            <p className="text-sm font-medium text-gray-500">수기 입력</p>
-          </button>
-        )}
-
         {/* 로딩 */}
         {status === "loading" && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
-            <div
-              className="w-4 h-4 border-2 rounded-full animate-spin"
-              style={{ borderColor: BRAND, borderTopColor: "transparent" }}
-            />
+            <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: BRAND, borderTopColor: "transparent" }} />
             <span className="text-sm text-gray-500">영수증 인식 중...</span>
           </div>
-        )}
-
-        {/* OCR 실패 */}
-        {status === "error" && mode === "ocr" && (
-          <>
-            <div className="bg-red-50 rounded-2xl p-4 text-sm text-red-500 text-center">
-              {errorMsg || "인식에 실패했습니다."}
-            </div>
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-medium text-gray-400 mb-3">
-                OCR 인식이 어려우신가요?
-              </p>
-              <button
-                onClick={switchToManual}
-                className="w-full h-24 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all"
-              >
-                <span className="text-2xl">✏️</span>
-                <p className="text-sm text-gray-500">직접 입력하기</p>
-              </button>
-            </div>
-          </>
         )}
 
         {/* OCR 성공 */}
@@ -431,57 +358,30 @@ export default function OcrPage() {
           <>
             <div className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-gray-100 flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-400 mb-0.5">
-                  {result.storeName || "가맹점 미인식"}
-                </p>
-                <p className="text-sm font-semibold text-gray-800">
-                  {formatPaidAt(result.paidAt)}
-                </p>
+                <p className="text-xs text-gray-400 mb-0.5">{result.storeName || "가맹점 미인식"}</p>
+                <p className="text-sm font-semibold text-gray-800">{formatPaidAt(result.paidAt)}</p>
               </div>
-              <span
-                className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full"
-                style={{ color: BRAND, background: `${BRAND}15` }}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full inline-block"
-                  style={{ background: BRAND }}
-                />
+              <span className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full" style={{ color: BRAND, background: `${BRAND}15` }}>
+                <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: BRAND }} />
                 OCR 인식 완료
               </span>
             </div>
 
-            {/* 메뉴 항목 */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="flex justify-between items-center px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-semibold text-gray-800">
-                  메뉴 항목 ({result.items.length}건)
-                </p>
-                <p className="text-sm font-bold text-gray-800">
-                  {result.totalAmount.toLocaleString()}원
-                </p>
+                <p className="text-sm font-semibold text-gray-800">메뉴 항목 ({result.items.length}건)</p>
+                <p className="text-sm font-bold text-gray-800">{result.totalAmount.toLocaleString()}원</p>
               </div>
-
               {result.items.map((item, i) => (
-                <div
-                  key={i}
-                  className={`px-4 py-3.5 border-b border-gray-50 last:border-b-0 ${
-                    item.assigneeIds.length > 0 ? "bg-green-50/40" : ""
-                  }`}
-                >
+                <div key={i} className={`px-4 py-3.5 border-b border-gray-50 last:border-b-0 ${item.assigneeIds.length > 0 ? "bg-green-50/40" : ""}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">
-                        {item.name}
-                      </p>
+                      <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
                       {item.qty > 1 && (
-                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">
-                          ×{item.qty}
-                        </span>
+                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">×{item.qty}</span>
                       )}
                     </div>
-                    <p className="text-sm font-semibold text-gray-700 ml-2 flex-shrink-0">
-                      {item.total.toLocaleString()}원
-                    </p>
+                    <p className="text-sm font-semibold text-gray-700 ml-2 flex-shrink-0">{item.total.toLocaleString()}원</p>
                   </div>
                   <button
                     onClick={() => setSelectingItemIdx(i)}
@@ -492,9 +392,7 @@ export default function OcrPage() {
                     }`}
                   >
                     <span className="truncate text-xs">
-                      {item.assigneeIds.length === 0
-                        ? "담당자 선택"
-                        : item.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                      {item.assigneeIds.length === 0 ? "담당자 선택" : item.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
                     </span>
                     <span className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                       <span className="text-xs">{item.assigneeIds.length}/{item.qty}명</span>
@@ -505,70 +403,61 @@ export default function OcrPage() {
               ))}
             </div>
 
-            {/* 점심 시간 검증 */}
-            <div
-              className={`rounded-2xl px-4 py-3 flex items-center gap-2 text-sm ${
-                result.isLunchTime
-                  ? "bg-green-50 text-green-700"
-                  : "bg-orange-50 text-orange-600"
-              }`}
-            >
+            <div className={`rounded-2xl px-4 py-3 flex items-center gap-2 text-sm ${result.isLunchTime ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-600"}`}>
               <span>{result.isLunchTime ? "🕐" : "⚠️"}</span>
               <div>
-                <p className="font-medium">
-                  {result.isLunchTime ? "점심 시간 검증 통과" : "점심 시간 외 결제"}
-                </p>
+                <p className="font-medium">{result.isLunchTime ? "점심 시간 검증 통과" : "점심 시간 외 결제"}</p>
                 <p className="text-xs mt-0.5 opacity-70">
-                  {result.isLunchTime
-                    ? "11:30~14:00 사이에 결제됨"
-                    : "점심 시간(11:30~14:00) 외에 결제됨"}
+                  {result.isLunchTime ? "11:30~14:00 사이에 결제됨" : "점심 시간(11:30~14:00) 외에 결제됨"}
                 </p>
               </div>
             </div>
 
-            <button
-              onClick={switchToManual}
-              className="text-xs text-gray-400 underline self-center mt-1"
-            >
+            <button onClick={switchToManual} className="text-xs text-gray-400 underline self-center mt-1">
               인식 결과가 다른가요? 직접 입력하기
             </button>
           </>
         )}
 
-        {/* 수기 입력 모드 */}
+        {/* 수기 입력 모드 (OCR 실패 자동 전환 또는 직접 전환) */}
         {mode === "manual" && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4">
+            {/* OCR 실패 안내 */}
+            {status === "error" && (
+              <div className="flex items-start gap-2 bg-orange-50 rounded-xl px-3 py-2.5">
+                <span className="text-sm">⚠️</span>
+                <p className="text-xs text-orange-700 leading-relaxed">
+                  OCR 인식에 실패했습니다. 아래에 직접 입력해주세요.<br />
+                  {failedStoragePath && <span className="text-orange-500">사진은 자동 저장됩니다.</span>}
+                </p>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
-              <button
-                onClick={switchToOcr}
-                className="text-gray-400 text-lg font-bold leading-none"
-              >
-                ←
-              </button>
-              <span className="text-sm font-medium text-gray-600">
-                직접 입력하기
-              </span>
+              {status !== "error" && (
+                <button onClick={switchToOcr} className="text-gray-400 text-lg font-bold leading-none">←</button>
+              )}
+              <span className="text-sm font-medium text-gray-600">직접 입력하기</span>
+              {status === "error" && (
+                <span className="ml-auto">
+                  <PenLine size={14} className="text-gray-400" />
+                </span>
+              )}
             </div>
 
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">
-                  날짜 <span className="text-red-400">*</span>
-                </label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">날짜 <span className="text-red-400">*</span></label>
                 <input
-                  type="date"
-                  value={manual.date}
+                  type="date" value={manual.date}
                   onChange={(e) => setManual({ ...manual, date: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
                 />
               </div>
               <div className="flex-1">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">
-                  시간 <span className="text-red-400">*</span>
-                </label>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">시간 <span className="text-red-400">*</span></label>
                 <input
-                  type="time"
-                  value={manual.time}
+                  type="time" value={manual.time}
                   onChange={(e) => setManual({ ...manual, time: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
                 />
@@ -576,33 +465,26 @@ export default function OcrPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                식당명 <span className="text-red-400">*</span>
-              </label>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">식당명 <span className="text-red-400">*</span></label>
               <input
-                type="text"
-                value={manual.storeName}
+                type="text" value={manual.storeName}
                 onChange={(e) => setManual({ ...manual, storeName: e.target.value })}
                 placeholder="예) 풀무원 구내식당"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
               />
             </div>
 
-            {/* 금액 + 담당자 헤더 */}
             <div className="flex gap-3 px-0.5">
               <p className="flex-1 text-xs font-medium text-gray-500">금액 <span className="text-red-400">*</span></p>
               <p className="flex-1 text-xs font-medium text-gray-500">담당자 <span className="text-red-400">*</span></p>
               <div className="w-7" />
             </div>
 
-            {/* 항목 행 */}
             {manual.items.map((it, idx) => (
               <div key={idx} className="flex gap-3 items-center">
                 <div className="flex-1 relative">
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    value={it.amount}
+                    type="text" inputMode="numeric" value={it.amount}
                     onChange={(e) => updateManualItem(idx, "amount", e.target.value.replace(/\D/g, ""))}
                     placeholder="0"
                     className="w-full px-3 py-2.5 pr-7 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
@@ -613,9 +495,7 @@ export default function OcrPage() {
                   <button
                     onClick={() => setManualAssigneeIdx(idx)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-xs transition-colors ${
-                      it.assigneeId
-                        ? "border-green-400 bg-green-50 text-green-700"
-                        : "border-gray-200 bg-gray-50 text-gray-400"
+                      it.assigneeId ? "border-green-400 bg-green-50 text-green-700" : "border-gray-200 bg-gray-50 text-gray-400"
                     }`}
                   >
                     <span className="truncate">{it.assigneeId ? getAssigneeName(it.assigneeId) : "선택"}</span>
@@ -632,7 +512,6 @@ export default function OcrPage() {
               </div>
             ))}
 
-            {/* 항목 추가 버튼 */}
             <button
               onClick={addManualItem}
               className="flex items-center gap-1.5 text-xs font-medium self-start px-3 py-1.5 rounded-lg border border-dashed border-gray-300 text-gray-400 hover:border-green-400 hover:text-green-600 transition-colors"
@@ -643,7 +522,7 @@ export default function OcrPage() {
         )}
 
         {/* 저장 버튼 */}
-        {(photo || mode === "manual") && (
+        {photo && (
           <button
             disabled={!canSubmit || submitting}
             onClick={handleSubmit}
@@ -672,15 +551,10 @@ export default function OcrPage() {
                 return (
                   <button
                     key={m.id}
-                    onClick={() => {
-                      updateManualItem(manualAssigneeIdx, "assigneeId", m.id)
-                      setManualAssigneeIdx(null)
-                    }}
+                    onClick={() => { updateManualItem(manualAssigneeIdx, "assigneeId", m.id); setManualAssigneeIdx(null) }}
                     className="w-full flex items-center gap-3 px-5 py-3 text-left active:bg-gray-50 transition-colors"
                   >
-                    <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
-                      selected ? "bg-green-500 border-green-500" : "border-gray-300"
-                    }`}>
+                    <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${selected ? "bg-green-500 border-green-500" : "border-gray-300"}`}>
                       {selected && <Check size={11} className="text-white" strokeWidth={3} />}
                     </span>
                     <span className={`text-sm ${selected ? "text-green-700 font-semibold" : "text-gray-700"}`}>
@@ -691,11 +565,7 @@ export default function OcrPage() {
               })}
             </div>
             <div className="px-5 py-4">
-              <button
-                onClick={() => setManualAssigneeIdx(null)}
-                className="w-full py-3 rounded-xl text-white text-sm font-semibold"
-                style={{ background: BRAND }}
-              >
+              <button onClick={() => setManualAssigneeIdx(null)} className="w-full py-3 rounded-xl text-white text-sm font-semibold" style={{ background: BRAND }}>
                 완료
               </button>
             </div>
@@ -703,7 +573,7 @@ export default function OcrPage() {
         </div>
       )}
 
-      {/* 담당자 선택 바텀시트 */}
+      {/* OCR 항목 담당자 바텀시트 */}
       {selectingItemIdx !== null && result && (() => {
         const item = result.items[selectingItemIdx]
         return (
@@ -715,9 +585,7 @@ export default function OcrPage() {
               </div>
               <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
                 <p className="text-sm font-bold text-gray-800 truncate mr-3">{item.name}</p>
-                <span className="text-xs text-gray-400 flex-shrink-0">
-                  {item.assigneeIds.length}/{item.qty}명 선택
-                </span>
+                <span className="text-xs text-gray-400 flex-shrink-0">{item.assigneeIds.length}/{item.qty}명 선택</span>
               </div>
               <div className="overflow-y-auto max-h-64 py-1">
                 {teamMembers.map((m) => {
@@ -728,13 +596,9 @@ export default function OcrPage() {
                       key={m.id}
                       disabled={maxReached}
                       onClick={() => toggleAssignee(selectingItemIdx, m.id)}
-                      className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${
-                        maxReached ? "opacity-40 cursor-not-allowed" : "active:bg-gray-50"
-                      }`}
+                      className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${maxReached ? "opacity-40 cursor-not-allowed" : "active:bg-gray-50"}`}
                     >
-                      <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${
-                        selected ? "bg-green-500 border-green-500" : "border-gray-300"
-                      }`}>
+                      <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${selected ? "bg-green-500 border-green-500" : "border-gray-300"}`}>
                         {selected && <Check size={11} className="text-white" strokeWidth={3} />}
                       </span>
                       <span className={`text-sm ${selected ? "text-green-700 font-semibold" : "text-gray-700"}`}>
@@ -745,11 +609,7 @@ export default function OcrPage() {
                 })}
               </div>
               <div className="px-5 py-4">
-                <button
-                  onClick={() => setSelectingItemIdx(null)}
-                  className="w-full py-3 rounded-xl text-white text-sm font-semibold"
-                  style={{ background: BRAND }}
-                >
+                <button onClick={() => setSelectingItemIdx(null)} className="w-full py-3 rounded-xl text-white text-sm font-semibold" style={{ background: BRAND }}>
                   완료
                 </button>
               </div>
