@@ -243,19 +243,15 @@ export default function MyPage() {
 
   useEffect(() => {
     if (!authUser) return;
-    const fetchProfile = async () => {
-      const { data } = await supabase.from("users").select("*").eq("id", authUser.id).single();
-      const profile = {
-        name: data?.name ?? authUser.name,
-        department: data?.department ?? authUser.department,
-        position: data?.position ?? authUser.position,
-        phone: data?.phone ?? "",
-        email: data?.email ?? authUser.email,
-      };
-      setForm(profile);
-      setSaved(profile);
+    const profile = {
+      name: authUser.name,
+      department: authUser.department,
+      position: authUser.position,
+      phone: authUser.phone,
+      email: authUser.email,
     };
-    fetchProfile();
+    setForm(profile);
+    setSaved(profile);
   }, [authUser]);
 
   /* 로그아웃 확인 */
