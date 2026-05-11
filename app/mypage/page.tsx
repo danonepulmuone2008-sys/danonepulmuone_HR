@@ -315,6 +315,27 @@ export default function MyPage() {
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
   useEffect(() => {
+    const registerPush = async () => {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      const existing = await reg.pushManager.getSubscription();
+      const subscription = existing ?? await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      });
+      if (authUser) {
+        await supabase.from('push_subscriptions').upsert({
+          user_id: authUser.id,
+          subscription: JSON.parse(JSON.stringify(subscription)),
+        }, { onConflict: 'user_id' });
+      }
+    };
+    registerPush();
+  }, [authUser]);
+
+  useEffect(() => {
     const fetchAlarm = async () => {
       if (!authUser) return;
       const { data } = await supabase.from("alarm_settings").select("*").eq("id", authUser.id).single();
