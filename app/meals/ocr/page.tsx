@@ -32,6 +32,7 @@ type OcrResult = {
 type ManualItem = { amount: string; assigneeId: string }
 type ManualForm = {
   date: string
+  time: string
   storeName: string
   items: ManualItem[]
 }
@@ -68,6 +69,7 @@ export default function OcrPage() {
   // 수기 입력
   const [manual, setManual] = useState<ManualForm>({
     date: "",
+    time: "",
     storeName: "",
     items: [{ amount: "", assigneeId: "" }],
   })
@@ -163,6 +165,7 @@ export default function OcrPage() {
     if (result) {
       setManual({
         date: result.paidAt ? result.paidAt.slice(0, 10) : "",
+        time: result.paidAt ? result.paidAt.slice(11, 16) : "",
         storeName: result.storeName ?? "",
         items: [{ amount: result.totalAmount ? String(result.totalAmount) : "", assigneeId: "" }],
       })
@@ -203,6 +206,7 @@ export default function OcrPage() {
   const canSubmitManual =
     mode === "manual" &&
     !!manual.date &&
+    !!manual.time &&
     !!manual.storeName &&
     manual.items.length > 0 &&
     manual.items.every((it) => !!it.amount && !!it.assigneeId)
@@ -236,7 +240,7 @@ export default function OcrPage() {
           source: "manual",
           storagePath: null,
           storeName: manual.storeName,
-          paidAt: `${manual.date}T12:00:00`,
+          paidAt: `${manual.date}T${manual.time}:00+09:00`,
           totalAmount,
           isLunchTime: false,
           ocrRaw: null,
@@ -546,16 +550,29 @@ export default function OcrPage() {
               </span>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
-                날짜 <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="date"
-                value={manual.date}
-                onChange={(e) => setManual({ ...manual, date: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
-              />
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="text-xs font-medium text-gray-500 mb-1 block">
+                  날짜 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={manual.date}
+                  onChange={(e) => setManual({ ...manual, date: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs font-medium text-gray-500 mb-1 block">
+                  시간 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="time"
+                  value={manual.time}
+                  onChange={(e) => setManual({ ...manual, time: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
+                />
+              </div>
             </div>
 
             <div>

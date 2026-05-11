@@ -93,27 +93,26 @@ export default function MealsPage() {
       .then((data) => { if (data.used !== undefined) setMealUsed(data.used); })
       .catch(() => {});
 
-    supabase
-      .from("receipts")
-      .select("id, store_name, paid_at, total_amount, status")
-      .eq("uploader_id", user.id)
-      .order("paid_at", { ascending: false })
-      .then(({ data: rows }) => {
-        if (rows) {
-          setReceipts(rows.map((r) => {
-            const dt = new Date(r.paid_at);
-            return {
-              id: r.id,
-              date: dt.toISOString().split("T")[0],
-              time: `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`,
-              store: r.store_name ?? "가맹점 미인식",
-              menu: "",
-              amount: r.total_amount ?? 0,
-              status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
-            };
-          }));
-        }
-      });
+    fetch("/api/meals/receipts", {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.json())
+      .then((rows: { id: string; store_name: string | null; paid_at: string; total_amount: number; status: string }[]) => {
+        if (!Array.isArray(rows)) return;
+        setReceipts(rows.map((r) => {
+          const dt = new Date(r.paid_at);
+          return {
+            id: r.id,
+            date: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`,
+            time: `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`,
+            store: r.store_name ?? "가맹점 미인식",
+            menu: "",
+            amount: r.total_amount ?? 0,
+            status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
+          };
+        }));
+      })
+      .catch(() => {});
 
     fetchPending();
   }, [user, fetchPending]);

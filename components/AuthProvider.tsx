@@ -9,6 +9,7 @@ export type AuthUser = {
   name: string;
   department: string;
   position: string;
+  phone: string;
   email: string;
   token: string;
 };
@@ -47,7 +48,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
       const { data: profile } = await supabase
         .from("users")
-        .select("name, department, role")
+        .select("name, department, role, position, phone")
         .eq("id", session.user.id)
         .maybeSingle();
 
@@ -56,7 +57,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         id: session.user.id,
         name: profile?.name ?? meta.name ?? "",
         department: profile?.department ?? meta.department ?? "",
-        position: meta.position ?? profile?.role ?? "",
+        position: profile?.position ?? meta.position ?? "",
+        phone: profile?.phone ?? meta.phone ?? "",
         email: session.user.email ?? "",
         token: session.access_token,
       });
