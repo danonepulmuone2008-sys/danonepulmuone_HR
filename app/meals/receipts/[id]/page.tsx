@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { ChevronLeft } from "lucide-react";
+import AppBar from "@/components/AppBar";
 
 const BRAND = "#72BF44";
 
@@ -42,7 +42,6 @@ function fmt(iso: string) {
 
 export default function ReceiptDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const { user } = useAuth();
   const [receipt, setReceipt] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,12 +64,7 @@ export default function ReceiptDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col min-h-screen bg-gray-50">
-        <div className="flex items-center gap-2 px-4 pt-12 pb-4 bg-white border-b border-gray-100">
-          <button onClick={() => router.back()} className="p-1.5 -ml-1.5 rounded-full active:bg-gray-100">
-            <ChevronLeft size={20} className="text-gray-700" />
-          </button>
-          <span className="text-base font-semibold text-gray-900">영수증 상세</span>
-        </div>
+        <AppBar title="영수증 상세" />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: BRAND, borderTopColor: "transparent" }} />
         </div>
@@ -81,12 +75,7 @@ export default function ReceiptDetailPage() {
   if (!receipt) {
     return (
       <div className="flex flex-col min-h-screen bg-gray-50">
-        <div className="flex items-center gap-2 px-4 pt-12 pb-4 bg-white border-b border-gray-100">
-          <button onClick={() => router.back()} className="p-1.5 -ml-1.5 rounded-full active:bg-gray-100">
-            <ChevronLeft size={20} className="text-gray-700" />
-          </button>
-          <span className="text-base font-semibold text-gray-900">영수증 상세</span>
-        </div>
+        <AppBar title="영수증 상세" />
         <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
           영수증을 찾을 수 없습니다
         </div>
@@ -99,13 +88,7 @@ export default function ReceiptDetailPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* 헤더 */}
-      <div className="flex items-center gap-2 px-4 pt-12 pb-4 bg-white border-b border-gray-100">
-        <button onClick={() => router.back()} className="p-1.5 -ml-1.5 rounded-full active:bg-gray-100">
-          <ChevronLeft size={20} className="text-gray-700" />
-        </button>
-        <span className="text-base font-semibold text-gray-900">영수증 상세</span>
-      </div>
+      <AppBar title="영수증 상세" />
 
       <div className="flex flex-col gap-3 px-4 pt-4 pb-10">
         {/* 영수증 이미지 (OCR인 경우) */}
