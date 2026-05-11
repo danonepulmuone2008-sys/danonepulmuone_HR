@@ -196,11 +196,15 @@ export default function OcrPage() {
 
   const canSubmitOcr =
     mode === "ocr" && status === "done" && result &&
-    result.items.length > 0 && result.items.every((i) => i.assigneeIds.length > 0)
+    result.items.length > 0 &&
+    result.items.every((i) => i.assigneeIds.length > 0) &&
+    result.items.some((i) => currentUser && i.assigneeIds.includes(currentUser.id))
 
   const canSubmitManual =
     mode === "manual" && !!manual.date && !!manual.time && !!manual.storeName &&
-    manual.items.length > 0 && manual.items.every((it) => !!it.amount && it.assigneeIds.length > 0)
+    manual.items.length > 0 &&
+    manual.items.every((it) => !!it.amount && it.assigneeIds.length > 0) &&
+    manual.items.some((it) => currentUser && it.assigneeIds.includes(currentUser.id))
 
   const canSubmit = canSubmitOcr || canSubmitManual
 

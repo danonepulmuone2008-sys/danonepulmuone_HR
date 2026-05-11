@@ -34,14 +34,20 @@ export async function GET(req: Request) {
       .select("id, store_name, paid_at, total_amount, status")
       .eq("uploader_id", user.id)
 
-    // 내가 담당자로 지정된 영수증 ID
-    const { data: assignedItems } = await supabaseAdmin
+    // 내가 담당자로 지정된 receipt_items (price 합산용)
+    const { data: myItems } = await supabaseAdmin
       .from("receipt_items")
-      .select("receipt_id")
+      .select("receipt_id, price")
       .eq("assigned_user_id", user.id)
 
+    // receipt_id별 내 price 합계
+    const myAmountMap: Record<string, number> = {}
+    for (const item of myItems ?? []) {
+      myAmountMap[item.receipt_id] = (myAmountMap[item.receipt_id] ?? 0) + (item.price ?? 0)
+    }
+
     const uploadedIds = new Set((uploaded ?? []).map((r) => r.id))
-    const assignedIds = [...new Set((assignedItems ?? []).map((i) => i.receipt_id))]
+    const assignedIds = [...new Set((myItems ?? []).map((i) => i.receipt_id))]
       .filter((id) => !uploadedIds.has(id))
 
     let assigned: typeof uploaded = []
@@ -55,6 +61,7 @@ export async function GET(req: Request) {
 
     const all = [...(uploaded ?? []), ...assigned]
       .sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+      .map((r) => ({ ...r, my_amount: myAmountMap[r.id] ?? r.total_amount }))
 
     return NextResponse.json(all)
   } catch (err) {
