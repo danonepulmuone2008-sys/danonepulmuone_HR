@@ -277,7 +277,7 @@ export default function AttendancePage() {
             <div className="flex items-center gap-1">
               <button onClick={() => setWeekOffset(o => o - 1)} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-base leading-none">‹</button>
               <span className="text-xs text-gray-600 font-medium min-w-[84px] text-center">{getWeekLabel(weekOffset)}</span>
-              <button onClick={() => setWeekOffset(o => Math.min(o + 1, 1))} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-base leading-none">›</button>
+              <button onClick={() => setWeekOffset(o => Math.min(o + 1, 8))} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-base leading-none">›</button>
             </div>
           </div>
           <div className="mb-4">
