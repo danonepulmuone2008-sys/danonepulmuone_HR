@@ -28,7 +28,7 @@ type OcrResult = {
   storagePath: string
 }
 
-type ManualItem = { amount: string; assigneeId: string }
+type ManualItem = { amount: string; assigneeIds: string[] }
 type ManualForm = {
   date: string
   time: string
@@ -64,7 +64,7 @@ export default function OcrPage() {
     date: "",
     time: "",
     storeName: "",
-    items: [{ amount: "", assigneeId: "" }],
+    items: [{ amount: "", assigneeIds: [] }],
   })
 
   const [manualAssigneeIdx, setManualAssigneeIdx] = useState<number | null>(null)
@@ -73,14 +73,26 @@ export default function OcrPage() {
   const [savedNeedsApproval, setSavedNeedsApproval] = useState(false)
   const [selectingItemIdx, setSelectingItemIdx] = useState<number | null>(null)
 
-  const updateManualItem = (idx: number, field: keyof ManualItem, value: string) =>
+  const updateManualAmount = (idx: number, value: string) =>
     setManual((prev) => ({
       ...prev,
-      items: prev.items.map((it, i) => i === idx ? { ...it, [field]: value } : it),
+      items: prev.items.map((it, i) => i === idx ? { ...it, amount: value } : it),
+    }))
+
+  const toggleManualAssignee = (idx: number, uid: string) =>
+    setManual((prev) => ({
+      ...prev,
+      items: prev.items.map((it, i) => {
+        if (i !== idx) return it
+        const ids = it.assigneeIds.includes(uid)
+          ? it.assigneeIds.filter((id) => id !== uid)
+          : [...it.assigneeIds, uid]
+        return { ...it, assigneeIds: ids }
+      }),
     }))
 
   const addManualItem = () =>
-    setManual((prev) => ({ ...prev, items: [...prev.items, { amount: "", assigneeId: "" }] }))
+    setManual((prev) => ({ ...prev, items: [...prev.items, { amount: "", assigneeIds: [] }] }))
 
   const removeManualItem = (idx: number) =>
     setManual((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))
@@ -108,23 +120,20 @@ export default function OcrPage() {
     const data = await res.json()
 
     if (!res.ok) {
-      // 이미지가 업로드됐다면 storagePath 보존 (422 케이스)
       setFailedStoragePath(data.storagePath ?? null)
       setErrorMsg(data.error ?? "인식에 실패했습니다")
       setStatus("error")
       setMode("manual")
-      // 부분 인식된 정보로 폼 자동 채우기
       setManual({
         date: data.paidAt ? data.paidAt.slice(0, 10) : "",
         time: data.paidAt ? data.paidAt.slice(11, 16) : "",
         storeName: data.storeName ?? "",
-        items: [{ amount: "", assigneeId: "" }],
+        items: [{ amount: "", assigneeIds: [] }],
       })
       return
     }
 
     if (!data.items || data.items.length === 0) {
-      // 인식됐지만 항목 없음 - storagePath는 있음
       setFailedStoragePath(data.storagePath ?? null)
       setErrorMsg("영수증에서 메뉴를 인식하지 못했어요")
       setStatus("error")
@@ -133,7 +142,7 @@ export default function OcrPage() {
         date: data.paidAt ? data.paidAt.slice(0, 10) : "",
         time: data.paidAt ? data.paidAt.slice(11, 16) : "",
         storeName: data.storeName ?? "",
-        items: [{ amount: "", assigneeId: "" }],
+        items: [{ amount: "", assigneeIds: [] }],
       })
       return
     }
@@ -145,15 +154,13 @@ export default function OcrPage() {
     setStatus("done")
   }
 
-  const toggleAssignee = (index: number, uid: string) => {
+  const toggleOcrAssignee = (index: number, uid: string) => {
     if (!result) return
     setResult({
       ...result,
       items: result.items.map((item, i) => {
         if (i !== index) return item
-        const isSelected = item.assigneeIds.includes(uid)
-        if (!isSelected && item.assigneeIds.length >= item.qty) return item
-        const ids = isSelected
+        const ids = item.assigneeIds.includes(uid)
           ? item.assigneeIds.filter((id) => id !== uid)
           : [...item.assigneeIds, uid]
         return { ...item, assigneeIds: ids }
@@ -168,7 +175,7 @@ export default function OcrPage() {
         date: result.paidAt ? result.paidAt.slice(0, 10) : "",
         time: result.paidAt ? result.paidAt.slice(11, 16) : "",
         storeName: result.storeName ?? "",
-        items: [{ amount: result.totalAmount ? String(result.totalAmount) : "", assigneeId: "" }],
+        items: [{ amount: result.totalAmount ? String(result.totalAmount) : "", assigneeIds: [] }],
       })
     }
   }
@@ -193,7 +200,7 @@ export default function OcrPage() {
 
   const canSubmitManual =
     mode === "manual" && !!manual.date && !!manual.time && !!manual.storeName &&
-    manual.items.length > 0 && manual.items.every((it) => !!it.amount && !!it.assigneeId)
+    manual.items.length > 0 && manual.items.every((it) => !!it.amount && it.assigneeIds.length > 0)
 
   const canSubmit = canSubmitOcr || canSubmitManual
 
@@ -228,7 +235,7 @@ export default function OcrPage() {
             unitPrice: Number(it.amount),
             qty: 1,
             total: Number(it.amount),
-            assigneeIds: [it.assigneeId],
+            assigneeIds: it.assigneeIds,
           })),
         }
       } else {
@@ -277,7 +284,7 @@ export default function OcrPage() {
 
   if (submitSuccess) {
     const assigneeNames = mode === "manual"
-      ? [...new Set(manual.items.map((it) => getAssigneeName(it.assigneeId)).filter(Boolean))]
+      ? [...new Set(manual.items.flatMap((it) => it.assigneeIds).map((id) => getAssigneeName(id)).filter(Boolean))]
       : result
         ? [...new Set(result.items.flatMap((i) => i.assigneeIds).map((id) => getAssigneeName(id)).filter(Boolean))]
         : []
@@ -372,35 +379,44 @@ export default function OcrPage() {
                 <p className="text-sm font-semibold text-gray-800">메뉴 항목 ({result.items.length}건)</p>
                 <p className="text-sm font-bold text-gray-800">{result.totalAmount.toLocaleString()}원</p>
               </div>
-              {result.items.map((item, i) => (
-                <div key={i} className={`px-4 py-3.5 border-b border-gray-50 last:border-b-0 ${item.assigneeIds.length > 0 ? "bg-green-50/40" : ""}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                      {item.qty > 1 && (
-                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">×{item.qty}</span>
-                      )}
+              {result.items.map((item, i) => {
+                const n = item.assigneeIds.length
+                const perPerson = n > 1 ? Math.round(item.total / n) : null
+                return (
+                  <div key={i} className={`px-4 py-3.5 border-b border-gray-50 last:border-b-0 ${n > 0 ? "bg-green-50/40" : ""}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                        {item.qty > 1 && (
+                          <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">×{item.qty}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                        <p className="text-sm font-semibold text-gray-700">{item.total.toLocaleString()}원</p>
+                        {perPerson && (
+                          <span className="text-xs text-blue-400">({perPerson.toLocaleString()}원/인)</span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm font-semibold text-gray-700 ml-2 flex-shrink-0">{item.total.toLocaleString()}원</p>
+                    <button
+                      onClick={() => setSelectingItemIdx(i)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-sm transition-colors ${
+                        n > 0
+                          ? "border-green-400 bg-green-50 text-green-700"
+                          : "border-gray-200 bg-gray-50 text-gray-400"
+                      }`}
+                    >
+                      <span className="truncate text-xs">
+                        {n === 0 ? "담당자 선택" : item.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                      </span>
+                      <span className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                        <span className="text-xs">{n}명</span>
+                        <ChevronDown size={13} />
+                      </span>
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setSelectingItemIdx(i)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-sm transition-colors ${
-                      item.assigneeIds.length > 0
-                        ? "border-green-400 bg-green-50 text-green-700"
-                        : "border-gray-200 bg-gray-50 text-gray-400"
-                    }`}
-                  >
-                    <span className="truncate text-xs">
-                      {item.assigneeIds.length === 0 ? "담당자 선택" : item.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
-                    </span>
-                    <span className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                      <span className="text-xs">{item.assigneeIds.length}/{item.qty}명</span>
-                      <ChevronDown size={13} />
-                    </span>
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className={`rounded-2xl px-4 py-3 flex items-center gap-2 text-sm ${result.isLunchTime ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-600"}`}>
@@ -419,10 +435,9 @@ export default function OcrPage() {
           </>
         )}
 
-        {/* 수기 입력 모드 (OCR 실패 자동 전환 또는 직접 전환) */}
+        {/* 수기 입력 모드 */}
         {mode === "manual" && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4">
-            {/* OCR 실패 안내 */}
             {status === "error" && (
               <div className="flex items-start gap-2 bg-orange-50 rounded-xl px-3 py-2.5">
                 <span className="text-sm">⚠️</span>
@@ -474,43 +489,53 @@ export default function OcrPage() {
               />
             </div>
 
-            <div className="flex gap-3 px-0.5">
-              <p className="flex-1 text-xs font-medium text-gray-500">금액 <span className="text-red-400">*</span></p>
-              <p className="flex-1 text-xs font-medium text-gray-500">담당자 <span className="text-red-400">*</span></p>
-              <div className="w-7" />
-            </div>
-
-            {manual.items.map((it, idx) => (
-              <div key={idx} className="flex gap-3 items-center">
-                <div className="flex-1 relative">
-                  <input
-                    type="text" inputMode="numeric" value={it.amount}
-                    onChange={(e) => updateManualItem(idx, "amount", e.target.value.replace(/\D/g, ""))}
-                    placeholder="0"
-                    className="w-full px-3 py-2.5 pr-7 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
-                  />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">원</span>
+            {manual.items.map((it, idx) => {
+              const n = it.assigneeIds.length
+              const perPerson = n > 1 && it.amount ? Math.round(Number(it.amount) / n) : null
+              return (
+                <div key={idx} className="flex flex-col gap-1.5">
+                  <div className="flex gap-3 items-center">
+                    <div className="flex-1 relative">
+                      <input
+                        type="text" inputMode="numeric" value={it.amount}
+                        onChange={(e) => updateManualAmount(idx, e.target.value.replace(/\D/g, ""))}
+                        placeholder="0"
+                        className="w-full px-3 py-2.5 pr-7 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">원</span>
+                    </div>
+                    <div className="flex-1">
+                      <button
+                        onClick={() => setManualAssigneeIdx(idx)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-xs transition-colors ${
+                          n > 0 ? "border-green-400 bg-green-50 text-green-700" : "border-gray-200 bg-gray-50 text-gray-400"
+                        }`}
+                      >
+                        <span className="truncate">
+                          {n === 0 ? "담당자 선택" : it.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                        </span>
+                        <span className="flex items-center gap-1 flex-shrink-0 ml-1">
+                          {n > 0 && <span>{n}명</span>}
+                          <ChevronDown size={12} />
+                        </span>
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => removeManualItem(idx)}
+                      disabled={manual.items.length === 1}
+                      className="w-7 h-7 flex items-center justify-center rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-0"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {perPerson && (
+                    <p className="text-xs text-blue-400 text-right pr-10">
+                      1인당 {perPerson.toLocaleString()}원
+                    </p>
+                  )}
                 </div>
-                <div className="flex-1">
-                  <button
-                    onClick={() => setManualAssigneeIdx(idx)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-xs transition-colors ${
-                      it.assigneeId ? "border-green-400 bg-green-50 text-green-700" : "border-gray-200 bg-gray-50 text-gray-400"
-                    }`}
-                  >
-                    <span className="truncate">{it.assigneeId ? getAssigneeName(it.assigneeId) : "선택"}</span>
-                    <ChevronDown size={12} className="flex-shrink-0 ml-1" />
-                  </button>
-                </div>
-                <button
-                  onClick={() => removeManualItem(idx)}
-                  disabled={manual.items.length === 1}
-                  className="w-7 h-7 flex items-center justify-center rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors disabled:opacity-0"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+              )
+            })}
 
             <button
               onClick={addManualItem}
@@ -534,7 +559,7 @@ export default function OcrPage() {
         )}
       </div>
 
-      {/* 수기 입력 담당자 바텀시트 */}
+      {/* 수기 입력 담당자 바텀시트 (다중 선택) */}
       {manualAssigneeIdx !== null && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setManualAssigneeIdx(null)} />
@@ -542,16 +567,19 @@ export default function OcrPage() {
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
-            <div className="px-5 py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <p className="text-sm font-bold text-gray-800">담당자 선택</p>
+              <span className="text-xs text-gray-400">
+                {manual.items[manualAssigneeIdx]?.assigneeIds.length ?? 0}명 선택됨
+              </span>
             </div>
             <div className="overflow-y-auto max-h-64 py-1">
               {teamMembers.map((m) => {
-                const selected = manual.items[manualAssigneeIdx]?.assigneeId === m.id
+                const selected = manual.items[manualAssigneeIdx]?.assigneeIds.includes(m.id) ?? false
                 return (
                   <button
                     key={m.id}
-                    onClick={() => { updateManualItem(manualAssigneeIdx, "assigneeId", m.id); setManualAssigneeIdx(null) }}
+                    onClick={() => toggleManualAssignee(manualAssigneeIdx, m.id)}
                     className="w-full flex items-center gap-3 px-5 py-3 text-left active:bg-gray-50 transition-colors"
                   >
                     <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${selected ? "bg-green-500 border-green-500" : "border-gray-300"}`}>
@@ -565,7 +593,11 @@ export default function OcrPage() {
               })}
             </div>
             <div className="px-5 py-4">
-              <button onClick={() => setManualAssigneeIdx(null)} className="w-full py-3 rounded-xl text-white text-sm font-semibold" style={{ background: BRAND }}>
+              <button
+                onClick={() => setManualAssigneeIdx(null)}
+                className="w-full py-3 rounded-xl text-white text-sm font-semibold"
+                style={{ background: BRAND }}
+              >
                 완료
               </button>
             </div>
@@ -573,9 +605,11 @@ export default function OcrPage() {
         </div>
       )}
 
-      {/* OCR 항목 담당자 바텀시트 */}
+      {/* OCR 항목 담당자 바텀시트 (다중 선택, 인원 제한 없음) */}
       {selectingItemIdx !== null && result && (() => {
         const item = result.items[selectingItemIdx]
+        const n = item.assigneeIds.length
+        const perPerson = n > 1 ? Math.round(item.total / n) : null
         return (
           <div className="fixed inset-0 z-50 flex flex-col justify-end">
             <div className="absolute inset-0 bg-black/40" onClick={() => setSelectingItemIdx(null)} />
@@ -584,19 +618,22 @@ export default function OcrPage() {
                 <div className="w-10 h-1 rounded-full bg-gray-200" />
               </div>
               <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-                <p className="text-sm font-bold text-gray-800 truncate mr-3">{item.name}</p>
-                <span className="text-xs text-gray-400 flex-shrink-0">{item.assigneeIds.length}/{item.qty}명 선택</span>
+                <div className="min-w-0 mr-3">
+                  <p className="text-sm font-bold text-gray-800 truncate">{item.name}</p>
+                  {perPerson && (
+                    <p className="text-xs text-blue-400 mt-0.5">1인당 {perPerson.toLocaleString()}원</p>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400 flex-shrink-0">{n}명 선택됨</span>
               </div>
               <div className="overflow-y-auto max-h-64 py-1">
                 {teamMembers.map((m) => {
                   const selected = item.assigneeIds.includes(m.id)
-                  const maxReached = item.assigneeIds.length >= item.qty && !selected
                   return (
                     <button
                       key={m.id}
-                      disabled={maxReached}
-                      onClick={() => toggleAssignee(selectingItemIdx, m.id)}
-                      className={`w-full flex items-center gap-3 px-5 py-3 text-left transition-colors ${maxReached ? "opacity-40 cursor-not-allowed" : "active:bg-gray-50"}`}
+                      onClick={() => toggleOcrAssignee(selectingItemIdx, m.id)}
+                      className="w-full flex items-center gap-3 px-5 py-3 text-left active:bg-gray-50 transition-colors"
                     >
                       <span className={`w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border-2 transition-colors ${selected ? "bg-green-500 border-green-500" : "border-gray-300"}`}>
                         {selected && <Check size={11} className="text-white" strokeWidth={3} />}
@@ -609,7 +646,11 @@ export default function OcrPage() {
                 })}
               </div>
               <div className="px-5 py-4">
-                <button onClick={() => setSelectingItemIdx(null)} className="w-full py-3 rounded-xl text-white text-sm font-semibold" style={{ background: BRAND }}>
+                <button
+                  onClick={() => setSelectingItemIdx(null)}
+                  className="w-full py-3 rounded-xl text-white text-sm font-semibold"
+                  style={{ background: BRAND }}
+                >
                   완료
                 </button>
               </div>
