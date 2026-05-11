@@ -59,6 +59,7 @@ export default function AdminHomePage() {
       .from("users")
       .select("id, name, phone, email")
       .eq("is_active", true)
+      .eq("role", "employee")
       .order("name");
     if (data) setUsers(data);
   }
@@ -101,23 +102,23 @@ export default function AdminHomePage() {
   async function saveAttendance() {
     if (!editUserId) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("attendance_records")
-      .upsert(
-        {
-          user_id: editUserId,
-          date: editDate,
-          clock_in: editCheckIn ? toTimestamptz(editDate, editCheckIn) : null,
-          clock_out: editCheckOut ? toTimestamptz(editDate, editCheckOut) : null,
-        },
-        { onConflict: "user_id,date" }
-      );
+    const res = await fetch("/api/admin/attendance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: editUserId,
+        date: editDate,
+        clock_in: editCheckIn ? toTimestamptz(editDate, editCheckIn) : null,
+        clock_out: editCheckOut ? toTimestamptz(editDate, editCheckOut) : null,
+      }),
+    });
 
-    if (!error) {
+    if (res.ok) {
       await fetchTodayAttendance();
       setEditUserId(null);
     } else {
-      alert("저장 중 오류가 발생했습니다: " + error.message);
+      const { error } = await res.json();
+      alert("저장 중 오류가 발생했습니다: " + error);
     }
     setSaving(false);
   }
