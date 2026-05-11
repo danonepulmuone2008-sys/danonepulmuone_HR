@@ -103,27 +103,46 @@ export default function AttendancePage() {
   const fetchWeekData = useCallback(async (uid: string, offset: number) => {
     const monday = getMondayOfWeek(new Date());
     monday.setDate(monday.getDate() + offset * 7);
+    const friday = new Date(monday);
+    friday.setDate(friday.getDate() + 4);
     const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-    const days = await Promise.all(
-      DAY_LABELS.map(async (day, i) => {
-        const date = new Date(monday);
-        date.setDate(date.getDate() + i);
-        const { data } = await supabase
-          .from("attendance_records")
-          .select("clock_in, clock_out, lunch_break")
-          .eq("user_id", uid)
-          .eq("date", fmt(date))
-          .maybeSingle();
-        let hours = 0;
-        if (data?.clock_in && data?.clock_out) {
-          const diff = new Date(data.clock_out).getTime() - new Date(data.clock_in).getTime();
-          hours = Math.round(diff / 36000) / 100;
-          if (data.lunch_break) hours = Math.max(0, hours - 1);
-        }
-        return { day, hours };
-      })
-    );
+    const weekDates = DAY_LABELS.map((_, i) => {
+      const d = new Date(monday);
+      d.setDate(d.getDate() + i);
+      return fmt(d);
+    });
+
+    const [attendanceRows, { data: trips }] = await Promise.all([
+      Promise.all(weekDates.map(date =>
+        supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).eq("date", date).maybeSingle().then(r => r.data)
+      )),
+      supabase.from("business_trip_requests")
+        .select("start_date, end_date, start_time, end_time")
+        .eq("user_id", uid).eq("status", "approved")
+        .lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
+    ]);
+
+    const days = DAY_LABELS.map((day, i) => {
+      const data = attendanceRows[i];
+      const date = weekDates[i];
+      let hours = 0;
+      if (data?.clock_in && data?.clock_out) {
+        const diff = new Date(data.clock_out).getTime() - new Date(data.clock_in).getTime();
+        hours = Math.round(diff / 36000) / 100;
+        if (data.lunch_break) hours = Math.max(0, hours - 1);
+      }
+      const trip = (trips ?? []).find(t => t.start_date <= date && t.end_date >= date && t.start_time && t.end_time);
+      if (trip) {
+        const isSingleDay = trip.start_date === trip.end_date;
+        const startStr = isSingleDay || trip.start_date === date ? trip.start_time : "09:00";
+        const endStr = isSingleDay || trip.end_date === date ? trip.end_time : "18:00";
+        const [sh, sm] = startStr.split(":").map(Number);
+        const [eh, em] = endStr.split(":").map(Number);
+        hours += (eh * 60 + em - sh * 60 - sm) / 60;
+      }
+      return { day, hours };
+    });
     setWeekDays(days);
   }, []);
 
@@ -139,9 +158,9 @@ export default function AttendancePage() {
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
         .eq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("vacation_requests").select("id, user_id, type, start_date, end_date, status")
-        .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
+        .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("business_trip_requests").select("id, user_id, destination, start_date, end_date, status")
-        .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
+        .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
       supabase.from("users").select("id, name"),
@@ -227,6 +246,7 @@ export default function AttendancePage() {
 
   const handleFlexSubmit = async () => {
     if (!selectedDay || !flexInput.startTime || !flexInput.endTime || !userId || !user) return;
+    if (flexInput.startTime >= flexInput.endTime) return;
     const dateStr = `${calYear}-${calMm}-${String(selectedDay).padStart(2, "0")}`;
     await supabase.from("flex_schedules").upsert(
       { user_id: userId, user_name: user.name, date: dateStr, start_time: flexInput.startTime, end_time: flexInput.endTime },
@@ -530,21 +550,28 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              {modalMode === "flex-add" && (
-                <div className="px-5 pt-4">
-                  <div className="flex gap-3 mb-5">
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-500 mb-1.5 block">시작 시간</label>
-                      <input type="time" value={flexInput.startTime} onChange={e => setFlexInput(p => ({ ...p, startTime: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-purple-500 bg-gray-50" />
+              {modalMode === "flex-add" && (() => {
+                const flexTimeInvalid = !!flexInput.startTime && !!flexInput.endTime && flexInput.endTime <= flexInput.startTime;
+                return (
+                  <div className="px-5 pt-4">
+                    <div className="flex gap-3 mb-1">
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-500 mb-1.5 block">시작 시간</label>
+                        <input type="time" value={flexInput.startTime} onChange={e => setFlexInput(p => ({ ...p, startTime: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-purple-500 bg-gray-50" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-xs text-gray-500 mb-1.5 block">종료 시간</label>
+                        <input type="time" value={flexInput.endTime} min={flexInput.startTime || undefined} onChange={e => setFlexInput(p => ({ ...p, endTime: e.target.value }))} className={`w-full h-11 px-4 rounded-xl border text-sm outline-none bg-gray-50 ${flexTimeInvalid ? "border-red-400 focus:border-red-400" : "border-gray-200 focus:border-purple-500"}`} />
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-500 mb-1.5 block">종료 시간</label>
-                      <input type="time" value={flexInput.endTime} onChange={e => setFlexInput(p => ({ ...p, endTime: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-purple-500 bg-gray-50" />
-                    </div>
+                    {flexTimeInvalid && (
+                      <p className="text-xs text-red-500 mb-4">종료 시간은 시작 시간보다 늦어야 합니다.</p>
+                    )}
+                    {!flexTimeInvalid && <div className="mb-4" />}
+                    <button onClick={handleFlexSubmit} disabled={!flexInput.startTime || !flexInput.endTime || flexTimeInvalid} className="w-full py-4 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">등록하기</button>
                   </div>
-                  <button onClick={handleFlexSubmit} disabled={!flexInput.startTime || !flexInput.endTime} className="w-full py-4 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">등록하기</button>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         );
