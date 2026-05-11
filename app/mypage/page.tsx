@@ -319,17 +319,22 @@ export default function MyPage() {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') return;
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      const existing = await reg.pushManager.getSubscription();
-      const subscription = existing ?? await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-      });
-      if (authUser) {
-        await supabase.from('push_subscriptions').upsert({
-          user_id: authUser.id,
-          subscription: JSON.parse(JSON.stringify(subscription)),
-        }, { onConflict: 'user_id' });
+      try {
+        await navigator.serviceWorker.register('/sw.js');
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        const subscription = existing ?? await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+        });
+        if (authUser) {
+          await supabase.from('push_subscriptions').upsert({
+            user_id: authUser.id,
+            subscription: JSON.parse(JSON.stringify(subscription)),
+          }, { onConflict: 'user_id' });
+        }
+      } catch (e) {
+        console.warn('Push subscription failed:', e);
       }
     };
     registerPush();

@@ -1,8 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { ADMIN_DUMMY } from "@/lib/api";
+
+type RealFlexSchedule = {
+  user_name: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+};
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const WEEKS = [
@@ -65,8 +72,16 @@ export default function AdminAttendancePage() {
   const [activeTab, setActiveTab] = useState<"schedule" | "records">("schedule");
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [flexSchedules, setFlexSchedules] = useState<RealFlexSchedule[]>([]);
 
-  const { interns, internEvents, internFlexSchedules, attendanceRecords } = ADMIN_DUMMY;
+  const { interns, internEvents, attendanceRecords } = ADMIN_DUMMY;
+
+  useEffect(() => {
+    fetch("/api/admin/schedules?month=2026-05")
+      .then((res) => res.json())
+      .then((json) => { if (json.flexSchedules) setFlexSchedules(json.flexSchedules); })
+      .catch((err) => console.error("[schedules fetch]", err));
+  }, []);
 
   // 날짜별 특별 일정이 있는 인턴 집합 (기본 외 = flex or 휴가/출장)
   const specialMap: Record<number, Set<string>> = {};
@@ -75,10 +90,12 @@ export default function AdminAttendancePage() {
     if (!specialMap[day]) specialMap[day] = new Set();
     specialMap[day].add(e.internId);
   });
-  internFlexSchedules.forEach((f) => {
+  flexSchedules.forEach((f) => {
+    const intern = interns.find((i) => i.name === f.user_name);
+    if (!intern) return;
     const day = parseInt(f.date.split("-")[2]);
     if (!specialMap[day]) specialMap[day] = new Set();
-    specialMap[day].add(f.internId);
+    specialMap[day].add(intern.id);
   });
 
   // 특정 인턴+날짜의 일정 조회
@@ -86,8 +103,11 @@ export default function AdminAttendancePage() {
     const dateKey = `2026-05-${String(day).padStart(2, "0")}`;
     const event = internEvents.find((e) => e.internId === internId && e.date === dateKey);
     if (event) return { type: "event" as const, event };
-    const flex = internFlexSchedules.find((f) => f.internId === internId && f.date === dateKey);
-    if (flex) return { type: "flex" as const, flex };
+    const intern = interns.find((i) => i.id === internId);
+    const flex = intern
+      ? flexSchedules.find((f) => f.user_name === intern.name && f.date === dateKey)
+      : undefined;
+    if (flex) return { type: "flex" as const, flex: { startTime: flex.start_time, endTime: flex.end_time } };
     return { type: "default" as const };
   };
 
