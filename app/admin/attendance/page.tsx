@@ -53,6 +53,13 @@ function getWeekLabel(offset: number): string {
 }
 
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
+const HALF_DAY_SPLIT = "13:00";
+
+function getHalfDayWorkTime(label: string): string {
+  if (label.includes("오전")) return `${HALF_DAY_SPLIT} ~ ${DEFAULT_END}`;
+  if (label.includes("오후")) return `${DEFAULT_START} ~ ${HALF_DAY_SPLIT}`;
+  return "";
+}
 
 export default function AdminAttendancePage() {
   const [activeTab, setActiveTab] = useState<"schedule" | "records">("schedule");
@@ -119,23 +126,61 @@ export default function AdminAttendancePage() {
 
       {activeTab === "schedule" ? (
         <div className="flex flex-col gap-3 px-4 pt-3">
-          {/* 인턴 범례 */}
-          <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-400 font-medium mb-2">인턴 구분 · 기본 {DEFAULT_START}~{DEFAULT_END}</p>
-            <div className="flex flex-wrap gap-3">
-              {interns.map((intern, i) => (
-                <div key={intern.id} className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: INTERN_HEX[i] }} />
-                  <span className="text-xs text-gray-600">{intern.name}</span>
-                </div>
-              ))}
+          {/* 당일 근무 일정 */}
+          <div className="bg-white rounded-2xl px-4 pt-3 pb-2 shadow-sm border border-gray-100">
+            <p className="text-base font-bold mb-2" style={{ color: "#8dc63f" }}>오늘의 근무일정</p>
+            <div className="flex flex-col gap-1.5">
+              {interns.map((intern, i) => {
+                const sched = getSchedule(intern.id, TODAY);
+                return (
+                  <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: INTERN_BG_RGBA[i] }}>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }}>
+                        {intern.name.slice(0, 1)}
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900">{intern.name}</span>
+                    </div>
+                    <div className="text-right">
+                      {sched.type === "event" ? (
+                        <div>
+                          {sched.event.label.includes("반차") ? (
+                            <>
+                              <p className="text-sm font-semibold text-gray-900">{getHalfDayWorkTime(sched.event.label)}</p>
+                              <p className="text-xs text-green-600 mt-0.5">반차</p>
+                            </>
+                          ) : (
+                            <>
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${sched.event.type === "vacation" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>
+                                {sched.event.label}
+                              </span>
+                              {sched.event.destination && (
+                                <p className="text-xs text-gray-400 mt-0.5">→ {sched.event.destination}</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ) : sched.type === "flex" ? (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{sched.flex.startTime} ~ {sched.flex.endTime}</p>
+                          <p className="text-xs text-purple-500 mt-0.5">유연근무</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{DEFAULT_START} ~ {DEFAULT_END}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">기본</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* 캘린더 */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs font-medium text-gray-400 mb-3">
-              점이 있는 날짜 = 기본 외 일정 있음
+              기본: {DEFAULT_START} ~ {DEFAULT_END}
             </p>
             <div className="grid grid-cols-7 text-center mb-1">
               {CALENDAR_DAYS.map((d) => (
@@ -298,23 +343,32 @@ export default function AdminAttendancePage() {
                     <div className="text-right">
                       {sched.type === "event" ? (
                         <div>
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                            sched.event.type === "vacation" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                          }`}>
-                            {sched.event.label}
-                          </span>
-                          {sched.event.destination && (
-                            <p className="text-xs text-gray-400 mt-1">→ {sched.event.destination}</p>
+                          {sched.event.label.includes("반차") ? (
+                            <>
+                              <p className="text-sm font-semibold text-gray-900">{getHalfDayWorkTime(sched.event.label)}</p>
+                              <p className="text-xs text-green-600 mt-0.5">반차</p>
+                            </>
+                          ) : (
+                            <>
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                                sched.event.type === "vacation" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                              }`}>
+                                {sched.event.label}
+                              </span>
+                              {sched.event.destination && (
+                                <p className="text-xs text-gray-400 mt-1">→ {sched.event.destination}</p>
+                              )}
+                            </>
                           )}
                         </div>
                       ) : sched.type === "flex" ? (
                         <div>
-                          <p className="text-sm font-semibold text-gray-700">{sched.flex.startTime} ~ {sched.flex.endTime}</p>
+                          <p className="text-sm font-semibold text-gray-900">{sched.flex.startTime} ~ {sched.flex.endTime}</p>
                           <p className="text-xs text-purple-500 mt-0.5">유연근무</p>
                         </div>
                       ) : (
                         <div>
-                          <p className="text-sm font-semibold text-gray-500">{DEFAULT_START} ~ {DEFAULT_END}</p>
+                          <p className="text-sm font-semibold text-gray-900">{DEFAULT_START} ~ {DEFAULT_END}</p>
                           <p className="text-xs text-gray-400 mt-0.5">기본</p>
                         </div>
                       )}
