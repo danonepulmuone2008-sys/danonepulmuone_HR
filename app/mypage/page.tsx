@@ -159,11 +159,11 @@ const TimePicker = ({ time, onChange }: { time: string; onChange: (t: string) =>
 
         {/* 분 */}
         <div className="flex flex-col items-center">
-          <ArrowBtn onClick={() => setM(m + 5)} up />
+          <ArrowBtn onClick={() => setM(m + 1)} up />
           <span className="text-5xl font-bold w-20 text-center" style={{ color: BRAND_BLUE }}>
             {pad(m)}
           </span>
-          <ArrowBtn onClick={() => setM(m - 5)} up={false} />
+          <ArrowBtn onClick={() => setM(m - 1)} up={false} />
         </div>
       </div>
     </div>
@@ -317,19 +317,23 @@ export default function MyPage() {
   useEffect(() => {
     const registerPush = async () => {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return;
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      const existing = await reg.pushManager.getSubscription();
-      const subscription = existing ?? await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-      });
-      if (authUser) {
-        await supabase.from('push_subscriptions').upsert({
-          user_id: authUser.id,
-          subscription: JSON.parse(JSON.stringify(subscription)),
-        }, { onConflict: 'user_id' });
+      if (Notification.permission !== 'granted') return;
+      try {
+        await navigator.serviceWorker.register('/sw.js');
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        const subscription = existing ?? await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+        });
+        if (authUser) {
+          await supabase.from('push_subscriptions').upsert({
+            user_id: authUser.id,
+            subscription: JSON.parse(JSON.stringify(subscription)),
+          }, { onConflict: 'user_id' });
+        }
+      } catch (e) {
+        console.warn('Push subscription failed:', e);
       }
     };
     registerPush();
@@ -485,7 +489,7 @@ export default function MyPage() {
               <button
                 onClick={async () => {
                   if (!authUser) return;
-                  await supabase.from("users").upsert({ id: authUser.id, ...form });
+                  await supabase.from("users").update({ name: form.name, department: form.department, position: form.position, phone: form.phone }).eq("id", authUser.id);
                   setSaved({ ...form });
                   setShowEdit(false);
                   showToast("프로필이 수정되었습니다.");
