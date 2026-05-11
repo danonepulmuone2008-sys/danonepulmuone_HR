@@ -18,15 +18,28 @@ export async function GET(req: Request) {
       ? `${year + 1}-01-01`
       : `${year}-${String(month + 1).padStart(2, "0")}-01`
 
-    const { data, error } = await supabaseAdmin
+    // 이번 달 영수증 ID 목록
+    const { data: receiptRows, error: receiptError } = await supabaseAdmin
       .from("receipts")
-      .select("total_amount")
-      .eq("uploader_id", user.id)
+      .select("id")
       .gte("paid_at", startOfMonth)
       .lt("paid_at", startOfNext)
+    if (receiptError) throw new Error(receiptError.message)
+
+    const receiptIds = (receiptRows ?? []).map((r) => r.id)
+
+    // 나에게 할당된 항목만 합산 (승인 완료된 것만)
+    const { data, error } = receiptIds.length > 0
+      ? await supabaseAdmin
+          .from("receipt_items")
+          .select("price")
+          .eq("assigned_user_id", user.id)
+          .eq("status", "approved")
+          .in("receipt_id", receiptIds)
+      : { data: [], error: null }
     if (error) throw new Error(error.message)
 
-    const used = (data ?? []).reduce((sum, r) => sum + (r.total_amount ?? 0), 0)
+    const used = (data ?? []).reduce((sum, r) => sum + (r.price ?? 0), 0)
     const totalLimit = getMealLimit(year, month)
 
     return NextResponse.json({ used, totalLimit })

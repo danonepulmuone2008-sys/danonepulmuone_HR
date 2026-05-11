@@ -360,7 +360,7 @@ export default function MyPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-gray-50">
 
       {/* 헤더 */}
       <header
@@ -381,7 +381,7 @@ export default function MyPage() {
       </header>
 
       {/* 콘텐츠 */}
-      <div className="flex-1 flex flex-col gap-2.5 px-4 pt-3 pb-2 overflow-hidden">
+      <div className="flex flex-col gap-2.5 px-4 pt-3 pb-24">
 
         {/* 내 계정 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">

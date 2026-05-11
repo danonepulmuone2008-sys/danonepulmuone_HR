@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Receipt = {
   id: string;
@@ -22,6 +23,7 @@ function getMonthOffset(offset: number): { year: number; month: number } {
 }
 
 export default function WeeklyReceiptList({ receipts }: { receipts: Receipt[] }) {
+  const router = useRouter();
   const [monthOffset, setMonthOffset] = useState(0);
   const [page, setPage] = useState(1);
 
@@ -66,9 +68,10 @@ export default function WeeklyReceiptList({ receipts }: { receipts: Receipt[] })
         <div className="px-4 py-6 text-center text-sm text-gray-400">해당 월의 내역이 없습니다</div>
       ) : (
         paginated.map((receipt) => (
-          <div
+          <button
             key={receipt.id}
-            className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0"
+            onClick={() => router.push(`/meals/receipts/${receipt.id}`)}
+            className="w-full flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0 active:bg-gray-50 transition-colors text-left"
           >
             <div className="flex-1 min-w-0 mr-3">
               <p className="text-xs text-gray-400">{receipt.date.replace(/-/g, "/")} {receipt.time}</p>
@@ -87,7 +90,7 @@ export default function WeeklyReceiptList({ receipts }: { receipts: Receipt[] })
                 {receipt.status}
               </span>
             </div>
-          </div>
+          </button>
         ))
       )}
 
