@@ -20,6 +20,49 @@ interface SaveReceiptPayload {
   items: ItemPayload[]
 }
 
+export async function GET(req: Request) {
+  try {
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    // 내가 올린 영수증
+    const { data: uploaded } = await supabaseAdmin
+      .from("receipts")
+      .select("id, store_name, paid_at, total_amount, status")
+      .eq("uploader_id", user.id)
+
+    // 내가 담당자로 지정된 영수증 ID
+    const { data: assignedItems } = await supabaseAdmin
+      .from("receipt_items")
+      .select("receipt_id")
+      .eq("assigned_user_id", user.id)
+
+    const uploadedIds = new Set((uploaded ?? []).map((r) => r.id))
+    const assignedIds = [...new Set((assignedItems ?? []).map((i) => i.receipt_id))]
+      .filter((id) => !uploadedIds.has(id))
+
+    let assigned: typeof uploaded = []
+    if (assignedIds.length > 0) {
+      const { data } = await supabaseAdmin
+        .from("receipts")
+        .select("id, store_name, paid_at, total_amount, status")
+        .in("id", assignedIds)
+      assigned = data ?? []
+    }
+
+    const all = [...(uploaded ?? []), ...assigned]
+      .sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+
+    return NextResponse.json(all)
+  } catch (err) {
+    console.error("[receipts list]", err)
+    return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""

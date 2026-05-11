@@ -49,6 +49,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const userMap = Object.fromEntries((userRows ?? []).map((u) => [u.id, u.name]))
 
+    const isManual = !receipt.image_path || receipt.image_path === "manual"
+    let imageUrl: string | null = null
+    if (!isManual) {
+      const { data: signed } = await supabaseAdmin.storage
+        .from("receipts")
+        .createSignedUrl(receipt.image_path!, 60 * 60) // 1시간 유효
+      imageUrl = signed?.signedUrl ?? null
+    }
+
     return NextResponse.json({
       id: receipt.id,
       store_name: receipt.store_name,
@@ -56,7 +65,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       total_amount: receipt.total_amount,
       is_lunch_time: receipt.is_lunch_time,
       status: receipt.status,
-      image_path: receipt.image_path,
+      image_url: imageUrl,
       uploader_name: uploaderRow?.name ?? "알 수 없음",
       items: (itemRows ?? []).map((item) => ({
         id: item.id,

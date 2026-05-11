@@ -24,7 +24,7 @@ type ReceiptDetail = {
   total_amount: number;
   is_lunch_time: boolean;
   status: string;
-  image_path: string | null;
+  image_url: string | null;
   uploader_name: string;
   items: ReceiptItem[];
 };
@@ -84,7 +84,6 @@ export default function ReceiptDetailPage() {
   }
 
   const statusInfo = STATUS_LABEL[receipt.status] ?? { label: receipt.status, className: "bg-gray-100 text-gray-500" };
-  const isManual = !receipt.image_path || receipt.image_path === "manual";
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -92,10 +91,10 @@ export default function ReceiptDetailPage() {
 
       <div className="flex flex-col gap-3 px-4 pt-4 pb-10">
         {/* 영수증 이미지 (OCR인 경우) */}
-        {!isManual && (
+        {receipt.image_url && (
           <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
             <img
-              src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.image_path}`}
+              src={receipt.image_url}
               alt="영수증"
               className="w-full object-contain max-h-64"
             />
@@ -123,7 +122,7 @@ export default function ReceiptDetailPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">입력 방식</span>
-              <span className="font-medium text-gray-700">{isManual ? "수기 입력" : "OCR 인식"}</span>
+              <span className="font-medium text-gray-700">{receipt.image_url ? "OCR 인식" : "수기 입력"}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">점심 시간</span>
