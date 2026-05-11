@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { ADMIN_DUMMY } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 const CATEGORY_COLOR: Record<string, string> = {
   "출퇴근 시간 수정": "bg-green-100 text-green-700",
@@ -15,38 +15,65 @@ const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
 
 type InquiryStatus = { id: string; isNew: boolean; isProcessed: boolean };
 
-export default function AdminInquiryPage() {
-  const { interns } = ADMIN_DUMMY;
+type InquiryItem = {
+  id: string;
+  category: string;
+  subject: string;
+  internId: string;
+  senderName: string;
+  content: string;
+  date: string;
+  time: string;
+  isRead: boolean;
+};
 
-  // isNew = 아직 클릭 안 한 새 문의 (N 뱃지)
-  // isProcessed = 처리 완료 버튼 눌렀을 때
-  const [statuses, setStatuses] = useState<InquiryStatus[]>(
-    ADMIN_DUMMY.inquiries.map((q) => ({
-      id: q.id,
-      isNew: !q.isRead,
-      isProcessed: q.isRead,
-    }))
-  );
+export default function AdminInquiryPage() {
+  const [inquiryItems, setInquiryItems] = useState<InquiryItem[]>([]);
+  const [statuses, setStatuses] = useState<InquiryStatus[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"미처리" | "처리완료">("미처리");
 
-  const inquiries = ADMIN_DUMMY.inquiries.map((q) => {
-    const s = statuses.find((s) => s.id === q.id)!;
+  useEffect(() => {
+    const fetchInquiries = async () => {
+      const { data } = await supabase
+        .from("inquiries")
+        .select("id, user_id, subject, content, created_at, users(name)")
+        .order("created_at", { ascending: false });
+
+      if (data) {
+        const items: InquiryItem[] = data.map((d: any) => ({
+          id: d.id,
+          category: "기타 문의",
+          subject: d.subject ?? "",
+          internId: d.user_id ?? "",
+          senderName: d.users?.name ?? "알 수 없음",
+          content: d.content ?? "",
+          date: (d.created_at ?? "").slice(0, 10),
+          time: (d.created_at ?? "").slice(11, 16),
+          isRead: false,
+        }));
+        setInquiryItems(items);
+        setStatuses(items.map((q) => ({ id: q.id, isNew: true, isProcessed: false })));
+      }
+    };
+    fetchInquiries();
+  }, []);
+
+  const internColor = (internId: string) => {
+    const hash = internId.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    return INTERN_HEX[hash % INTERN_HEX.length];
+  };
+
+  const inquiries = inquiryItems.map((q) => {
+    const s = statuses.find((s) => s.id === q.id) ?? { isNew: true, isProcessed: false };
     return { ...q, isNew: s.isNew, isProcessed: s.isProcessed };
   });
 
-  const internColor = (internId: string) => {
-    const idx = interns.findIndex((i) => i.id === internId);
-    return INTERN_HEX[idx] ?? "#9CA3AF";
-  };
-
-  // 카드 클릭: N 뱃지만 제거 (미처리 유지) + 상세 열기
   const openInquiry = (id: string) => {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false } : s));
     setSelectedId(id);
   };
 
-  // 처리 완료 버튼: 처리완료로 이동
   const processInquiry = (id: string) => {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false, isProcessed: true } : s));
     setSelectedId(null);
@@ -106,7 +133,6 @@ export default function AdminInquiryPage() {
               className="relative bg-white rounded-2xl shadow-sm border border-gray-100 cursor-pointer active:scale-[0.98] transition-all overflow-visible"
               onClick={() => openInquiry(q.id)}
             >
-              {/* N 뱃지: 새 문의만 표시 */}
               {q.isNew && (
                 <div className="absolute -top-px -left-px bg-red-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-tl-2xl rounded-br-xl z-10 leading-none pointer-events-none">
                   N
@@ -115,7 +141,6 @@ export default function AdminInquiryPage() {
 
               <div className="px-4 pt-3.5 pb-2">
                 <div className="flex items-start gap-3">
-                  {/* 왼쪽 */}
                   <div className="flex-1 min-w-0">
                     <div className="mb-1">
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[q.category] ?? "bg-gray-100 text-gray-500"}`}>
@@ -131,7 +156,6 @@ export default function AdminInquiryPage() {
                     </div>
                     <p className="text-xs text-gray-400 line-clamp-1">{q.content}</p>
                   </div>
-                  {/* 오른쪽 */}
                   <div className="flex flex-col items-end flex-shrink-0 gap-1 pt-0.5">
                     <p className="text-[11px] text-gray-400 whitespace-nowrap">
                       {q.date.slice(5).replace("-", "/")} {q.time}
@@ -139,7 +163,6 @@ export default function AdminInquiryPage() {
                   </div>
                 </div>
               </div>
-
             </div>
           ))
         )}
@@ -180,7 +203,6 @@ export default function AdminInquiryPage() {
             <div className="px-5 pt-5 pb-4">
               <p className="text-sm text-gray-700 leading-relaxed">{selected.content}</p>
             </div>
-            {/* 바텀시트 내 처리 완료 버튼 */}
             {!selected.isProcessed && (
               <div className="px-5 pb-2">
                 <button
