@@ -19,14 +19,6 @@ type RealIntern = {
 };
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
-const WEEKS = [
-  [null, null, null, null, 1, 2, 3],
-  [4, 5, 6, 7, 8, 9, 10],
-  [11, 12, 13, 14, 15, 16, 17],
-  [18, 19, 20, 21, 22, 23, 24],
-  [25, 26, 27, 28, 29, 30, 31],
-];
-const TODAY = 7;
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "15:00";
 
@@ -39,12 +31,45 @@ const INTERN_BG_RGBA = [
   "rgba(220,38,38,0.12)",
 ];
 
-// 이번 주 월요일 = 2026-05-04
-const BASE_MONDAY = new Date(2026, 4, 4);
+const _now = new Date();
+const CURRENT_YEAR = _now.getFullYear();
+const CURRENT_MONTH = _now.getMonth() + 1;
+const CURRENT_MONTH_STR = `${CURRENT_YEAR}-${String(CURRENT_MONTH).padStart(2, "0")}`;
+const TODAY = _now.getDate();
+
+function buildWeeks(year: number, month: number): (number | null)[][] {
+  const firstDow = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const weeks: (number | null)[][] = [];
+  let week: (number | null)[] = Array(firstDow).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    week.push(d);
+    if (week.length === 7) { weeks.push(week); week = []; }
+  }
+  if (week.length > 0) {
+    while (week.length < 7) week.push(null);
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+const WEEKS = buildWeeks(CURRENT_YEAR, CURRENT_MONTH);
 
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+function getCurrentMonday(): Date {
+  const today = new Date();
+  const dow = today.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+const BASE_MONDAY = getCurrentMonday();
 
 function getWeekDates(offset: number): string[] {
   const monday = new Date(BASE_MONDAY);
@@ -86,7 +111,7 @@ export default function AdminAttendancePage() {
   const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
 
   useEffect(() => {
-    fetch("/api/admin/schedules?month=2026-05")
+    fetch(`/api/admin/schedules?month=${CURRENT_MONTH_STR}`)
       .then((res) => res.json())
       .then((json) => { if (json.flexSchedules) setFlexSchedules(json.flexSchedules); })
       .catch((err) => console.error("[schedules fetch]", err));
@@ -113,7 +138,7 @@ export default function AdminAttendancePage() {
 
   // 특정 인턴+날짜의 일정 조회
   const getSchedule = (internId: string, day: number) => {
-    const dateKey = `2026-05-${String(day).padStart(2, "0")}`;
+    const dateKey = `${CURRENT_MONTH_STR}-${String(day).padStart(2, "0")}`;
     const event = internEvents.find((e) => e.internId === internId && e.date === dateKey);
     if (event) return { type: "event" as const, event };
     const intern = scheduleInterns.find((i: RealIntern) => i.id === internId);
@@ -139,7 +164,7 @@ export default function AdminAttendancePage() {
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
       <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100">
         <h1 className="text-lg font-bold text-gray-900">근태 관리</h1>
-        <p className="text-xs text-gray-400 mt-0.5">2026년 5월</p>
+        <p className="text-xs text-gray-400 mt-0.5">{CURRENT_YEAR}년 {CURRENT_MONTH}월</p>
       </header>
 
       {/* 탭 */}
@@ -255,7 +280,7 @@ export default function AdminAttendancePage() {
                         {/* hover 툴팁 */}
                         {specials.size > 0 && (
                           <div className={`absolute bottom-full ${tooltipAlign} mb-2 z-50 hidden group-hover:block bg-gray-900 text-white rounded-xl shadow-xl w-52 p-3 pointer-events-none`}>
-                            <p className="text-[10px] text-gray-400 font-medium mb-2">5월 {day}일</p>
+                            <p className="text-[10px] text-gray-400 font-medium mb-2">{CURRENT_MONTH}월 {day}일</p>
                             <div className="flex flex-col gap-1.5">
                               {scheduleInterns.map((intern: RealIntern, i: number) => {
                                 if (!specials.has(intern.id)) return null;
@@ -357,7 +382,7 @@ export default function AdminAttendancePage() {
           >
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
               <div>
-                <h3 className="text-base font-bold text-gray-900">5월 {selectedDay}일 근무 일정</h3>
+                <h3 className="text-base font-bold text-gray-900">{CURRENT_MONTH}월 {selectedDay}일 근무 일정</h3>
                 <p className="text-xs text-gray-400 mt-0.5">인턴별 근무 계획</p>
               </div>
               <button onClick={() => setSelectedDay(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
