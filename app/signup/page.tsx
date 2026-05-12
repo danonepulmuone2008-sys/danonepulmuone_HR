@@ -68,12 +68,23 @@ export default function SignupPage() {
         return;
       }
 
-      if (data.session) {
-        router.push("/login");
-      } else {
-        alert("이메일 인증 후 로그인해주세요");
-        router.push("/login");
+      if (data.user) {
+        const { error: userError } = await supabase.from("users").insert({
+          id: data.user.id,
+          email,
+          name,
+          phone,
+          department,
+          position,
+        });
+
+        if (userError) {
+          setErrorMsg("사용자 정보 저장 중 오류가 발생했습니다: " + userError.message);
+          return;
+        }
       }
+
+      router.push("/login");
     } catch (err) {
       setErrorMsg("가입 중 오류가 발생했습니다");
       console.error(err);
