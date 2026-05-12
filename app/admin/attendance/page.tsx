@@ -38,6 +38,7 @@ type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
   records: Record<string, { hours: number | null; checkedIn: boolean }>
+  vacations: Record<string, boolean>
 }
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -568,16 +569,18 @@ export default function AdminAttendancePage() {
                       >
                         <span className="text-xs font-bold text-gray-800 truncate">{u.name}</span>
                         {dayCells.map((rec, di) => {
+                          const date = currentWeekDates[di];
                           if (dayIsHoliday[di]) {
                             return <span key={di} className="text-xs text-center text-gray-300">−</span>;
                           }
-                          if (rec?.checkedIn && currentWeekDates[di] === todayStr) {
-                            return (
-                              <span key={di} className="text-[10px] text-center font-semibold text-orange-400">출근</span>
-                            );
+                          if (rec?.checkedIn && date === todayStr) {
+                            return <span key={di} className="text-[10px] text-center font-semibold text-orange-400">출근</span>;
                           }
                           if (rec?.hours !== null && rec?.hours !== undefined) {
                             return <span key={di} className="text-xs text-center font-semibold text-gray-700">{rec.hours}</span>;
+                          }
+                          if (recordsData.vacations[`${u.id}__${date}`]) {
+                            return <span key={di} className="text-[10px] text-center font-semibold text-green-500">휴가</span>;
                           }
                           return <span key={di} className="text-xs text-center text-gray-400">−</span>;
                         })}
@@ -729,9 +732,9 @@ export default function AdminAttendancePage() {
                         <span className="text-gray-400">시간</span>
                         <span className="text-gray-700 font-medium">{req.start_time} ~ {req.end_time}</span>
                       </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">목적지</span>
-                        <span className="text-gray-700 font-medium">{req.destination}</span>
+                      <div className="flex justify-between text-xs gap-2">
+                        <span className="text-gray-400 flex-shrink-0">목적지</span>
+                        <span className="text-gray-700 font-medium text-right truncate max-w-[70%]">{req.destination}</span>
                       </div>
                     </>
                   )}
@@ -778,9 +781,9 @@ export default function AdminAttendancePage() {
                       </div>
                     </>
                   )}
-                  <div className="flex justify-between text-xs pt-0.5 border-t border-gray-200 mt-0.5">
-                    <span className="text-gray-400">사유</span>
-                    <span className="text-gray-700 font-medium">{req.reason ?? "—"}</span>
+                  <div className="flex flex-col gap-0.5 pt-1.5 border-t border-gray-200 mt-0.5">
+                    <span className="text-gray-400 text-xs">사유</span>
+                    <span className="text-gray-700 text-xs font-medium leading-relaxed">{req.reason ?? "—"}</span>
                   </div>
                 </div>
 
