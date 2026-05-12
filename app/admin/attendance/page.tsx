@@ -36,14 +36,34 @@ const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "15:00";
 
-const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
-const INTERN_BG_RGBA = [
-  "rgba(0,204,255,0.12)",
-  "rgba(124,58,237,0.12)",
-  "rgba(255,212,0,0.12)",
-  "rgba(236,72,153,0.12)",
-  "rgba(220,38,38,0.12)",
+const PRESET_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
+const PRESET_RGBA = [
+  "rgba(0,204,255,0.12)", "rgba(124,58,237,0.12)", "rgba(255,212,0,0.12)",
+  "rgba(236,72,153,0.12)", "rgba(220,38,38,0.12)", "rgba(255,122,0,0.12)",
+  "rgba(26,45,110,0.12)", "rgba(0,180,166,0.12)", "rgba(255,182,200,0.12)",
 ];
+
+function hslToHex(h: number, s: number, l: number): string {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+    return Math.round(255 * color).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+function getInternColor(index: number): string {
+  if (index < PRESET_HEX.length) return PRESET_HEX[index];
+  const hue = (index * 137.508) % 360;
+  return hslToHex(hue, 0.65, 0.52);
+}
+
+function getInternBgRgba(index: number): string {
+  if (index < PRESET_RGBA.length) return PRESET_RGBA[index];
+  const hue = (index * 137.508) % 360;
+  return `hsla(${hue.toFixed(1)}, 65%, 52%, 0.12)`;
+}
 
 const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
@@ -319,9 +339,9 @@ export default function AdminAttendancePage() {
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, TODAY);
                 return (
-                  <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: INTERN_BG_RGBA[i] }}>
+                  <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: getInternBgRgba(i) }}>
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }}>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(i) }}>
                         {intern.name.slice(0, 1)}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{intern.name}</span>
@@ -405,7 +425,7 @@ export default function AdminAttendancePage() {
                         <div className="h-4 flex gap-px mt-0.5 flex-wrap justify-center items-center max-w-full px-0.5">
                           {scheduleInterns.map((intern: RealIntern, i: number) =>
                             specials.has(intern.id) ? (
-                              <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }} />
+                              <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
                             ) : null
                           )}
                         </div>
@@ -419,7 +439,7 @@ export default function AdminAttendancePage() {
                                 const sched = getSchedule(intern.id, day!);
                                 return (
                                   <div key={intern.id} className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }} />
+                                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
                                     <span className="text-xs font-semibold">{intern.name}</span>
                                     <span className="text-xs text-gray-300">
                                       {sched.type === "event"
@@ -716,9 +736,9 @@ export default function AdminAttendancePage() {
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, selectedDay);
                 return (
-                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: INTERN_BG_RGBA[i] }}>
+                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(i) }}>
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(i) }}>
                         {intern.name.slice(0, 1)}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{intern.name}</span>

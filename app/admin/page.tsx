@@ -4,7 +4,23 @@ import { useRouter } from "next/navigation";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
 
-const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
+const PRESET_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
+
+function hslToHex(h: number, s: number, l: number): string {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+    return Math.round(255 * color).toString(16).padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+function getInternColor(index: number): string {
+  if (index < PRESET_HEX.length) return PRESET_HEX[index];
+  const hue = (index * 137.508) % 360;
+  return hslToHex(hue, 0.65, 0.52);
+}
 
 function getTodayStr() {
   const d = new Date();
@@ -57,13 +73,9 @@ export default function AdminHomePage() {
   }, []);
 
   async function fetchUsers() {
-    const { data } = await supabase
-      .from("users")
-      .select("id, name, phone, email")
-      .eq("is_active", true)
-      .eq("role", "employee")
-      .order("name");
-    if (data) setUsers(data);
+    const res = await fetch("/api/admin/interns");
+    const json = await res.json();
+    if (json.interns) setUsers(json.interns);
   }
 
   async function fetchTodayAttendance() {
@@ -162,7 +174,7 @@ export default function AdminHomePage() {
                 <div className="flex items-center gap-3">
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0"
-                    style={{ backgroundColor: INTERN_HEX[i % INTERN_HEX.length] }}
+                    style={{ backgroundColor: getInternColor(i) }}
                   >
                     {user.name.slice(0, 1)}
                   </div>
@@ -242,7 +254,7 @@ export default function AdminHomePage() {
               <div className="flex items-center gap-3">
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold"
-                  style={{ backgroundColor: INTERN_HEX[editUserIndex % INTERN_HEX.length] }}
+                  style={{ backgroundColor: getInternColor(editUserIndex) }}
                 >
                   {editUser.name.slice(0, 1)}
                 </div>
