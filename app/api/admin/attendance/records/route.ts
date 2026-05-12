@@ -49,6 +49,25 @@ export async function GET(req: Request) {
 
     if (attError) throw new Error(attError.message)
 
+    // 해당 주 승인된 휴가 조회
+    const { data: vacationRows } = await supabaseAdmin
+      .from("vacation_requests")
+      .select("user_id, start_date, end_date")
+      .in("user_id", userIds)
+      .eq("status", "approved")
+      .lte("start_date", friday)
+      .gte("end_date", monday)
+
+    // 휴가 맵: user_id__date → true
+    const vacMap: Record<string, boolean> = {}
+    for (const v of vacationRows ?? []) {
+      for (const date of weekDates) {
+        if (v.start_date <= date && date <= v.end_date) {
+          vacMap[`${v.user_id}__${date}`] = true
+        }
+      }
+    }
+
     // user_id + date 키로 맵 생성
     const recMap: Record<string, { hours: number | null; checkedIn: boolean }> = {}
     for (const row of attendanceRows ?? []) {
@@ -63,6 +82,7 @@ export async function GET(req: Request) {
       users: users.map((u) => ({ id: u.id, name: u.name })),
       weekDates,
       records: recMap,
+      vacations: vacMap,
     })
   } catch (err) {
     console.error("[admin attendance records]", err)
