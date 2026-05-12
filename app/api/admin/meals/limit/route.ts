@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 import { getMealLimit, getMonthlyBusinessDays } from "@/lib/holidays"
 
 export async function GET(req: Request) {
@@ -7,7 +7,7 @@ export async function GET(req: Request) {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
@@ -55,7 +55,7 @@ export async function PATCH(req: Request) {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { year, month, dailyLimit, businessDays, holidayCount } = await req.json()

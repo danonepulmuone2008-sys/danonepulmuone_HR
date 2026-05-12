@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 export async function GET(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
