@@ -36,13 +36,17 @@ const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "15:00";
 
-const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
+const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
 const INTERN_BG_RGBA = [
   "rgba(0,204,255,0.12)",
   "rgba(124,58,237,0.12)",
   "rgba(255,212,0,0.12)",
   "rgba(236,72,153,0.12)",
   "rgba(220,38,38,0.12)",
+  "rgba(255,122,0,0.12)",
+  "rgba(26,45,110,0.12)",
+  "rgba(0,180,166,0.12)",
+  "rgba(255,182,200,0.12)",
 ];
 
 const _now = new Date();
