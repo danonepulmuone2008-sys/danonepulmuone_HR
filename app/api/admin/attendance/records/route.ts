@@ -49,10 +49,13 @@ export async function GET(req: Request) {
     if (attError) throw new Error(attError.message)
 
     // user_id + date 키로 맵 생성
-    const recMap: Record<string, { hours: number | null }> = {}
+    const recMap: Record<string, { hours: number | null; checkedIn: boolean }> = {}
     for (const row of attendanceRows ?? []) {
       const key = `${row.user_id}__${row.date}`
-      recMap[key] = { hours: calcHours(row.clock_in, row.clock_out) }
+      recMap[key] = {
+        hours: calcHours(row.clock_in, row.clock_out),
+        checkedIn: !!row.clock_in && !row.clock_out,
+      }
     }
 
     return NextResponse.json({

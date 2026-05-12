@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { ADMIN_DUMMY } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 
 type ApprovalRequest =
   | { id: string; type: "business_trip"; status: string; user_id: string; user_name: string; start_date: string; end_date: string; start_time: string; end_time: string; destination: string; reason: string | null; requested_at: string }
@@ -28,7 +29,7 @@ type RecordsUser = { id: string; name: string }
 type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
-  records: Record<string, { hours: number | null }>
+  records: Record<string, { hours: number | null; checkedIn: boolean }>
 }
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -135,6 +136,7 @@ export default function AdminAttendancePage() {
   const [approvalLoading, setApprovalLoading] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const { interns: dummyInterns, internEvents } = ADMIN_DUMMY;
   const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
@@ -149,6 +151,16 @@ export default function AdminAttendancePage() {
       .then((json) => { if (json.interns) setRealInterns(json.interns); })
       .catch((err) => console.error("[interns fetch]", err));
   }, []);
+
+  useEffect(() => {
+    if (!user?.token) return;
+    fetch("/api/admin/attendance/requests", {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: unknown[]) => setPendingCount(Array.isArray(data) ? data.length : 0))
+      .catch(() => {});
+  }, [user?.token]);
 
   useEffect(() => {
     if (activeTab !== "records") return;
@@ -214,6 +226,7 @@ export default function AdminAttendancePage() {
       });
       if (res.ok) {
         setRequests((prev) => prev.filter((r) => r.id !== req.id));
+        setPendingCount((c) => Math.max(0, c - 1));
       }
     } finally {
       setProcessingId(null);
@@ -266,11 +279,18 @@ export default function AdminAttendancePage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors relative ${
               activeTab === tab ? "border-[#8dc63f] text-[#8dc63f]" : "border-transparent text-gray-400"
             }`}
           >
-            {tab === "schedule" ? "근무 일정" : tab === "records" ? "근무 기록" : "요청 승인"}
+            <span className="inline-flex items-center gap-1">
+              {tab === "schedule" ? "근무 일정" : tab === "records" ? "근무 기록" : "요청 승인"}
+              {tab === "approval" && pendingCount > 0 && (
+                <span className="bg-red-500 text-white text-[9px] font-bold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-0.5 leading-none">
+                  {pendingCount}
+                </span>
+              )}
+            </span>
           </button>
         ))}
       </div>
@@ -403,82 +423,98 @@ export default function AdminAttendancePage() {
         </div>
       ) : activeTab === "records" ? (
         /* 근무 기록 탭 */
-        <div className="flex flex-col gap-3 px-4 pt-3">
-          {/* 주 네비게이션 */}
-          <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 flex items-center justify-between">
-            <button
-              onClick={() => setWeekOffset((o) => o - 1)}
-              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
-            >‹</button>
-            <span className="text-sm font-semibold text-gray-700">{getWeekLabel(weekOffset)}</span>
-            <button
-              onClick={() => setWeekOffset((o) => Math.min(o + 1, 8))}
-              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
-            >›</button>
-          </div>
+        (() => {
+          const currentWeekDates = getWeekDates(weekOffset);
+          const weekMonday = new Date(currentWeekDates[0]);
+          const requiredHours = getWorkingDaysInWeek(weekMonday) * 5;
+          const dayIsHoliday = currentWeekDates.map((d) => isHoliday(d));
+          const todayStr = toDateStr(new Date());
 
-          {recordsLoading ? (
-            <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
-              <p className="text-sm text-gray-400">불러오는 중...</p>
-            </div>
-          ) : recordsError ? (
-            <div className="bg-white rounded-2xl px-4 py-6 shadow-sm border border-red-100 flex flex-col items-center gap-3">
-              <p className="text-xs text-red-500 text-center">{recordsError}</p>
-              <button onClick={fetchRecords} className="text-xs text-blue-500 underline">다시 시도</button>
-            </div>
-          ) : recordsData && recordsData.users.length > 0 ? (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="grid grid-cols-[72px_1fr_1fr_1fr_1fr_1fr_44px] px-3 py-2 bg-gray-50 border-b border-gray-100">
-                <span className="text-xs text-gray-400 font-medium">이름</span>
-                {DAY_LABELS.map((d) => (
-                  <span key={d} className="text-xs text-gray-400 font-medium text-center">{d}</span>
-                ))}
-                <span className="text-xs text-gray-400 font-medium text-right">계</span>
+          return (
+            <div className="flex flex-col gap-3 px-4 pt-3">
+              {/* 주 네비게이션 */}
+              <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 flex items-center justify-between">
+                <button
+                  onClick={() => setWeekOffset((o) => o - 1)}
+                  className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
+                >‹</button>
+                <div className="flex flex-col items-center">
+                  <span className="text-sm font-semibold text-gray-700">{getWeekLabel(weekOffset)}</span>
+                  <span className="text-xs text-gray-400 mt-0.5">기준 {requiredHours}시간</span>
+                </div>
+                <button
+                  onClick={() => setWeekOffset((o) => Math.min(o + 1, 8))}
+                  className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
+                >›</button>
               </div>
-              {recordsData.users.map((u, ci) => {
-                const color = INTERN_HEX[ci % INTERN_HEX.length];
-                const dayHours = recordsData.weekDates.map((date) => {
-                  const rec = recordsData.records[`${u.id}__${date}`];
-                  return rec?.hours ?? null;
-                });
-                const totalHours = dayHours.reduce((sum, h) => (sum ?? 0) + (h ?? 0), 0) ?? 0;
-                const totalRounded = Math.round((totalHours as number) * 10) / 10;
-                return (
-                  <div
-                    key={u.id}
-                    className="grid grid-cols-[72px_1fr_1fr_1fr_1fr_1fr_44px] px-3 py-3 border-b border-gray-50 last:border-b-0 items-center"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                      <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
-                    </div>
-                    {dayHours.map((h, di) => (
-                      <span
-                        key={di}
-                        className={`text-xs text-center ${h !== null ? "font-semibold" : "text-gray-300"}`}
-                        style={h !== null ? { color } : undefined}
-                      >
-                        {h !== null ? h : "−"}
-                      </span>
-                    ))}
-                    <span
-                      className={`text-xs font-bold text-right ${totalRounded === 0 ? "text-gray-300" : ""}`}
-                      style={totalRounded > 0 ? { color } : undefined}
-                    >
-                      {totalRounded > 0 ? `${totalRounded}h` : "−"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : recordsData && recordsData.users.length === 0 ? (
-            <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
-              <p className="text-sm text-gray-400">등록된 직원이 없습니다</p>
-            </div>
-          ) : null}
 
-          <p className="text-xs text-gray-400 text-center px-4">단위: 시간 · −는 미출근 또는 공휴일</p>
-        </div>
+              {recordsLoading ? (
+                <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
+                  <p className="text-sm text-gray-400">불러오는 중...</p>
+                </div>
+              ) : recordsError ? (
+                <div className="bg-white rounded-2xl px-4 py-6 shadow-sm border border-red-100 flex flex-col items-center gap-3">
+                  <p className="text-xs text-red-500 text-center">{recordsError}</p>
+                  <button onClick={fetchRecords} className="text-xs text-blue-500 underline">다시 시도</button>
+                </div>
+              ) : recordsData && recordsData.users.length > 0 ? (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  {/* 헤더 */}
+                  <div className="grid grid-cols-[68px_1fr_1fr_1fr_1fr_1fr_40px] px-3 py-2.5 bg-gray-50 border-b border-gray-200">
+                    <span className="text-xs text-gray-500 font-semibold">이름</span>
+                    {DAY_LABELS.map((d, i) => (
+                      <div key={d} className="flex flex-col items-center gap-px">
+                        <span className={`text-xs font-semibold ${dayIsHoliday[i] ? "text-red-500" : "text-gray-600"}`}>{d}</span>
+                        <span className={`text-[10px] font-medium ${dayIsHoliday[i] ? "text-red-400" : "text-gray-400"}`}>
+                          {currentWeekDates[i].slice(5).replace("-", "/")}
+                        </span>
+                      </div>
+                    ))}
+                    <span className="text-xs text-gray-500 font-semibold text-right">계</span>
+                  </div>
+                  {/* 직원 행 */}
+                  {recordsData.users.map((u) => {
+                    const dayCells = recordsData.weekDates.map((date) => recordsData.records[`${u.id}__${date}`] ?? null);
+                    const totalHours = dayCells.reduce((sum, rec) => sum + (rec?.hours ?? 0), 0);
+                    const totalRounded = Math.round(totalHours * 10) / 10;
+                    const metGoal = totalRounded >= requiredHours;
+                    return (
+                      <div
+                        key={u.id}
+                        className="grid grid-cols-[68px_1fr_1fr_1fr_1fr_1fr_40px] px-3 py-3 border-b border-gray-100 last:border-b-0 items-center"
+                      >
+                        <span className="text-xs font-bold text-gray-800 truncate">{u.name}</span>
+                        {dayCells.map((rec, di) => {
+                          if (dayIsHoliday[di]) {
+                            return <span key={di} className="text-xs text-center text-gray-300">−</span>;
+                          }
+                          if (rec?.checkedIn && currentWeekDates[di] === todayStr) {
+                            return (
+                              <span key={di} className="text-[10px] text-center font-semibold text-orange-400">출근</span>
+                            );
+                          }
+                          if (rec?.hours !== null && rec?.hours !== undefined) {
+                            return <span key={di} className="text-xs text-center font-semibold text-gray-700">{rec.hours}</span>;
+                          }
+                          return <span key={di} className="text-xs text-center text-gray-400">−</span>;
+                        })}
+                        <span className={`text-xs font-bold text-right ${totalRounded === 0 ? "text-gray-400" : metGoal ? "text-[#8dc63f]" : "text-gray-700"}`}>
+                          {totalRounded > 0 ? `${totalRounded}h` : "−"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : recordsData && recordsData.users.length === 0 ? (
+                <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
+                  <p className="text-sm text-gray-400">등록된 직원이 없습니다</p>
+                </div>
+              ) : null}
+
+              <p className="text-xs text-gray-400 text-center px-4">단위: 시간 · −는 미출근 또는 공휴일</p>
+            </div>
+          );
+        })()
       ) : activeTab === "approval" ? (
         /* 요청 승인 탭 */
         <div className="flex flex-col gap-3 px-4 pt-3">
@@ -535,8 +571,7 @@ export default function AdminAttendancePage() {
             </div>
           ) : null}
 
-          {!approvalLoading && filteredRequests.map((req, idx) => {
-            const colorIdx = idx % INTERN_HEX.length;
+          {!approvalLoading && filteredRequests.map((req) => {
             const typeLabel = req.type === "business_trip" ? "출장" : req.type === "vacation" ? "휴가" : "출근 / 퇴근";
             const typeBg = req.type === "business_trip" ? "bg-blue-100 text-blue-700" : req.type === "vacation" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700";
             const isProcessing = processingId === req.id;
@@ -547,17 +582,9 @@ export default function AdminAttendancePage() {
             return (
               <div key={req.id} className={`bg-white rounded-2xl px-4 py-4 shadow-sm border border-gray-100 transition-opacity ${isProcessing ? "opacity-50" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                      style={{ backgroundColor: INTERN_HEX[colorIdx] }}
-                    >
-                      {req.user_name.slice(0, 1)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{req.user_name}</p>
-                      <p className="text-xs text-gray-400">{dateStr} 신청</p>
-                    </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{req.user_name}</p>
+                    <p className="text-xs text-gray-400">{dateStr} 신청</p>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {showHistory && statusLabel && (
