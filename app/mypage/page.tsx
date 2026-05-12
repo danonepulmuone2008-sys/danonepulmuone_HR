@@ -245,13 +245,13 @@ export default function MyPage() {
 
   useEffect(() => {
     if (!authUser) return;
-    supabase.from("users").select("name, department, position, phone").eq("id", authUser.id).single().then(({ data }) => {
+    supabase.from("users").select("name, department, position, phone, email").eq("id", authUser.id).single().then(({ data }) => {
       const profile = {
         name: data?.name ?? authUser.name,
         department: data?.department ?? authUser.department,
         position: data?.position || "인턴",
         phone: data?.phone ?? authUser.phone,
-        email: authUser.email,
+        email: data?.email ?? authUser.email,
       };
       setForm(profile);
       setSaved(profile);
