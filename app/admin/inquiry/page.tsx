@@ -25,6 +25,7 @@ export default function AdminInquiryPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"미처리" | "처리완료">("미처리");
   const [allUsers, setAllUsers] = useState<{ id: string }[]>([]);
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/interns")
@@ -88,6 +89,8 @@ export default function AdminInquiryPage() {
   const processInquiry = async (id: string) => {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false, isProcessed: true } : s));
     setSelectedId(null);
+    setToast("처리 완료되었습니다.");
+    setTimeout(() => setToast(""), 2500);
     window.dispatchEvent(new CustomEvent("inquiryProcessed"));
     await supabase.from("inquiries").update({ is_processed: true, is_read: true }).eq("id", id);
   };
@@ -220,6 +223,15 @@ export default function AdminInquiryPage() {
       )}
 
       <AdminBottomNav />
+
+      {toast && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className="flex items-center gap-2 bg-white text-gray-800 text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-100">
+            <span className="text-green-500 text-base">✓</span>
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

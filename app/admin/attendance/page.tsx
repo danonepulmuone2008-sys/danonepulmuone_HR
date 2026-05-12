@@ -854,17 +854,17 @@ export default function AdminAttendancePage() {
           onClick={() => setSelectedDay(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col max-h-[70vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div>
                 <h3 className="text-base font-bold text-gray-900">{calMonth}월 {selectedDay}일 근무 일정</h3>
                 <p className="text-xs text-gray-400 mt-0.5">인턴별 근무 계획</p>
               </div>
               <button onClick={() => setSelectedDay(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
             </div>
-            <div className="px-5 pt-4 pb-2 flex flex-col gap-2">
+            <div className="px-5 pt-4 pb-6 flex flex-col gap-2 overflow-y-auto">
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, selectedDay);
                 return (
