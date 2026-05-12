@@ -225,8 +225,11 @@ export default function AdminInquiryPage() {
       <AdminBottomNav />
 
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg z-50 whitespace-nowrap">
-          {toast}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className="flex items-center gap-2 bg-white text-gray-800 text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-100">
+            <span className="text-green-500 text-base">✓</span>
+            {toast}
+          </div>
         </div>
       )}
     </div>
