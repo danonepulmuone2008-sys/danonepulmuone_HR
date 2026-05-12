@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { ADMIN_DUMMY } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors";
@@ -170,8 +169,7 @@ export default function AdminAttendancePage() {
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
 
-  const { interns: dummyInterns, internEvents } = ADMIN_DUMMY;
-  const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
+  const scheduleInterns = realInterns;
   const colorMap = buildColorMap(scheduleInterns);
 
   useEffect(() => {
@@ -289,12 +287,6 @@ export default function AdminAttendancePage() {
 
   // 날짜별 특별 일정이 있는 인턴 집합 (기본 외 = flex or 휴가/출장)
   const specialMap: Record<number, Set<string>> = {};
-  internEvents.forEach((e) => {
-    if (!e.date.startsWith(calMonthStr)) return;
-    const day = parseInt(e.date.split("-")[2]);
-    if (!specialMap[day]) specialMap[day] = new Set();
-    specialMap[day].add(e.internId);
-  });
   flexSchedules.forEach((f) => {
     const intern = scheduleInterns.find((i: RealIntern) => i.name === f.user_name);
     if (!intern) return;
@@ -313,8 +305,6 @@ export default function AdminAttendancePage() {
   // 특정 인턴+날짜의 일정 조회
   const getSchedule = (internId: string, day: number) => {
     const dateKey = `${calMonthStr}-${String(day).padStart(2, "0")}`;
-    const event = internEvents.find((e) => e.internId === internId && e.date === dateKey);
-    if (event) return { type: "event" as const, event };
     const approved = approvedEvents.find((e) => e.user_id === internId && e.date === dateKey);
     if (approved) return {
       type: "event" as const,
