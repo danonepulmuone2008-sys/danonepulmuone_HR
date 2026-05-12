@@ -39,7 +39,7 @@ export async function GET(req: Request) {
         .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("attendance_edit_requests")
-        .select("id, user_id, date, direction, requested_time, reason, requested_at, status")
+        .select("id, user_id, date, direction, requested_time, reason, requested_at, status, lunch_break")
         .in("status", statusFilter)
         .order("requested_at", { ascending: false }),
     ])
@@ -103,6 +103,7 @@ export async function GET(req: Request) {
       direction: r.direction as "in" | "out",
       requested_time: r.requested_time,
       reason: r.reason,
+      lunch_break: r.lunch_break as boolean | null,
       requested_at: r.requested_at,
     }))
 
