@@ -24,6 +24,7 @@ export default function AdminBottomNav() {
     supabase
       .from("inquiries")
       .select("id", { count: "exact", head: true })
+      .eq("is_processed", false)
       .then(({ count }) => setInquiryCount(count ?? 0));
 
     const handler = () => setInquiryCount((prev) => Math.max(0, prev - 1));

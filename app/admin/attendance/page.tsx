@@ -18,6 +18,14 @@ type RealFlexSchedule = {
   end_time: string;
 };
 
+type RealApprovedEvent = {
+  user_id: string;
+  date: string;
+  type: "vacation" | "business_trip";
+  label: string;
+  destination?: string;
+};
+
 type RealIntern = {
   id: string;
   name: string;
@@ -139,6 +147,7 @@ export default function AdminAttendancePage() {
 
   // 근무 일정 탭 상태
   const [flexSchedules, setFlexSchedules] = useState<RealFlexSchedule[]>([]);
+  const [approvedEvents, setApprovedEvents] = useState<RealApprovedEvent[]>([]);
   const [realInterns, setRealInterns] = useState<RealIntern[]>([]);
   const [calYear, setCalYear] = useState(CURRENT_YEAR);
   const [calMonth, setCalMonth] = useState(CURRENT_MONTH);
@@ -175,7 +184,10 @@ export default function AdminAttendancePage() {
   useEffect(() => {
     fetch(`/api/admin/schedules?month=${calMonthStr}`)
       .then((res) => res.json())
-      .then((json) => { if (json.flexSchedules) setFlexSchedules(json.flexSchedules); })
+      .then((json) => {
+        if (json.flexSchedules) setFlexSchedules(json.flexSchedules);
+        if (json.approvedEvents) setApprovedEvents(json.approvedEvents);
+      })
       .catch((err) => console.error("[schedules fetch]", err));
   }, [calMonthStr]);
 
@@ -287,12 +299,24 @@ export default function AdminAttendancePage() {
     if (!specialMap[day]) specialMap[day] = new Set();
     specialMap[day].add(intern.id);
   });
+  approvedEvents.forEach((e) => {
+    const intern = scheduleInterns.find((i: RealIntern) => i.id === e.user_id);
+    if (!intern) return;
+    const day = parseInt(e.date.split("-")[2]);
+    if (!specialMap[day]) specialMap[day] = new Set();
+    specialMap[day].add(intern.id);
+  });
 
   // 특정 인턴+날짜의 일정 조회
   const getSchedule = (internId: string, day: number) => {
     const dateKey = `${calMonthStr}-${String(day).padStart(2, "0")}`;
     const event = internEvents.find((e) => e.internId === internId && e.date === dateKey);
     if (event) return { type: "event" as const, event };
+    const approved = approvedEvents.find((e) => e.user_id === internId && e.date === dateKey);
+    if (approved) return {
+      type: "event" as const,
+      event: { type: approved.type, label: approved.label, destination: approved.destination },
+    };
     const intern = scheduleInterns.find((i: RealIntern) => i.id === internId);
     const flex = intern
       ? flexSchedules.find((f) => f.user_name === intern.name && f.date === dateKey)
@@ -421,13 +445,23 @@ export default function AdminAttendancePage() {
                         }`}>
                           {day ?? ""}
                         </div>
-                        {/* 도트 영역 — 항상 고정 높이로 렌더링해 셀 크기 통일 */}
-                        <div className="h-4 flex gap-px mt-0.5 flex-wrap justify-center items-center max-w-full px-0.5">
-                          {scheduleInterns.map((intern: RealIntern, i: number) =>
-                            specials.has(intern.id) ? (
-                              <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
-                            ) : null
-                          )}
+                        {/* 도트 영역 — 최대 3개 + 초과 숫자 */}
+                        <div className="h-4 flex gap-px mt-0.5 justify-center items-center max-w-full px-0.5">
+                          {(() => {
+                            const dots = scheduleInterns
+                              .map((intern: RealIntern, i: number) => specials.has(intern.id) ? { intern, i } : null)
+                              .filter(Boolean) as { intern: RealIntern; i: number }[];
+                            if (dots.length >= 3) {
+                              return <span className="text-[8px] font-bold text-gray-400 leading-none">+{dots.length}</span>;
+                            }
+                            return (
+                              <>
+                                {dots.map(({ intern, i }) => (
+                                  <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
+                                ))}
+                              </>
+                            );
+                          })()}
                         </div>
                         {/* hover 툴팁 */}
                         {specials.size > 0 && (
