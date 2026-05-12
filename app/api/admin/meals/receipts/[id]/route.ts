@@ -64,6 +64,49 @@ export async function GET(
   }
 }
 
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    // 이미지 경로 조회 후 storage 삭제
+    const { data: receipt } = await supabaseAdmin
+      .from("receipts")
+      .select("image_path")
+      .eq("id", id)
+      .single()
+
+    if (receipt?.image_path) {
+      await supabaseAdmin.storage.from("receipts").remove([receipt.image_path])
+    }
+
+    // receipt_items 먼저 삭제 (FK 제약)
+    const { error: itemsError } = await supabaseAdmin
+      .from("receipt_items")
+      .delete()
+      .eq("receipt_id", id)
+    if (itemsError) throw itemsError
+
+    const { error: receiptError } = await supabaseAdmin
+      .from("receipts")
+      .delete()
+      .eq("id", id)
+    if (receiptError) throw receiptError
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error("[admin/meals/receipts/[id] DELETE]", err)
+    return NextResponse.json({ error: "삭제에 실패했습니다" }, { status: 500 })
+  }
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -76,7 +119,22 @@ export async function PATCH(
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-const { userId, totalAmount, itemId, price } = await req.json()
+const body = await req.json()
+const { userId, totalAmount, itemId, price, itemStatus } = body
+
+if (itemId && itemStatus !== undefined) {
+  const allowed = ["approved", "rejected", "pending"]
+  if (!allowed.includes(itemStatus)) {
+    return NextResponse.json({ error: "올바른 상태값이 아닙니다" }, { status: 400 })
+  }
+  const { error } = await supabaseAdmin
+    .from("receipt_items")
+    .update({ status: itemStatus })
+    .eq("id", itemId)
+    .eq("receipt_id", id)
+  if (error) throw error
+  return NextResponse.json({ success: true })
+}
 
 if (itemId) {
   if (typeof price !== "number" || price < 0) {

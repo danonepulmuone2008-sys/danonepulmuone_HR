@@ -48,7 +48,7 @@ export default function OcrPage() {
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   useEffect(() => {
-    supabase.from("users").select("id, name, department").then(({ data }) => {
+    supabase.from("users").select("id, name, department").eq("role", "employee").eq("is_active", true).then(({ data }) => {
       if (data) setTeamMembers(data)
     })
   }, [])

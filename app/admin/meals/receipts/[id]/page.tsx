@@ -51,6 +51,23 @@ export default function AdminReceiptDetailPage() {
 
   const [receipt, setReceipt] = useState<ReceiptDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function deleteReceipt() {
+    const token = await getToken()
+    if (!token) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/meals/receipts/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) router.replace("/admin/meals/receipts")
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     if (!authUser?.id || !id) return
@@ -97,7 +114,13 @@ export default function AdminReceiptDetailPage() {
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
       <header className="bg-white px-4 pt-5 pb-3 border-b border-gray-100 flex items-center gap-2">
         <button onClick={() => router.back()} className="w-8 h-8 flex items-center justify-center text-gray-500 text-2xl leading-none">‹</button>
-        <h1 className="text-lg font-bold text-gray-900 truncate">{receipt.store_name}</h1>
+        <h1 className="text-lg font-bold text-gray-900 truncate flex-1">{receipt.store_name}</h1>
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          className="text-xs text-red-400 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors"
+        >
+          삭제
+        </button>
       </header>
 
       <div className="px-4 pt-3 flex flex-col gap-3">
@@ -165,6 +188,34 @@ export default function AdminReceiptDetailPage() {
       </div>
 
       <AdminBottomNav />
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-8">
+          <div className="bg-white rounded-2xl w-full max-w-[300px] overflow-hidden shadow-xl">
+            <div className="px-6 pt-6 pb-4 text-center">
+              <p className="text-sm font-semibold text-gray-800">영수증을 삭제할까요?</p>
+              <p className="text-xs text-gray-400 mt-1">삭제 후 복구할 수 없습니다</p>
+            </div>
+            <div className="border-t border-gray-100 flex">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 h-12 text-sm text-gray-500 border-r border-gray-100"
+              >
+                취소
+              </button>
+              <button
+                onClick={deleteReceipt}
+                disabled={deleting}
+                className="flex-1 h-12 text-sm font-semibold text-red-500 disabled:opacity-50"
+              >
+                {deleting ? "삭제 중..." : "삭제"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

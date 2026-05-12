@@ -6,6 +6,7 @@ import AdminBottomNav from "@/components/AdminBottomNav";
 import { ADMIN_DUMMY } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
+import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors";
 
 async function downloadFile(url: string, filename?: string) {
   const res = await fetch(url)
@@ -57,34 +58,6 @@ const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "15:00";
 
-const PRESET_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
-const PRESET_RGBA = [
-  "rgba(0,204,255,0.12)", "rgba(124,58,237,0.12)", "rgba(255,212,0,0.12)",
-  "rgba(236,72,153,0.12)", "rgba(220,38,38,0.12)", "rgba(255,122,0,0.12)",
-  "rgba(26,45,110,0.12)", "rgba(0,180,166,0.12)", "rgba(255,182,200,0.12)",
-];
-
-function hslToHex(h: number, s: number, l: number): string {
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
-    return Math.round(255 * color).toString(16).padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-function getInternColor(index: number): string {
-  if (index < PRESET_HEX.length) return PRESET_HEX[index];
-  const hue = (index * 137.508) % 360;
-  return hslToHex(hue, 0.65, 0.52);
-}
-
-function getInternBgRgba(index: number): string {
-  if (index < PRESET_RGBA.length) return PRESET_RGBA[index];
-  const hue = (index * 137.508) % 360;
-  return `hsla(${hue.toFixed(1)}, 65%, 52%, 0.12)`;
-}
 
 const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
@@ -199,6 +172,7 @@ export default function AdminAttendancePage() {
 
   const { interns: dummyInterns, internEvents } = ADMIN_DUMMY;
   const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
+  const colorMap = buildColorMap(scheduleInterns);
 
   useEffect(() => {
     fetch(`/api/admin/schedules?month=${calMonthStr}`)
@@ -477,9 +451,9 @@ export default function AdminAttendancePage() {
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, TODAY);
                 return (
-                  <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: getInternBgRgba(i) }}>
+                  <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(i) }}>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }}>
                         {intern.name.slice(0, 1)}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{intern.name}</span>
@@ -571,7 +545,7 @@ export default function AdminAttendancePage() {
                             return (
                               <>
                                 {dots.map(({ intern, i }) => (
-                                  <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
+                                  <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }} />
                                 ))}
                               </>
                             );
@@ -587,7 +561,7 @@ export default function AdminAttendancePage() {
                                 const sched = getSchedule(intern.id, day!);
                                 return (
                                   <div key={intern.id} className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
+                                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }} />
                                     <span className="text-xs font-semibold">{intern.name}</span>
                                     <span className="text-xs text-gray-300">
                                       {sched.type === "event"
@@ -937,23 +911,23 @@ export default function AdminAttendancePage() {
           onClick={() => setSelectedDay(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col max-h-[70vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div>
                 <h3 className="text-base font-bold text-gray-900">{calMonth}월 {selectedDay}일 근무 일정</h3>
                 <p className="text-xs text-gray-400 mt-0.5">인턴별 근무 계획</p>
               </div>
               <button onClick={() => setSelectedDay(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
             </div>
-            <div className="px-5 pt-4 pb-2 flex flex-col gap-2">
+            <div className="px-5 pt-4 pb-6 flex flex-col gap-2 overflow-y-auto">
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, selectedDay);
                 return (
-                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(i) }}>
+                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(i) }}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }}>
                         {intern.name.slice(0, 1)}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{intern.name}</span>

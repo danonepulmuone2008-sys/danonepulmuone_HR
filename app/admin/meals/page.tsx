@@ -13,8 +13,6 @@ async function getToken(): Promise<string> {
 }
 
 const now = new Date();
-const year = now.getFullYear();
-const month = now.getMonth() + 1;
 
 const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
 
@@ -54,6 +52,20 @@ interface ReceiptItem {
 export default function AdminMealsPage() {
   const { user: authUser } = useAuth();
 
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1);
+
+  function navigatePrev() {
+    setViewYear((y) => viewMonth === 1 ? y - 1 : y);
+    setViewMonth((m) => m === 1 ? 12 : m - 1);
+    closeSheet();
+  }
+  function navigateNext() {
+    setViewYear((y) => viewMonth === 12 ? y + 1 : y);
+    setViewMonth((m) => m === 12 ? 1 : m + 1);
+    closeSheet();
+  }
+
   const [limitInfo, setLimitInfo] = useState<LimitInfo | null>(null);
   const [limitLoading, setLimitLoading] = useState(true);
 
@@ -71,6 +83,32 @@ export default function AdminMealsPage() {
   const [showNumericAlert, setShowNumericAlert] = useState(false);
   function alertNumeric() { setShowNumericAlert(true); }
 
+  const [changingItemStatusId, setChangingItemStatusId] = useState<string | null>(null);
+
+  async function changeItemStatus(receiptId: string, itemId: string, itemStatus: "approved" | "rejected" | "pending") {
+    const token = await getToken();
+    if (!token) return;
+    setChangingItemStatusId(itemId);
+    try {
+      const res = await fetch(`/api/admin/meals/receipts/${receiptId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, itemStatus }),
+      });
+      if (!res.ok) return;
+      setReceipts((prev) =>
+        prev.map((r) =>
+          r.id !== receiptId ? r : {
+            ...r,
+            items: r.items.map((i) => i.id === itemId ? { ...i, status: itemStatus } : i),
+          }
+        )
+      );
+    } finally {
+      setChangingItemStatusId(null);
+    }
+  }
+
   // 한도 편집 상태
   const [showLimitEdit, setShowLimitEdit] = useState(false);
   const [editDailyLimit, setEditDailyLimit] = useState("");
@@ -83,14 +121,14 @@ export default function AdminMealsPage() {
     if (!token) return;
     setLimitLoading(true);
     try {
-      const res = await fetch(`/api/admin/meals/limit?year=${year}&month=${month}`, {
+      const res = await fetch(`/api/admin/meals/limit?year=${viewYear}&month=${viewMonth}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setLimitInfo(await res.json());
     } finally {
       setLimitLoading(false);
     }
-  }, []);
+  }, [viewYear, viewMonth]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -100,7 +138,7 @@ export default function AdminMealsPage() {
       try {
         const token = await getToken();
         if (!token) return;
-        const res = await fetch(`/api/admin/users?year=${year}&month=${month}`, {
+        const res = await fetch(`/api/admin/users?year=${viewYear}&month=${viewMonth}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) setUsers(await res.json());
@@ -108,7 +146,7 @@ export default function AdminMealsPage() {
         setUsersLoading(false);
       }
     })();
-  }, [authUser?.id, fetchLimit]);
+  }, [authUser?.id, viewYear, viewMonth, fetchLimit]);
 
   const fetchReceipts = useCallback(async (userId: string) => {
     const token = await getToken();
@@ -117,14 +155,14 @@ export default function AdminMealsPage() {
     setReceipts([]);
     try {
       const res = await fetch(
-        `/api/admin/meals/receipts?userId=${userId}&year=${year}&month=${month}`,
+        `/api/admin/meals/receipts?userId=${userId}&year=${viewYear}&month=${viewMonth}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.ok) setReceipts(await res.json());
     } finally {
       setReceiptsLoading(false);
     }
-  }, []);
+  }, [viewYear, viewMonth]);
 
   function openSheet(userId: string) {
     setSelectedUserId(userId);
@@ -236,7 +274,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ year, month, dailyLimit, businessDays, holidayCount }),
+        body: JSON.stringify({ year: viewYear, month: viewMonth, dailyLimit, businessDays, holidayCount }),
       });
       if (!res.ok) return;
       await fetchLimit();
@@ -252,17 +290,33 @@ async function saveItemAmount(receiptId: string, itemId: string) {
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
-      <header className="bg-white px-5 pt-5 pb-2 border-b border-gray-100 flex items-start justify-between">
-        <div>
+      <header className="bg-white px-5 pt-5 pb-3 border-b border-gray-100">
+        <div className="flex items-start justify-between mb-3">
           <h1 className="text-lg font-bold text-gray-900">식대 관리</h1>
-          <p className="text-xs text-gray-400 mt-0.5">{year}년 {month}월 · 인턴별 현황</p>
+          <Link href="/admin/meals/receipts">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+              <span className="text-base leading-none">🧾</span>
+              <span>영수증 보관함</span>
+            </div>
+          </Link>
         </div>
-        <Link href="/admin/meals/receipts">
-          <div className="mt-1 flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-            <span className="text-base leading-none">🧾</span>
-            <span>영수증 보관함</span>
-          </div>
-        </Link>
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={navigatePrev}
+            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors text-xl leading-none"
+          >
+            ‹
+          </button>
+          <span className="text-sm font-semibold text-gray-800 w-24 text-center">
+            {viewYear}년 {viewMonth}월
+          </span>
+          <button
+            onClick={navigateNext}
+            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors text-xl leading-none"
+          >
+            ›
+          </button>
+        </div>
       </header>
 
       {/* 이달 식대 한도 카드 */}
@@ -273,7 +327,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-400 mb-0.5">
-                {month}월 식대 한도
+                {viewMonth}월 식대 한도
                 {limitInfo?.source === "calculated" && (
                   <span className="ml-1.5 text-orange-400">자동 계산</span>
                 )}
@@ -352,7 +406,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
       {/* 영수증 내역 바텀시트 */}
       {selectedUserId !== null && selectedUser && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8"
           onClick={closeSheet}
         >
           <div
@@ -363,7 +417,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div>
                 <h3 className="text-base font-bold text-gray-900">{selectedUser.name} 영수증 내역</h3>
-                <p className="text-xs text-gray-400 mt-0.5">{year}년 {month}월</p>
+                <p className="text-xs text-gray-400 mt-0.5">{viewYear}년 {viewMonth}월</p>
               </div>
               <button onClick={closeSheet} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600">×</button>
             </div>
@@ -398,12 +452,12 @@ async function saveItemAmount(receiptId: string, itemId: string) {
               <p className="text-sm font-semibold text-gray-900 truncate">
                 {r.store_name}
               </p>
-              <span
-                className={`text-xs ${
-                  r.status === "approved" ? "text-green-500" : "text-orange-400"
-                }`}
-              >
-                {r.status === "approved" ? "승인완료" : "승인대기"}
+              <span className={`text-xs mt-0.5 block ${
+                r.status === "approved" ? "text-green-500"
+                : r.status === "rejected" ? "text-red-400"
+                : "text-orange-400"
+              }`}>
+                {r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기"}
               </span>
             </div>
 
@@ -428,68 +482,104 @@ async function saveItemAmount(receiptId: string, itemId: string) {
             return (
               <div
                 key={item.id}
-                className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-b-0"
+                className="py-2 border-b border-gray-50 last:border-b-0"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">
-                    {item.item_name}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {(item.unit_price ?? 0).toLocaleString()}원 × {item.qty ?? 1}
-                  </p>
+                {/* 상단: 이름 + 금액/편집 */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {item.item_name}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {(item.unit_price ?? 0).toLocaleString()}원 × {item.qty ?? 1}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isEditing ? (
+                      <>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editValue}
+                          onChange={(e) => {
+                            if (/\D/.test(e.target.value)) {
+                              alertNumeric();
+                            } else {
+                              setEditValue(e.target.value);
+                            }
+                          }}
+                          className="w-24 h-8 px-2 text-sm text-right border border-blue-300 rounded-lg outline-none focus:border-blue-500 bg-blue-50"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveItemAmount(r.id, item.id);
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                        <button
+                          onClick={() => saveItemAmount(r.id, item.id)}
+                          disabled={isSaving}
+                          className="text-xs px-2 py-1 rounded-lg bg-blue-500 text-white font-medium disabled:opacity-50"
+                        >
+                          {isSaving ? "…" : "저장"}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500"
+                        >
+                          취소
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-green-500">
+                          {(item.price ?? 0).toLocaleString()}원
+                        </p>
+                        <button
+                          onClick={() => startEditItem(item)}
+                          className="text-gray-300 hover:text-gray-500 text-sm"
+                        >
+                          ✏️
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {isEditing ? (
-                    <>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={editValue}
-                        onChange={(e) => {
-                          if (/\D/.test(e.target.value)) {
-                            alertNumeric();
-                          } else {
-                            setEditValue(e.target.value);
-                          }
-                        }}
-                        className="w-24 h-8 px-2 text-sm text-right border border-blue-300 rounded-lg outline-none focus:border-blue-500 bg-blue-50"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveItemAmount(r.id, item.id);
-                          if (e.key === "Escape") cancelEdit();
-                        }}
-                      />
-
-                      <button
-                        onClick={() => saveItemAmount(r.id, item.id)}
-                        disabled={isSaving}
-                        className="text-xs px-2 py-1 rounded-lg bg-blue-500 text-white font-medium disabled:opacity-50"
-                      >
-                        {isSaving ? "…" : "저장"}
-                      </button>
-
-                      <button
-                        onClick={cancelEdit}
-                        className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500"
-                      >
-                        취소
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-bold text-green-500">
-                        {(item.price ?? 0).toLocaleString()}원
-                      </p>
-                      <button
-                        onClick={() => startEditItem(item)}
-                        className="text-gray-300 hover:text-gray-500 text-sm"
-                      >
-                        ✏️
-                      </button>
-                    </>
-                  )}
-                </div>
+                {/* 하단: 상태 + 승인/반려 버튼 */}
+                {!isEditing && (
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className={`text-xs ${
+                      item.status === "approved" ? "text-green-500"
+                      : item.status === "rejected" ? "text-red-400"
+                      : "text-orange-400"
+                    }`}>
+                      {item.status === "approved" ? "승인완료" : item.status === "rejected" ? "반려" : "승인대기"}
+                    </span>
+                    <button
+                      onClick={() => changeItemStatus(r.id, item.id, "approved")}
+                      disabled={item.status === "approved" || changingItemStatusId === item.id}
+                      className={`text-xs px-2 py-0.5 rounded-md border font-medium transition-colors disabled:opacity-40 ${
+                        item.status === "approved"
+                          ? "bg-green-500 text-white border-green-500"
+                          : "border-green-400 text-green-600 hover:bg-green-50"
+                      }`}
+                    >
+                      승인
+                    </button>
+                    <button
+                      onClick={() => changeItemStatus(r.id, item.id, "rejected")}
+                      disabled={item.status === "rejected" || changingItemStatusId === item.id}
+                      className={`text-xs px-2 py-0.5 rounded-md border font-medium transition-colors disabled:opacity-40 ${
+                        item.status === "rejected"
+                          ? "bg-red-500 text-white border-red-500"
+                          : "border-red-400 text-red-400 hover:bg-red-50"
+                      }`}
+                    >
+                      반려
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -525,7 +615,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-              <h3 className="text-base font-bold text-gray-900">{year}년 {month}월 식대 한도 설정</h3>
+              <h3 className="text-base font-bold text-gray-900">{viewYear}년 {viewMonth}월 식대 한도 설정</h3>
               <button onClick={() => setShowLimitEdit(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
             </div>
 
@@ -555,7 +645,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
                       value={editBusinessDays}
                       onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditBusinessDays(e.target.value); } }}
                       className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
-                      placeholder={String(getMonthlyBusinessDays(year, month))}
+                      placeholder={String(getMonthlyBusinessDays(viewYear, viewMonth))}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
                   </div>
