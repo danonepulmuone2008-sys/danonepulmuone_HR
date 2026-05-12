@@ -70,7 +70,7 @@ export async function GET(req: Request) {
     // 해당 유저가 assigned된 receipt_items 조회 (해당 월 범위)
     const { data: items, error: itemsError } = await supabaseAdmin
       .from("receipt_items")
-      .select("receipt_id, price")
+      .select("id, receipt_id, item_name, unit_price, qty, price, status")
       .eq("assigned_user_id", userId)
 
     if (itemsError) throw itemsError
