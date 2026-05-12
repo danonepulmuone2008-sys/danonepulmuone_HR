@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 
-function calcHours(clockIn: string | null, clockOut: string | null): number | null {
+function calcHours(clockIn: string | null, clockOut: string | null, lunchBreak: boolean | null): number | null {
   if (!clockIn || !clockOut) return null
   const diff = (new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 3600000
   if (diff <= 0) return null
-  return Math.round(diff * 10) / 10
+  const adjusted = lunchBreak ? Math.max(0, diff - 1) : diff
+  return Math.round(adjusted * 10) / 10
 }
 
 // GET /api/admin/attendance/records?monday=2026-05-04
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
     // 해당 주 출퇴근 기록 조회
     const { data: attendanceRows, error: attError } = await supabaseAdmin
       .from("attendance_records")
-      .select("user_id, date, clock_in, clock_out")
+      .select("user_id, date, clock_in, clock_out, lunch_break")
       .in("user_id", userIds)
       .gte("date", monday)
       .lte("date", friday)
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
     for (const row of attendanceRows ?? []) {
       const key = `${row.user_id}__${row.date}`
       recMap[key] = {
-        hours: calcHours(row.clock_in, row.clock_out),
+        hours: calcHours(row.clock_in, row.clock_out, row.lunch_break),
         checkedIn: !!row.clock_in && !row.clock_out,
       }
     }
