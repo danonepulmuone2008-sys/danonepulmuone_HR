@@ -897,11 +897,12 @@ export default function AdminAttendancePage() {
       {/* 날짜 상세 바텀시트 (근무 일정 탭) */}
       {selectedDay !== null && activeTab === "schedule" && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-12"
           onClick={() => setSelectedDay(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col max-h-[70vh]"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col"
+            style={{ maxHeight: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
