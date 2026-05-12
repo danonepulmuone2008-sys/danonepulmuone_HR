@@ -11,7 +11,12 @@ export async function GET() {
 
     if (error) throw new Error(error.message);
 
-    return NextResponse.json({ interns: data ?? [] });
+    const interns = (data ?? []).map((u) => ({
+      ...u,
+      phone: u.phone ? u.phone.replace(/\D/g, "") : "",
+    }));
+
+    return NextResponse.json({ interns });
   } catch (err) {
     console.error("[admin/users-profile]", err);
     return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 });
