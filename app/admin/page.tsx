@@ -66,7 +66,7 @@ export default function AdminHomePage() {
   }, []);
 
   async function fetchUsers() {
-    const res = await fetch("/api/admin/interns");
+    const res = await fetch("/api/admin/users-profile");
     const json = await res.json();
     if (json.interns) setUsers(json.interns);
   }
