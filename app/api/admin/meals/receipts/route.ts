@@ -67,39 +67,50 @@ export async function GET(req: Request) {
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`
     const endDate   = new Date(Number(year), Number(month), 1).toISOString().slice(0, 10)
 
-    // 해당 유저가 assigned된 receipt_items 조회 (해당 월 범위)
-    const { data: items, error: itemsError } = await supabaseAdmin
-      .from("receipt_items")
-      .select("id, receipt_id, item_name, unit_price, qty, price, status")
-      .eq("assigned_user_id", userId)
-
-    if (itemsError) throw itemsError
-
-    if (!items || items.length === 0) return NextResponse.json([])
-
-    // receipt_id별 내 price 합산
-    const myAmountMap: Record<string, number> = {}
-    for (const item of items) {
-      myAmountMap[item.receipt_id] = (myAmountMap[item.receipt_id] ?? 0) + (item.price ?? 0)
-    }
-
-    const receiptIds = Object.keys(myAmountMap)
-
-    // 해당 월 범위 receipts 조회
+    // 해당 월의 영수증 먼저 조회
     const { data: receipts, error: receiptsError } = await supabaseAdmin
       .from("receipts")
       .select("id, store_name, paid_at, total_amount, status")
-      .in("id", receiptIds)
       .gte("paid_at", startDate)
       .lt("paid_at", endDate)
       .order("paid_at", { ascending: false })
 
     if (receiptsError) throw receiptsError
+    if (!receipts || receipts.length === 0) return NextResponse.json([])
 
-    const result = (receipts ?? []).map((r) => ({
-      ...r,
-      my_amount: myAmountMap[r.id] ?? 0,
-    }))
+    const receiptIds = receipts.map((r) => r.id)
+
+    // 해당 유저가 담당자인 항목만 조회
+    const { data: items, error: itemsError } = await supabaseAdmin
+      .from("receipt_items")
+      .select("id, receipt_id, item_name, unit_price, qty, price, status")
+      .eq("assigned_user_id", userId)
+      .in("receipt_id", receiptIds)
+
+    if (itemsError) throw itemsError
+    if (!items || items.length === 0) return NextResponse.json([])
+
+    const itemsByReceipt: Record<string, typeof items> = {}
+
+    for (const item of items) {
+      if (!itemsByReceipt[item.receipt_id]) {
+        itemsByReceipt[item.receipt_id] = []
+      }
+      itemsByReceipt[item.receipt_id].push(item)
+    }
+
+    const result = receipts
+      .filter((r) => itemsByReceipt[r.id]?.length > 0)
+      .map((r) => {
+        const myItems = itemsByReceipt[r.id] ?? []
+        const myAmount = myItems.reduce((sum, item) => sum + (item.price ?? 0), 0)
+
+        return {
+          ...r,
+          my_amount: myAmount,
+          items: myItems,
+        }
+      })
 
     return NextResponse.json(result)
   } catch (err) {

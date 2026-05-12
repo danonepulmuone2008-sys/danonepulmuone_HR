@@ -56,12 +56,30 @@ export default function VacationPage() {
         return;
       }
 
+      let attachmentUrl: string | null = null;
+      if (files.length > 0) {
+        const uploadForm = new FormData();
+        uploadForm.append("file", files[0]);
+        uploadForm.append("userId", session.user.id);
+        const uploadRes = await fetch("/api/attendance/vacation/upload", {
+          method: "POST",
+          body: uploadForm,
+        });
+        if (!uploadRes.ok) {
+          showToast("파일 업로드 중 오류가 발생했습니다.", true);
+          return;
+        }
+        const { url } = await uploadRes.json();
+        attachmentUrl = url;
+      }
+
       const { error } = await supabase.from("vacation_requests").insert({
         user_id: session.user.id,
         type: form.type,
         start_date: form.startDate,
         end_date: form.endDate,
         reason: form.reason || null,
+        attachment_url: attachmentUrl,
       });
 
       if (error) {

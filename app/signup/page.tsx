@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { supabase } from "@/lib/supabase";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -18,6 +17,9 @@ export default function SignupPage() {
   const [securityAnswer, setSecurityAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [nameError, setNameError] = useState("");
 
   const SECURITY_QUESTIONS = [
     "기억에 남는 추억의 장소는?",
@@ -38,6 +40,10 @@ export default function SignupPage() {
     e.preventDefault();
     setErrorMsg("");
 
+    if (!email || !name || !phone || !department || !position || !password || !passwordConfirm || !securityQuestion || !securityAnswer) {
+      setErrorMsg("모든 항목을 입력해야 회원가입이 가능합니다");
+      return;
+    }
     if (password !== passwordConfirm) {
       setErrorMsg("비밀번호가 일치하지 않습니다");
       return;
@@ -49,39 +55,25 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { name, phone, department, position, securityQuestion, securityAnswer } },
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name, phone, department, position, securityQuestion, securityAnswer }),
       });
+      const json = await res.json();
 
-      if (error) {
-        if (error.message.includes("already registered")) {
+      if (!res.ok) {
+        const msg = json?.error ?? "";
+        if (msg.includes("already registered") || msg.includes("already been registered")) {
           setErrorMsg("이미 가입된 이메일입니다");
-        } else if (error.message.includes("Password")) {
+        } else if (msg.includes("Password")) {
           setErrorMsg("비밀번호 형식이 올바르지 않습니다");
-        } else if (error.message.includes("email")) {
+        } else if (msg.includes("email")) {
           setErrorMsg("이메일 형식이 올바르지 않습니다");
         } else {
-          setErrorMsg(error.message);
+          setErrorMsg(msg || "가입 중 오류가 발생했습니다");
         }
         return;
-      }
-
-      if (data.user) {
-        const { error: userError } = await supabase.from("users").insert({
-          id: data.user.id,
-          email,
-          name,
-          phone,
-          department,
-          position,
-        });
-
-        if (userError) {
-          setErrorMsg("사용자 정보 저장 중 오류가 발생했습니다: " + userError.message);
-          return;
-        }
       }
 
       router.push("/login");
@@ -118,26 +110,59 @@ export default function SignupPage() {
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/[^\x00-\x7F]/.test(val)) {
+                setEmailError("이메일은 영문, 숫자, 특수기호만 입력 가능합니다");
+              } else {
+                setEmailError("");
+              }
+              setEmail(val.replace(/[^\x00-\x7F]/g, ""));
+            }}
             placeholder="이메일을 입력하세요"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {emailError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{emailError}</p>
+          )}
           <input
             type="text"
             required
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/[^가-힣a-zA-Z]/.test(val)) {
+                setNameError("한글, 영문만 입력 가능합니다");
+              } else {
+                setNameError("");
+              }
+              setName(val.replace(/[^가-힣a-zA-Z]/g, ""));
+            }}
             placeholder="이름"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {nameError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{nameError}</p>
+          )}
           <input
             type="tel"
             required
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/\D/.test(val)) {
+                setPhoneError("숫자만 입력 가능합니다");
+              } else {
+                setPhoneError("");
+              }
+              setPhone(val.replace(/\D/g, ""));
+            }}
             placeholder="전화번호"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {phoneError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{phoneError}</p>
+          )}
           <input
             type="text"
             required
