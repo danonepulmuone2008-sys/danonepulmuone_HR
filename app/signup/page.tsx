@@ -17,6 +17,9 @@ export default function SignupPage() {
   const [securityAnswer, setSecurityAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [nameError, setNameError] = useState("");
 
   const SECURITY_QUESTIONS = [
     "기억에 남는 추억의 장소는?",
@@ -107,26 +110,59 @@ export default function SignupPage() {
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/[^\x00-\x7F]/.test(val)) {
+                setEmailError("이메일은 영문, 숫자, 특수기호만 입력 가능합니다");
+              } else {
+                setEmailError("");
+              }
+              setEmail(val.replace(/[^\x00-\x7F]/g, ""));
+            }}
             placeholder="이메일을 입력하세요"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {emailError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{emailError}</p>
+          )}
           <input
             type="text"
             required
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/[^가-힣a-zA-Z]/.test(val)) {
+                setNameError("한글, 영문만 입력 가능합니다");
+              } else {
+                setNameError("");
+              }
+              setName(val.replace(/[^가-힣a-zA-Z]/g, ""));
+            }}
             placeholder="이름"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {nameError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{nameError}</p>
+          )}
           <input
             type="tel"
             required
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/\D/.test(val)) {
+                setPhoneError("숫자만 입력 가능합니다");
+              } else {
+                setPhoneError("");
+              }
+              setPhone(val.replace(/\D/g, ""));
+            }}
             placeholder="전화번호"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {phoneError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{phoneError}</p>
+          )}
           <input
             type="text"
             required
