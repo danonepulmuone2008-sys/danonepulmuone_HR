@@ -10,6 +10,7 @@ export async function GET() {
 
     const interns = (data.users ?? [])
       .filter((u) => u.email !== ADMIN_EMAIL)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .map((u) => ({
         id: u.id,
         name: (u.user_metadata?.name ?? u.user_metadata?.full_name ?? u.email ?? ""),
