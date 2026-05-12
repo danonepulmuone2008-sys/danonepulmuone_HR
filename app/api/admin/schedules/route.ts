@@ -19,13 +19,13 @@ export async function GET(req: Request) {
         .order("date"),
       supabaseAdmin
         .from("vacation_requests")
-        .select("user_id, user_name, type, start_date, end_date")
+        .select("user_id, type, start_date, end_date")
         .eq("status", "approved")
         .gte("end_date", startDate)
         .lt("start_date", nextMonth),
       supabaseAdmin
         .from("business_trip_requests")
-        .select("user_id, user_name, destination, start_date, end_date")
+        .select("user_id, destination, start_date, end_date")
         .eq("status", "approved")
         .gte("end_date", startDate)
         .lt("start_date", nextMonth),
@@ -35,7 +35,6 @@ export async function GET(req: Request) {
 
     type ApprovedEvent = {
       user_id: string;
-      user_name: string;
       date: string;
       type: "vacation" | "business_trip";
       label: string;
@@ -64,13 +63,13 @@ export async function GET(req: Request) {
 
     (vacResult.data ?? []).forEach((v) => {
       expandRange(v.start_date, v.end_date).forEach((date) => {
-        approvedEvents.push({ user_id: v.user_id, user_name: v.user_name, date, type: "vacation", label: v.type });
+        approvedEvents.push({ user_id: v.user_id, date, type: "vacation", label: v.type });
       });
     });
 
     (tripResult.data ?? []).forEach((t) => {
       expandRange(t.start_date, t.end_date).forEach((date) => {
-        approvedEvents.push({ user_id: t.user_id, user_name: t.user_name, date, type: "business_trip", label: "출장", destination: t.destination });
+        approvedEvents.push({ user_id: t.user_id, date, type: "business_trip", label: "출장", destination: t.destination });
       });
     });
 

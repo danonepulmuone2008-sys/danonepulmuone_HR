@@ -20,7 +20,6 @@ type RealFlexSchedule = {
 
 type RealApprovedEvent = {
   user_id: string;
-  user_name: string;
   date: string;
   type: "vacation" | "business_trip";
   label: string;
