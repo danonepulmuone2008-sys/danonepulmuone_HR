@@ -37,6 +37,10 @@ export default function SignupPage() {
     e.preventDefault();
     setErrorMsg("");
 
+    if (!email || !name || !phone || !department || !position || !password || !passwordConfirm || !securityQuestion || !securityAnswer) {
+      setErrorMsg("모든 항목을 입력해야 회원가입이 가능합니다");
+      return;
+    }
     if (password !== passwordConfirm) {
       setErrorMsg("비밀번호가 일치하지 않습니다");
       return;
