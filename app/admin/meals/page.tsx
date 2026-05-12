@@ -71,6 +71,32 @@ export default function AdminMealsPage() {
   const [showNumericAlert, setShowNumericAlert] = useState(false);
   function alertNumeric() { setShowNumericAlert(true); }
 
+  const [changingItemStatusId, setChangingItemStatusId] = useState<string | null>(null);
+
+  async function changeItemStatus(receiptId: string, itemId: string, itemStatus: "approved" | "rejected" | "pending") {
+    const token = await getToken();
+    if (!token) return;
+    setChangingItemStatusId(itemId);
+    try {
+      const res = await fetch(`/api/admin/meals/receipts/${receiptId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, itemStatus }),
+      });
+      if (!res.ok) return;
+      setReceipts((prev) =>
+        prev.map((r) =>
+          r.id !== receiptId ? r : {
+            ...r,
+            items: r.items.map((i) => i.id === itemId ? { ...i, status: itemStatus } : i),
+          }
+        )
+      );
+    } finally {
+      setChangingItemStatusId(null);
+    }
+  }
+
   // 한도 편집 상태
   const [showLimitEdit, setShowLimitEdit] = useState(false);
   const [editDailyLimit, setEditDailyLimit] = useState("");
@@ -352,7 +378,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
       {/* 영수증 내역 바텀시트 */}
       {selectedUserId !== null && selectedUser && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8"
           onClick={closeSheet}
         >
           <div
@@ -398,12 +424,12 @@ async function saveItemAmount(receiptId: string, itemId: string) {
               <p className="text-sm font-semibold text-gray-900 truncate">
                 {r.store_name}
               </p>
-              <span
-                className={`text-xs ${
-                  r.status === "approved" ? "text-green-500" : "text-orange-400"
-                }`}
-              >
-                {r.status === "approved" ? "승인완료" : "승인대기"}
+              <span className={`text-xs mt-0.5 block ${
+                r.status === "approved" ? "text-green-500"
+                : r.status === "rejected" ? "text-red-400"
+                : "text-orange-400"
+              }`}>
+                {r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기"}
               </span>
             </div>
 
@@ -428,68 +454,104 @@ async function saveItemAmount(receiptId: string, itemId: string) {
             return (
               <div
                 key={item.id}
-                className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-b-0"
+                className="py-2 border-b border-gray-50 last:border-b-0"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">
-                    {item.item_name}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {(item.unit_price ?? 0).toLocaleString()}원 × {item.qty ?? 1}
-                  </p>
+                {/* 상단: 이름 + 금액/편집 */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {item.item_name}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {(item.unit_price ?? 0).toLocaleString()}원 × {item.qty ?? 1}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isEditing ? (
+                      <>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editValue}
+                          onChange={(e) => {
+                            if (/\D/.test(e.target.value)) {
+                              alertNumeric();
+                            } else {
+                              setEditValue(e.target.value);
+                            }
+                          }}
+                          className="w-24 h-8 px-2 text-sm text-right border border-blue-300 rounded-lg outline-none focus:border-blue-500 bg-blue-50"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveItemAmount(r.id, item.id);
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                        <button
+                          onClick={() => saveItemAmount(r.id, item.id)}
+                          disabled={isSaving}
+                          className="text-xs px-2 py-1 rounded-lg bg-blue-500 text-white font-medium disabled:opacity-50"
+                        >
+                          {isSaving ? "…" : "저장"}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500"
+                        >
+                          취소
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-green-500">
+                          {(item.price ?? 0).toLocaleString()}원
+                        </p>
+                        <button
+                          onClick={() => startEditItem(item)}
+                          className="text-gray-300 hover:text-gray-500 text-sm"
+                        >
+                          ✏️
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {isEditing ? (
-                    <>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={editValue}
-                        onChange={(e) => {
-                          if (/\D/.test(e.target.value)) {
-                            alertNumeric();
-                          } else {
-                            setEditValue(e.target.value);
-                          }
-                        }}
-                        className="w-24 h-8 px-2 text-sm text-right border border-blue-300 rounded-lg outline-none focus:border-blue-500 bg-blue-50"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveItemAmount(r.id, item.id);
-                          if (e.key === "Escape") cancelEdit();
-                        }}
-                      />
-
-                      <button
-                        onClick={() => saveItemAmount(r.id, item.id)}
-                        disabled={isSaving}
-                        className="text-xs px-2 py-1 rounded-lg bg-blue-500 text-white font-medium disabled:opacity-50"
-                      >
-                        {isSaving ? "…" : "저장"}
-                      </button>
-
-                      <button
-                        onClick={cancelEdit}
-                        className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500"
-                      >
-                        취소
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-bold text-green-500">
-                        {(item.price ?? 0).toLocaleString()}원
-                      </p>
-                      <button
-                        onClick={() => startEditItem(item)}
-                        className="text-gray-300 hover:text-gray-500 text-sm"
-                      >
-                        ✏️
-                      </button>
-                    </>
-                  )}
-                </div>
+                {/* 하단: 상태 + 승인/반려 버튼 */}
+                {!isEditing && (
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className={`text-xs ${
+                      item.status === "approved" ? "text-green-500"
+                      : item.status === "rejected" ? "text-red-400"
+                      : "text-orange-400"
+                    }`}>
+                      {item.status === "approved" ? "승인완료" : item.status === "rejected" ? "반려" : "승인대기"}
+                    </span>
+                    <button
+                      onClick={() => changeItemStatus(r.id, item.id, "approved")}
+                      disabled={item.status === "approved" || changingItemStatusId === item.id}
+                      className={`text-xs px-2 py-0.5 rounded-md border font-medium transition-colors disabled:opacity-40 ${
+                        item.status === "approved"
+                          ? "bg-green-500 text-white border-green-500"
+                          : "border-green-400 text-green-600 hover:bg-green-50"
+                      }`}
+                    >
+                      승인
+                    </button>
+                    <button
+                      onClick={() => changeItemStatus(r.id, item.id, "rejected")}
+                      disabled={item.status === "rejected" || changingItemStatusId === item.id}
+                      className={`text-xs px-2 py-0.5 rounded-md border font-medium transition-colors disabled:opacity-40 ${
+                        item.status === "rejected"
+                          ? "bg-red-500 text-white border-red-500"
+                          : "border-red-400 text-red-400 hover:bg-red-50"
+                      }`}
+                    >
+                      반려
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

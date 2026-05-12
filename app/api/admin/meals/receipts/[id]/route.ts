@@ -76,7 +76,22 @@ export async function PATCH(
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-const { userId, totalAmount, itemId, price } = await req.json()
+const body = await req.json()
+const { userId, totalAmount, itemId, price, itemStatus } = body
+
+if (itemId && itemStatus !== undefined) {
+  const allowed = ["approved", "rejected", "pending"]
+  if (!allowed.includes(itemStatus)) {
+    return NextResponse.json({ error: "올바른 상태값이 아닙니다" }, { status: 400 })
+  }
+  const { error } = await supabaseAdmin
+    .from("receipt_items")
+    .update({ status: itemStatus })
+    .eq("id", itemId)
+    .eq("receipt_id", id)
+  if (error) throw error
+  return NextResponse.json({ success: true })
+}
 
 if (itemId) {
   if (typeof price !== "number" || price < 0) {
