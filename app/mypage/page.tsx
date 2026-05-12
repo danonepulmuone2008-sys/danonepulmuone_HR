@@ -516,7 +516,7 @@ export default function MyPage() {
               <button
                 onClick={async () => {
                   if (!authUser) return;
-                  await supabase.from("users").update({ name: form.name, department: form.department, position: form.position, phone: form.phone }).eq("id", authUser.id);
+                  await supabase.from("users").update({ name: form.name, department: form.department, position: form.position, phone: form.phone, email: form.email }).eq("id", authUser.id);
                   setSaved({ ...form });
                   setShowEdit(false);
                   showToast("프로필이 수정되었습니다.");
