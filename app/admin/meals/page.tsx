@@ -10,7 +10,7 @@ const now = new Date();
 const year = now.getFullYear();
 const month = now.getMonth() + 1;
 
-const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
+const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
 
 interface LimitInfo {
   source: "db" | "calculated";
