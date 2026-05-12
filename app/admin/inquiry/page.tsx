@@ -84,7 +84,7 @@ export default function AdminInquiryPage() {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false, isProcessed: true } : s));
     setSelectedId(null);
     window.dispatchEvent(new CustomEvent("inquiryProcessed"));
-    await supabase.from("inquiries").update({ is_processed: true }).eq("id", id);
+    await supabase.from("inquiries").update({ is_processed: true, is_read: true }).eq("id", id);
   };
 
   const unprocCount = inquiries.filter((q) => !q.isProcessed).length;
