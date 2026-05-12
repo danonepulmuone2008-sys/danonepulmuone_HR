@@ -68,7 +68,7 @@ export default function MealsPage() {
       headers: { Authorization: `Bearer ${user.token}` },
     })
       .then((r) => r.json())
-      .then((rows: { id: string; store_name: string | null; paid_at: string; total_amount: number; status: string }[]) => {
+      .then((rows: { id: string; store_name: string | null; paid_at: string; my_amount: number; status: string }[]) => {
         if (!Array.isArray(rows)) return;
         setReceipts(rows.map((r) => {
           const dt = new Date(r.paid_at);
@@ -78,7 +78,7 @@ export default function MealsPage() {
             time: `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`,
             store: r.store_name ?? "가맹점 미인식",
             menu: "",
-            amount: r.total_amount ?? 0,
+            amount: r.my_amount ?? 0,
             status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
           };
         }));

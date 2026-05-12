@@ -35,6 +35,7 @@ type AttendanceRecord = {
   date: string;
   clock_in: string | null;
   clock_out: string | null;
+  lunch_break: boolean | null;
 };
 
 export default function AdminHomePage() {
@@ -47,6 +48,7 @@ export default function AdminHomePage() {
   const [editDate, setEditDate] = useState(getTodayStr());
   const [editCheckIn, setEditCheckIn] = useState("");
   const [editCheckOut, setEditCheckOut] = useState("");
+  const [editLunchBreak, setEditLunchBreak] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function AdminHomePage() {
   async function fetchTodayAttendance() {
     const { data } = await supabase
       .from("attendance_records")
-      .select("user_id, date, clock_in, clock_out")
+      .select("user_id, date, clock_in, clock_out, lunch_break")
       .eq("date", getTodayStr());
     if (data) setTodayAttendance(data);
   }
@@ -83,6 +85,7 @@ export default function AdminHomePage() {
     setEditDate(getTodayStr());
     setEditCheckIn(record?.clock_in ? toTimeStr(record.clock_in) : "");
     setEditCheckOut(record?.clock_out ? toTimeStr(record.clock_out) : "");
+    setEditLunchBreak(record?.lunch_break ?? false);
     setEditUserId(userId);
   }
 
@@ -91,12 +94,13 @@ export default function AdminHomePage() {
     if (!editUserId) return;
     const { data } = await supabase
       .from("attendance_records")
-      .select("clock_in, clock_out")
+      .select("clock_in, clock_out, lunch_break")
       .eq("user_id", editUserId)
       .eq("date", date)
       .single();
     setEditCheckIn(data?.clock_in ? toTimeStr(data.clock_in) : "");
     setEditCheckOut(data?.clock_out ? toTimeStr(data.clock_out) : "");
+    setEditLunchBreak(data?.lunch_break ?? false);
   }
 
   async function saveAttendance() {
@@ -285,6 +289,16 @@ export default function AdminHomePage() {
                   />
                 </div>
               </div>
+              <label className="flex items-center gap-3 mb-5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editLunchBreak}
+                  onChange={(e) => setEditLunchBreak(e.target.checked)}
+                  className="w-5 h-5 rounded accent-[#8dc63f]"
+                />
+                <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
+              </label>
+
               <button
                 onClick={saveAttendance}
                 disabled={saving}
