@@ -20,7 +20,6 @@ type RealFlexSchedule = {
 
 type RealApprovedEvent = {
   user_id: string;
-  user_name: string;
   date: string;
   type: "vacation" | "business_trip";
   label: string;
@@ -446,13 +445,23 @@ export default function AdminAttendancePage() {
                         }`}>
                           {day ?? ""}
                         </div>
-                        {/* 도트 영역 — 항상 고정 높이로 렌더링해 셀 크기 통일 */}
-                        <div className="h-4 flex gap-px mt-0.5 flex-wrap justify-center items-center max-w-full px-0.5">
-                          {scheduleInterns.map((intern: RealIntern, i: number) =>
-                            specials.has(intern.id) ? (
-                              <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
-                            ) : null
-                          )}
+                        {/* 도트 영역 — 최대 3개 + 초과 숫자 */}
+                        <div className="h-4 flex gap-px mt-0.5 justify-center items-center max-w-full px-0.5">
+                          {(() => {
+                            const dots = scheduleInterns
+                              .map((intern: RealIntern, i: number) => specials.has(intern.id) ? { intern, i } : null)
+                              .filter(Boolean) as { intern: RealIntern; i: number }[];
+                            if (dots.length >= 3) {
+                              return <span className="text-[8px] font-bold text-gray-400 leading-none">+{dots.length}</span>;
+                            }
+                            return (
+                              <>
+                                {dots.map(({ intern, i }) => (
+                                  <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
+                                ))}
+                              </>
+                            );
+                          })()}
                         </div>
                         {/* hover 툴팁 */}
                         {specials.size > 0 && (
