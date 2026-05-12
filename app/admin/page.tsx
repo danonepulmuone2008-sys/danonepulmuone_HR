@@ -118,7 +118,7 @@ export default function AdminHomePage() {
   async function saveAttendance() {
     if (!editUserId) return;
     setSaving(true);
-    const res = await fetch("/api/admin/attendance", {
+    const res = await fetch("/api/admin/attendance-with-lunch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -126,6 +126,7 @@ export default function AdminHomePage() {
         date: editDate,
         clock_in: editCheckIn ? toTimestamptz(editDate, editCheckIn) : null,
         clock_out: editCheckOut ? toTimestamptz(editDate, editCheckOut) : null,
+        lunch_break: editLunchBreak,
       }),
     });
 
