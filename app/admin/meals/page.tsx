@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { ADMIN_DUMMY } from "@/lib/api";
-import { getMealLimit } from "@/lib/holidays";
+import { getMonthlyBusinessDays } from "@/lib/holidays";
+import { useAuth } from "@/components/AuthProvider";
 
 const now = new Date();
 const year = now.getFullYear();
@@ -12,14 +12,190 @@ const month = now.getMonth() + 1;
 
 const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
 
+interface LimitInfo {
+  source: "db" | "calculated";
+  monthlyLimit: number;
+  dailyLimit: number;
+  businessDays: number;
+  holidayCount: number;
+}
+
+interface User {
+  id: string;
+  name: string;
+  used: number;
+}
+
+interface Receipt {
+  id: string;
+  store_name: string;
+  paid_at: string;
+  total_amount: number;
+  my_amount: number;
+  status: string;
+}
+
 export default function AdminMealsPage() {
-  const { interns, internMeals } = ADMIN_DUMMY;
-  const totalLimit = getMealLimit(year, month);
+  const { user: authUser } = useAuth();
 
-  const [selectedInternId, setSelectedInternId] = useState<string | null>(null);
+  const [limitInfo, setLimitInfo] = useState<LimitInfo | null>(null);
+  const [limitLoading, setLimitLoading] = useState(true);
 
-  const selectedMeals = internMeals.find((m) => m.internId === selectedInternId);
-  const selectedIntern = interns.find((i) => i.id === selectedInternId);
+  const [users, setUsers] = useState<User[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const [showNumericAlert, setShowNumericAlert] = useState(false);
+  function alertNumeric() { setShowNumericAlert(true); }
+
+  // 한도 편집 상태
+  const [showLimitEdit, setShowLimitEdit] = useState(false);
+  const [editDailyLimit, setEditDailyLimit] = useState("");
+  const [editBusinessDays, setEditBusinessDays] = useState("");
+  const [editHolidayCount, setEditHolidayCount] = useState("");
+  const [savingLimit, setSavingLimit] = useState(false);
+
+  const fetchLimit = useCallback(async () => {
+    if (!authUser?.token) return;
+    setLimitLoading(true);
+    try {
+      const res = await fetch(`/api/admin/meals/limit?year=${year}&month=${month}`, {
+        headers: { Authorization: `Bearer ${authUser.token}` },
+      });
+      if (res.ok) setLimitInfo(await res.json());
+    } finally {
+      setLimitLoading(false);
+    }
+  }, [authUser?.token]);
+
+  useEffect(() => {
+    if (!authUser?.token) return;
+    fetchLimit();
+    (async () => {
+      setUsersLoading(true);
+      try {
+        const res = await fetch(`/api/admin/users?year=${year}&month=${month}`, {
+          headers: { Authorization: `Bearer ${authUser.token}` },
+        });
+        if (res.ok) setUsers(await res.json());
+      } finally {
+        setUsersLoading(false);
+      }
+    })();
+  }, [authUser?.token, fetchLimit]);
+
+  const fetchReceipts = useCallback(async (userId: string) => {
+    if (!authUser?.token) return;
+    setReceiptsLoading(true);
+    setReceipts([]);
+    try {
+      const res = await fetch(
+        `/api/admin/meals/receipts?userId=${userId}&year=${year}&month=${month}`,
+        { headers: { Authorization: `Bearer ${authUser.token}` } }
+      );
+      if (res.ok) setReceipts(await res.json());
+    } finally {
+      setReceiptsLoading(false);
+    }
+  }, [authUser?.token]);
+
+  function openSheet(userId: string) {
+    setSelectedUserId(userId);
+    setEditingId(null);
+    fetchReceipts(userId);
+  }
+
+  function closeSheet() {
+    setSelectedUserId(null);
+    setEditingId(null);
+    setReceipts([]);
+  }
+
+  function startEdit(receipt: Receipt) {
+    setEditingId(receipt.id);
+    setEditValue(String(receipt.my_amount));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValue("");
+  }
+
+  async function saveAmount(receiptId: string) {
+    const amount = Number(editValue.replace(/,/g, ""));
+    if (isNaN(amount) || amount < 0) return;
+    if (!authUser?.token) return;
+    setSavingId(receiptId);
+    try {
+      const res = await fetch(`/api/admin/meals/receipts/${receiptId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${authUser.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId: selectedUserId, totalAmount: amount }),
+      });
+      if (!res.ok) return;
+      const oldAmount = receipts.find((r) => r.id === receiptId)?.my_amount ?? 0;
+      const diff = amount - oldAmount;
+      setReceipts((prev) =>
+        prev.map((r) => (r.id === receiptId ? { ...r, my_amount: amount } : r))
+      );
+      if (selectedUserId) {
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === selectedUserId ? { ...u, used: u.used + diff } : u
+          )
+        );
+      }
+      setEditingId(null);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function openLimitEdit() {
+    if (!limitInfo) return;
+    setEditDailyLimit(String(limitInfo.dailyLimit));
+    setEditBusinessDays(String(limitInfo.businessDays));
+    setEditHolidayCount(String(limitInfo.holidayCount));
+    setShowLimitEdit(true);
+  }
+
+  async function saveLimit() {
+    if (!authUser?.token) return;
+    const dailyLimit   = Number(editDailyLimit);
+    const businessDays = Number(editBusinessDays);
+    const holidayCount = Number(editHolidayCount) || 0;
+    if (!dailyLimit || !businessDays) return;
+    setSavingLimit(true);
+    try {
+      const res = await fetch("/api/admin/meals/limit", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${authUser.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ year, month, dailyLimit, businessDays, holidayCount }),
+      });
+      if (!res.ok) return;
+      await fetchLimit();
+      setShowLimitEdit(false);
+    } finally {
+      setSavingLimit(false);
+    }
+  }
+
+  const totalLimit = limitInfo?.monthlyLimit ?? 0;
+  const selectedUser = users.find((u) => u.id === selectedUserId);
+  const previewLimit = Number(editDailyLimit) * Number(editBusinessDays);
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
@@ -36,103 +212,278 @@ export default function AdminMealsPage() {
         </Link>
       </header>
 
-      <div className="flex flex-col gap-2 px-4 pt-2">
-        {/* 인턴별 식대 현황 */}
-        {interns.map((intern, i) => {
-          const mealData = internMeals.find((m) => m.internId === intern.id);
-          const used = mealData?.used ?? 0;
-          const remaining = totalLimit - used;
-          const pct = Math.min(Math.round((used / totalLimit) * 100), 100);
-
-          return (
-            <div
-              key={intern.id}
-              className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 cursor-pointer active:scale-[0.98] transition-all"
-              onClick={() => setSelectedInternId(intern.id)}
-            >
-              <div className="flex items-start justify-between mb-1">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }}>
-                    {intern.name.slice(0, 1)}
-                  </div>
-                  <p className="text-base font-bold text-gray-900">{intern.name}</p>
-                </div>
-                <span className="text-xs text-gray-400">{pct}% 사용</span>
-              </div>
-              <div className="flex justify-between items-end">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{used.toLocaleString()}원</p>
-                  <p className="text-xs text-gray-400">사용</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-blue-600">{remaining.toLocaleString()}원</p>
-                  <p className="text-xs text-gray-400">잔여</p>
-                </div>
-              </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ backgroundColor: INTERN_HEX[i], width: `${pct}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-400 text-right">한도 {totalLimit.toLocaleString()}원</p>
+      {/* 이달 식대 한도 카드 */}
+      <div className="mx-4 mt-3 bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
+        {limitLoading ? (
+          <div className="h-12 animate-pulse bg-gray-100 rounded-xl" />
+        ) : (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">
+                {month}월 식대 한도
+                {limitInfo?.source === "calculated" && (
+                  <span className="ml-1.5 text-orange-400">자동 계산</span>
+                )}
+              </p>
+              <p className="text-lg font-bold text-gray-900">
+                {totalLimit.toLocaleString()}원
+              </p>
+              {limitInfo && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {limitInfo.dailyLimit.toLocaleString()}원 × {limitInfo.businessDays}일
+                  {limitInfo.holidayCount > 0 && ` (공휴일 ${limitInfo.holidayCount}일 제외)`}
+                </p>
+              )}
             </div>
-          );
-        })}
+            <button
+              onClick={openLimitEdit}
+              className="flex items-center gap-1 text-xs text-blue-500 border border-blue-200 rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors"
+            >
+              ✏️ 수정
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* 개인별 영수증 내역 바텀시트 */}
-      {selectedInternId !== null && selectedMeals && selectedIntern && (() => {
-        const receipts = [...selectedMeals.receipts].sort(
-          (a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time)
-        );
-        return (
-          <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
-            onClick={() => setSelectedInternId(null)}
-          >
-            <div
-              className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10 max-h-[80vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
-                <div>
-                  <h3 className="text-base font-bold text-gray-900">{selectedIntern.name} 영수증 내역</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{year}년 {month}월</p>
+      {/* 인턴별 카드 */}
+      <div className="flex flex-col gap-2 px-4 pt-2">
+        {usersLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 h-24 animate-pulse" />
+          ))
+        ) : (
+          users.map((user, i) => {
+            const remaining = totalLimit - user.used;
+            const pct = totalLimit > 0 ? Math.min(Math.round((user.used / totalLimit) * 100), 100) : 0;
+            return (
+              <div
+                key={user.id}
+                className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 cursor-pointer active:scale-[0.98] transition-all"
+                onClick={() => openSheet(user.id)}
+              >
+                <div className="flex items-start justify-between mb-1">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0"
+                      style={{ backgroundColor: INTERN_HEX[i % INTERN_HEX.length] }}
+                    >
+                      {user.name.slice(0, 1)}
+                    </div>
+                    <p className="text-base font-bold text-gray-900">{user.name}</p>
+                  </div>
+                  <span className="text-xs text-gray-400">{pct}% 사용</span>
                 </div>
-                <button
-                  onClick={() => setSelectedInternId(null)}
-                  className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600"
-                >×</button>
+                <div className="flex justify-between items-end">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{user.used.toLocaleString()}원</p>
+                    <p className="text-xs text-gray-400">사용</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-blue-600">{remaining.toLocaleString()}원</p>
+                    <p className="text-xs text-gray-400">잔여</p>
+                  </div>
+                </div>
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ backgroundColor: INTERN_HEX[i % INTERN_HEX.length], width: `${pct}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400 text-right">한도 {totalLimit.toLocaleString()}원</p>
               </div>
+            );
+          })
+        )}
+      </div>
 
-              <div className="overflow-y-auto flex-1 px-5 pt-4">
-                {receipts.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-6">내역이 없습니다</p>
-                ) : (
-                  <div className="flex flex-col">
-                    {receipts.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center justify-between py-3 border-b border-gray-50 last:border-b-0"
-                      >
-                        <div className="flex-1 min-w-0 mr-3">
-                          <p className="text-xs text-gray-400">{r.date.replace(/-/g, "/")} {r.time}</p>
-                          <p className="text-sm font-medium text-gray-800 mt-0.5 truncate">{r.store}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 truncate">{r.menu}</p>
+      {/* 영수증 내역 바텀시트 */}
+      {selectedUserId !== null && selectedUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          onClick={closeSheet}
+        >
+          <div
+            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10 flex flex-col"
+            style={{ maxHeight: "80vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">{selectedUser.name} 영수증 내역</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{year}년 {month}월</p>
+              </div>
+              <button onClick={closeSheet} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 pt-4 pb-2">
+              {receiptsLoading ? (
+                <div className="flex flex-col gap-3 py-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : receipts.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">내역이 없습니다</p>
+              ) : (
+                <div className="flex flex-col">
+                  {receipts.map((r) => {
+                    const d = new Date(r.paid_at);
+                    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                    const timeStr = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                    const isEditing = editingId === r.id;
+                    const isSaving  = savingId === r.id;
+                    return (
+                      <div key={r.id} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-b-0 gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-400">{dateStr.replace(/-/g, "/")} {timeStr}</p>
+                          <p className="text-sm font-medium text-gray-800 mt-0.5 truncate">{r.store_name}</p>
+                          <span className={`text-xs mt-0.5 ${r.status === "approved" ? "text-green-500" : "text-orange-400"}`}>
+                            {r.status === "approved" ? "승인완료" : "승인대기"}
+                          </span>
                         </div>
-                        <div className="flex items-center shrink-0">
-                          <p className="text-base font-bold text-blue-500">{r.amount.toLocaleString()}원</p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isEditing ? (
+                            <>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={editValue}
+                                onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditValue(e.target.value); } }}
+                                className="w-24 h-8 px-2 text-sm text-right border border-blue-300 rounded-lg outline-none focus:border-blue-500 bg-blue-50"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveAmount(r.id);
+                                  if (e.key === "Escape") cancelEdit();
+                                }}
+                              />
+                              <button onClick={() => saveAmount(r.id)} disabled={isSaving} className="text-xs px-2 py-1 rounded-lg bg-blue-500 text-white font-medium disabled:opacity-50">
+                                {isSaving ? "…" : "저장"}
+                              </button>
+                              <button onClick={cancelEdit} className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-500">취소</button>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-base font-bold text-blue-500">{r.my_amount.toLocaleString()}원</p>
+                              <button onClick={() => startEdit(r)} className="text-gray-300 hover:text-gray-500 text-sm">✏️</button>
+                            </>
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
+
+      {/* 식대 한도 수정 바텀시트 */}
+      {showLimitEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          onClick={() => !savingLimit && setShowLimitEdit(false)}
+        >
+          <div
+            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <h3 className="text-base font-bold text-gray-900">{year}년 {month}월 식대 한도 설정</h3>
+              <button onClick={() => setShowLimitEdit(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
+            </div>
+
+            <div className="px-5 pt-4 flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">하루 식대 한도</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={editDailyLimit}
+                    onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditDailyLimit(e.target.value); } }}
+                    className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
+                    placeholder="10000"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">원</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">영업일 수</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editBusinessDays}
+                      onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditBusinessDays(e.target.value); } }}
+                      className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
+                      placeholder={String(getMonthlyBusinessDays(year, month))}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">공휴일 수</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editHolidayCount}
+                      onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditHolidayCount(e.target.value); } }}
+                      className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
+                      placeholder="0"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
+                  </div>
+                </div>
+              </div>
+
+              {editDailyLimit && editBusinessDays && (
+                <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center justify-between">
+                  <span className="text-xs text-blue-600">
+                    {Number(editDailyLimit).toLocaleString()}원 × {editBusinessDays}일
+                  </span>
+                  <span className="text-sm font-bold text-blue-700">
+                    = {previewLimit.toLocaleString()}원
+                  </span>
+                </div>
+              )}
+
+              <button
+                onClick={saveLimit}
+                disabled={savingLimit || !editDailyLimit || !editBusinessDays}
+                className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
+                style={{ backgroundColor: "#8dc63f" }}
+              >
+                {savingLimit ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNumericAlert && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-8">
+          <div className="bg-white rounded-2xl w-full max-w-[300px] overflow-hidden shadow-xl">
+            <div className="px-6 pt-6 pb-4 text-center">
+              <p className="text-sm text-gray-500">숫자만 입력해주세요</p>
+            </div>
+            <div className="border-t border-gray-100">
+              <button
+                onClick={() => setShowNumericAlert(false)}
+                className="w-full h-12 text-sm font-semibold"
+                style={{ color: "#8dc63f" }}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AdminBottomNav />
     </div>
