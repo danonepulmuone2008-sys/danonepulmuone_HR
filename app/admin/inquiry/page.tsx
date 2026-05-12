@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
-
-const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
+import { getInternColor, buildColorMap } from "@/lib/internColors";
 
 type InquiryStatus = { id: string; isNew: boolean; isProcessed: boolean };
 
@@ -25,6 +24,14 @@ export default function AdminInquiryPage() {
   const [statuses, setStatuses] = useState<InquiryStatus[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"미처리" | "처리완료">("미처리");
+  const [allUsers, setAllUsers] = useState<{ id: string }[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/interns")
+      .then((r) => r.json())
+      .then((json) => { if (json.interns) setAllUsers(json.interns); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetchInquiries = async () => {
@@ -64,10 +71,8 @@ export default function AdminInquiryPage() {
     fetchInquiries();
   }, []);
 
-  const internColor = (internId: string) => {
-    const hash = internId.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    return INTERN_HEX[hash % INTERN_HEX.length];
-  };
+  const colorMap = buildColorMap(allUsers);
+  const internColor = (internId: string) => getInternColor(colorMap.get(internId) ?? 0);
 
   const inquiries = inquiryItems.map((q) => {
     const s = statuses.find((s) => s.id === q.id) ?? { isNew: true, isProcessed: false };

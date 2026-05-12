@@ -1,15 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { ADMIN_DUMMY } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
+import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors";
+
+async function downloadFile(url: string) {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = blobUrl
+  a.download = url.split("/").pop() ?? "attachment"
+  a.click()
+  URL.revokeObjectURL(blobUrl)
+}
 
 type ApprovalRequest =
   | { id: string; type: "business_trip"; status: string; user_id: string; user_name: string; start_date: string; end_date: string; start_time: string; end_time: string; destination: string; reason: string | null; requested_at: string }
   | { id: string; type: "vacation"; status: string; user_id: string; user_name: string; start_date: string; end_date: string; label: string; reason: string | null; attachment_url: string | null; requested_at: string }
-  | { id: string; type: "attendance_edit"; status: string; user_id: string; user_name: string; date: string; direction: "in" | "out"; requested_time: string; reason: string | null; requested_at: string }
+  | { id: string; type: "attendance_edit"; status: string; user_id: string; user_name: string; date: string; direction: "in" | "out"; requested_time: string; reason: string | null; lunch_break: boolean | null; requested_at: string }
 
 type RealFlexSchedule = {
   user_name: string;
@@ -45,34 +58,6 @@ const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "15:00";
 
-const PRESET_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
-const PRESET_RGBA = [
-  "rgba(0,204,255,0.12)", "rgba(124,58,237,0.12)", "rgba(255,212,0,0.12)",
-  "rgba(236,72,153,0.12)", "rgba(220,38,38,0.12)", "rgba(255,122,0,0.12)",
-  "rgba(26,45,110,0.12)", "rgba(0,180,166,0.12)", "rgba(255,182,200,0.12)",
-];
-
-function hslToHex(h: number, s: number, l: number): string {
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
-    return Math.round(255 * color).toString(16).padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-function getInternColor(index: number): string {
-  if (index < PRESET_HEX.length) return PRESET_HEX[index];
-  const hue = (index * 137.508) % 360;
-  return hslToHex(hue, 0.65, 0.52);
-}
-
-function getInternBgRgba(index: number): string {
-  if (index < PRESET_RGBA.length) return PRESET_RGBA[index];
-  const hue = (index * 137.508) % 360;
-  return `hsla(${hue.toFixed(1)}, 65%, 52%, 0.12)`;
-}
 
 const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
@@ -141,6 +126,7 @@ function getHalfDayWorkTime(label: string): string {
 }
 
 export default function AdminAttendancePage() {
+  const router = useRouter();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval">("schedule");
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -180,9 +166,11 @@ export default function AdminAttendancePage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [approvalPage, setApprovalPage] = useState(1);
   const APPROVAL_PAGE_SIZE = 5;
+  const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
 
   const { interns: dummyInterns, internEvents } = ADMIN_DUMMY;
   const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
+  const colorMap = buildColorMap(scheduleInterns);
 
   useEffect(() => {
     fetch(`/api/admin/schedules?month=${calMonthStr}`)
@@ -336,6 +324,48 @@ export default function AdminAttendancePage() {
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
+      {viewAttachmentUrl && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setViewAttachmentUrl(null)}
+        >
+          <div
+            className="bg-white rounded-t-3xl w-full max-w-[390px] overflow-hidden"
+            style={{ maxHeight: "90vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">첨부파일</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => downloadFile(viewAttachmentUrl)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#8dc63f] text-white text-xs font-semibold"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  저장
+                </button>
+                <button
+                  onClick={() => setViewAttachmentUrl(null)}
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-lg leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-center p-4 overflow-auto" style={{ maxHeight: "80vh" }}>
+              {viewAttachmentUrl.toLowerCase().includes(".pdf") ? (
+                <iframe src={viewAttachmentUrl} className="w-full rounded-xl border border-gray-100" style={{ minHeight: "65vh" }} />
+              ) : (
+                <img src={viewAttachmentUrl} alt="첨부파일" className="max-w-full object-contain rounded-xl" style={{ maxHeight: "70vh" }} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100">
         <h1 className="text-lg font-bold text-gray-900">근태 관리</h1>
         <p className="text-xs text-gray-400 mt-0.5">{calYear}년 {calMonth}월</p>
@@ -372,9 +402,9 @@ export default function AdminAttendancePage() {
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, TODAY);
                 return (
-                  <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: getInternBgRgba(i) }}>
+                  <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(i) }}>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }}>
                         {intern.name.slice(0, 1)}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{intern.name}</span>
@@ -466,7 +496,7 @@ export default function AdminAttendancePage() {
                             return (
                               <>
                                 {dots.map(({ intern, i }) => (
-                                  <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
+                                  <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }} />
                                 ))}
                               </>
                             );
@@ -482,7 +512,7 @@ export default function AdminAttendancePage() {
                                 const sched = getSchedule(intern.id, day!);
                                 return (
                                   <div key={intern.id} className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(i) }} />
+                                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }} />
                                     <span className="text-xs font-semibold">{intern.name}</span>
                                     <span className="text-xs text-gray-300">
                                       {sched.type === "event"
@@ -643,12 +673,8 @@ export default function AdminAttendancePage() {
               ))}
             </div>
             <button
-              onClick={() => { setApprovalFilter("with_attachment"); setApprovalPage(1); }}
-              className={`w-full py-2 rounded-xl text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border ${
-                approvalFilter === "with_attachment"
-                  ? "bg-[#8dc63f] text-white border-[#8dc63f]"
-                  : "bg-white border-gray-200 text-gray-500"
-              }`}
+              onClick={() => router.push("/admin/attendance/attachments")}
+              className="w-full py-2 rounded-xl text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border bg-white border-gray-200 text-gray-500"
             >
               <span>📎</span>
               첨부파일 리스트
@@ -753,14 +779,15 @@ export default function AdminAttendancePage() {
                       {req.attachment_url && (
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-400">첨부파일</span>
-                          <a
-                            href={req.attachment_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-500 font-medium underline"
+                          <button
+                            onClick={() => setViewAttachmentUrl(req.attachment_url!)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-400 text-xs font-semibold"
                           >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z" clipRule="evenodd" />
+                            </svg>
                             파일 보기
-                          </a>
+                          </button>
                         </div>
                       )}
                     </>
@@ -779,6 +806,14 @@ export default function AdminAttendancePage() {
                         <span className="text-gray-400">요청 시간</span>
                         <span className="text-gray-700 font-medium">{req.requested_time}</span>
                       </div>
+                      {req.direction === "out" && req.lunch_break !== null && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">점심 차감</span>
+                          <span className={`font-medium ${req.lunch_break ? "text-orange-500" : "text-gray-400"}`}>
+                            {req.lunch_break ? "-1시간" : "없음"}
+                          </span>
+                        </div>
+                      )}
                     </>
                   )}
                   <div className="flex flex-col gap-0.5 pt-1.5 border-t border-gray-200 mt-0.5">
@@ -833,9 +868,9 @@ export default function AdminAttendancePage() {
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, selectedDay);
                 return (
-                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(i) }}>
+                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(i) }}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }}>
                         {intern.name.slice(0, 1)}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{intern.name}</span>

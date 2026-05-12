@@ -5,9 +5,9 @@ export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
       .from("users")
-      .select("id, name, email, phone")
+      .select("id, name, email, phone, created_at")
       .neq("role", "admin")
-      .order("name", { ascending: true });
+      .order("created_at", { ascending: false });
 
     if (error) throw new Error(error.message);
 

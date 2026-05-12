@@ -47,6 +47,7 @@ export default function HomePage() {
   const [modal, setModal] = useState<ModalState>(null);
   const [editReason, setEditReason] = useState("");
   const [editTime, setEditTime] = useState("");
+  const [editLunchBreak, setEditLunchBreak] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
@@ -135,12 +136,14 @@ export default function HomePage() {
         reason: editReason.trim(),
         requested_at: new Date().toISOString(),
         status: "pending",
+        lunch_break: modal.direction === "out" ? editLunchBreak : null,
       });
     }
     const label = modal.direction === "in" ? "출근" : "퇴근";
     showToast(`${label} 시간 수정 요청이 관리자에게 전송되었습니다.`);
     setEditReason("");
     setEditTime("");
+    setEditLunchBreak(true);
     setModal(null);
   };
 
@@ -290,6 +293,17 @@ export default function HomePage() {
                   onChange={(e) => setEditTime(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 mb-3"
                 />
+                {modal.direction === "out" && (
+                  <label className="flex items-center gap-2.5 mb-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editLunchBreak}
+                      onChange={(e) => setEditLunchBreak(e.target.checked)}
+                      className="w-4 h-4 rounded accent-blue-600"
+                    />
+                    <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
+                  </label>
+                )}
                 <p className="text-xs font-medium text-gray-500 mb-1.5">수정 사유</p>
                 <textarea
                   value={editReason}
@@ -300,7 +314,7 @@ export default function HomePage() {
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setModal(null); setEditReason(""); setEditTime(""); }}
+                    onClick={() => { setModal(null); setEditReason(""); setEditTime(""); setEditLunchBreak(true); }}
                     className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium"
                   >
                     취소

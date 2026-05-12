@@ -3,32 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
-
-const PRESET_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626", "#FF7A00", "#1A2D6E", "#00B4A6", "#FFB6C8"];
-
-function hslToHex(h: number, s: number, l: number): string {
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
-    return Math.round(255 * color).toString(16).padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-function getInternColor(index: number): string {
-  if (index < PRESET_HEX.length) return PRESET_HEX[index];
-  const hue = (index * 137.508) % 360;
-  return hslToHex(hue, 0.65, 0.52);
-}
-
-function formatPhone(phone: string | null | undefined): string {
-  if (!phone) return "";
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
-  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
-  return phone;
-}
+import { getInternColor, buildColorMap } from "@/lib/internColors";
 
 function getTodayStr() {
   const d = new Date();
@@ -74,7 +49,7 @@ export default function AdminHomePage() {
   }, []);
 
   async function fetchUsers() {
-    const res = await fetch("/api/admin/users-profile");
+    const res = await fetch("/api/admin/interns");
     const json = await res.json();
     if (json.interns) setUsers(json.interns);
   }
@@ -155,8 +130,9 @@ export default function AdminHomePage() {
     router.push("/login");
   }
 
+  const colorMap = buildColorMap(users);
   const editUser = users.find((u) => u.id === editUserId);
-  const editUserIndex = users.findIndex((u) => u.id === editUserId);
+  const editUserIndex = colorMap.get(editUserId ?? "") ?? 0;
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
@@ -174,8 +150,9 @@ export default function AdminHomePage() {
       </header>
 
       <div className="flex flex-col gap-2 px-4 pt-2">
-        {users.map((user, i) => {
+        {users.map((user) => {
           const status = getAttendanceStatus(user.id);
+          const ci = colorMap.get(user.id) ?? 0;
           return (
             <div
               key={user.id}
@@ -185,7 +162,7 @@ export default function AdminHomePage() {
                 <div className="flex items-center gap-3">
                   <div
                     className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0"
-                    style={{ backgroundColor: getInternColor(i) }}
+                    style={{ backgroundColor: getInternColor(ci) }}
                   >
                     {user.name.slice(0, 1)}
                   </div>
@@ -214,7 +191,7 @@ export default function AdminHomePage() {
               <div className="flex flex-col gap-1 pl-13">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-12">전화</span>
-                  <span className="text-sm text-gray-700">{formatPhone(user.phone)}</span>
+                  <span className="text-sm text-gray-700">{user.phone}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-12">이메일</span>
