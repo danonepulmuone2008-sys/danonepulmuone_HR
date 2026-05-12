@@ -74,15 +74,52 @@ if (itemId) {
     return NextResponse.json({ error: "올바른 금액을 입력해주세요" }, { status: 400 })
   }
 
+  // qty를 기준으로 unit_price도 같이 보정
+  const { data: item, error: itemFetchError } = await supabaseAdmin
+    .from("receipt_items")
+    .select("id, qty")
+    .eq("id", itemId)
+    .eq("receipt_id", id)
+    .single()
+
+  if (itemFetchError) throw itemFetchError
+  if (!item) {
+    return NextResponse.json({ error: "해당 항목이 없습니다" }, { status: 404 })
+  }
+
+  const qty = item.qty && item.qty > 0 ? item.qty : 1
+  const unitPrice = Math.round(price / qty)
+
   const { error } = await supabaseAdmin
     .from("receipt_items")
-    .update({ price })
+    .update({
+      price,
+      unit_price: unitPrice,
+    })
     .eq("id", itemId)
     .eq("receipt_id", id)
 
   if (error) throw error
 
-  return NextResponse.json({ success: true })
+  // 영수증 total_amount 재계산
+  const { data: allItems } = await supabaseAdmin
+    .from("receipt_items")
+    .select("price")
+    .eq("receipt_id", id)
+
+  const newTotalAmount = (allItems ?? []).reduce((sum, i) => sum + (i.price ?? 0), 0)
+
+  await supabaseAdmin
+    .from("receipts")
+    .update({ total_amount: newTotalAmount })
+    .eq("id", id)
+
+  return NextResponse.json({
+    success: true,
+    price,
+    unit_price: unitPrice,
+    new_total_amount: newTotalAmount,
+  })
 }
 
 if (!userId || typeof totalAmount !== "number" || totalAmount < 0) {

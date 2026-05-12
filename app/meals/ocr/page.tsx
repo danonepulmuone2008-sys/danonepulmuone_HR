@@ -194,6 +194,12 @@ export default function OcrPage() {
   const getAssigneeName = (id: string): string =>
     teamMembers.find((m) => m.id === id)?.name ?? ""
 
+  const formatAssignees = (ids: string[]) => {
+    if (ids.length === 0) return "담당자 선택"
+    if (ids.length === 1) return getAssigneeName(ids[0])
+    return `${getAssigneeName(ids[0])} 외 ${ids.length - 1}명`
+  }
+
   const canSubmitOcr =
     mode === "ocr" && status === "done" && result &&
     result.items.length > 0 &&
@@ -411,10 +417,9 @@ export default function OcrPage() {
                       }`}
                     >
                       <span className="truncate text-xs">
-                        {n === 0 ? "담당자 선택" : item.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                        {formatAssignees(item.assigneeIds)}
                       </span>
                       <span className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                        <span className="text-xs">{n}명</span>
                         <ChevronDown size={13} />
                       </span>
                     </button>
@@ -516,10 +521,9 @@ export default function OcrPage() {
                         }`}
                       >
                         <span className="truncate">
-                          {n === 0 ? "담당자 선택" : it.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                          {formatAssignees(it.assigneeIds)}
                         </span>
                         <span className="flex items-center gap-1 flex-shrink-0 ml-1">
-                          {n > 0 && <span>{n}명</span>}
                           <ChevronDown size={12} />
                         </span>
                       </button>
