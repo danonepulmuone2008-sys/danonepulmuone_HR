@@ -20,6 +20,7 @@ export async function GET(req: Request) {
       .from("users")
       .select("id, name, department, position, email, phone")
       .eq("is_active", true)
+      .eq("role", "employee")
       .order("name")
 
     if (usersError) throw usersError

@@ -1,4 +1,5 @@
 "use client";
+
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -19,7 +20,10 @@ type AuthContextType = {
   user: AuthUser | null;
 };
 
-const AuthContext = createContext<AuthContextType>({ session: null, user: null });
+const AuthContext = createContext<AuthContextType>({
+  session: null,
+  user: null,
+});
 
 export function useAuth() {
   return useContext(AuthContext);
@@ -37,46 +41,104 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [ready, setReady] = useState(isPublic);
 
   useEffect(() => {
+    let mounted = true;
+
+    async function clearAuth() {
+      if (!mounted) return;
+
+      setSession(null);
+      setUser(null);
+
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        // local signOut 실패해도 화면 전환은 진행
+      }
+
+      if (!isPublic) {
+        router.replace("/login");
+      }
+
+      setReady(true);
+    }
+
+    async function setAuthState(nextSession: Session) {
+      // getSession으로 가져온 세션이 실제 Supabase Auth 서버에도 유효한지 검증
+      const {
+        data: { user: verifiedUser },
+        error: userError,
+      } = await supabase.auth.getUser(nextSession.access_token);
+
+      if (userError || !verifiedUser) {
+        await clearAuth();
+        return;
+      }
+
+      const meta = verifiedUser.user_metadata ?? {};
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("name, department, role, position, phone")
+        .eq("id", verifiedUser.id)
+        .maybeSingle();
+
+      if (!mounted) return;
+
+      setSession(nextSession);
+      setUser({
+        id: verifiedUser.id,
+        name: profile?.name ?? meta.name ?? "",
+        department: profile?.department ?? meta.department ?? "",
+        position: profile?.position ?? meta.position ?? "",
+        phone: profile?.phone ?? meta.phone ?? "",
+        email: verifiedUser.email ?? "",
+        token: nextSession.access_token,
+      });
+
+      setReady(true);
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+
       if (!session) {
         if (!isPublic) router.replace("/login");
         setReady(true);
         return;
       }
 
-      const meta = session.user.user_metadata ?? {};
-
-      const { data: profile } = await supabase
-        .from("users")
-        .select("name, department, role, position, phone")
-        .eq("id", session.user.id)
-        .maybeSingle();
-
-      setSession(session);
-      setUser({
-        id: session.user.id,
-        name: profile?.name ?? meta.name ?? "",
-        department: profile?.department ?? meta.department ?? "",
-        position: profile?.position ?? meta.position ?? "",
-        phone: profile?.phone ?? meta.phone ?? "",
-        email: session.user.email ?? "",
-        token: session.access_token,
-      });
-      setReady(true);
+      await setAuthState(session);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT") {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (!mounted) return;
+
+      if (event === "SIGNED_OUT" || !nextSession) {
         setSession(null);
         setUser(null);
-        if (!isPublic) router.replace("/login");
-      } else if (session) {
-        setSession(session);
-        setUser((prev) => prev ? { ...prev, token: session.access_token } : prev);
+
+        if (!isPublic) {
+          router.replace("/login");
+        }
+
+        return;
+      }
+
+      if (
+        event === "SIGNED_IN" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "USER_UPDATED"
+      ) {
+        setAuthState(nextSession);
       }
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [isPublic, router]);
 
   if (!ready) return null;
