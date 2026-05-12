@@ -97,7 +97,7 @@ export default function AdminHomePage() {
     setEditDate(getTodayStr());
     setEditCheckIn(record?.clock_in ? toTimeStr(record.clock_in) : "");
     setEditCheckOut(record?.clock_out ? toTimeStr(record.clock_out) : "");
-    setEditLunchBreak(record?.lunch_break ?? false);
+    setEditLunchBreak(record?.lunch_break ?? true);
     setEditUserId(userId);
   }
 
@@ -112,7 +112,7 @@ export default function AdminHomePage() {
       .single();
     setEditCheckIn(data?.clock_in ? toTimeStr(data.clock_in) : "");
     setEditCheckOut(data?.clock_out ? toTimeStr(data.clock_out) : "");
-    setEditLunchBreak(data?.lunch_break ?? false);
+    setEditLunchBreak(data?.lunch_break ?? true);
   }
 
   async function saveAttendance() {

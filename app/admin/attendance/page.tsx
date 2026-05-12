@@ -8,7 +8,7 @@ import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 
 type ApprovalRequest =
   | { id: string; type: "business_trip"; status: string; user_id: string; user_name: string; start_date: string; end_date: string; start_time: string; end_time: string; destination: string; reason: string | null; requested_at: string }
-  | { id: string; type: "vacation"; status: string; user_id: string; user_name: string; start_date: string; end_date: string; label: string; reason: string | null; requested_at: string }
+  | { id: string; type: "vacation"; status: string; user_id: string; user_name: string; start_date: string; end_date: string; label: string; reason: string | null; attachment_url: string | null; requested_at: string }
   | { id: string; type: "attendance_edit"; status: string; user_id: string; user_name: string; date: string; direction: "in" | "out"; requested_time: string; reason: string | null; requested_at: string }
 
 type RealFlexSchedule = {
@@ -170,13 +170,15 @@ export default function AdminAttendancePage() {
   const [recordsError, setRecordsError] = useState<string | null>(null);
 
   // 요청 승인 탭 상태
-  const [approvalFilter, setApprovalFilter] = useState<"all" | "business_trip" | "vacation" | "attendance_edit">("all");
+  const [approvalFilter, setApprovalFilter] = useState<"all" | "business_trip" | "vacation" | "attendance_edit" | "with_attachment">("all");
   const [showHistory, setShowHistory] = useState(false);
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [approvalLoading, setApprovalLoading] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [approvalPage, setApprovalPage] = useState(1);
+  const APPROVAL_PAGE_SIZE = 5;
 
   const { interns: dummyInterns, internEvents } = ADMIN_DUMMY;
   const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
@@ -281,8 +283,14 @@ export default function AdminAttendancePage() {
 
   const filteredRequests = requests.filter((r) => {
     if (approvalFilter === "all") return true;
+    if (approvalFilter === "with_attachment") return r.type === "vacation" && !!(r as { attachment_url?: string | null }).attachment_url;
     return r.type === approvalFilter;
   });
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / APPROVAL_PAGE_SIZE));
+  const paginatedRequests = filteredRequests.slice(
+    (approvalPage - 1) * APPROVAL_PAGE_SIZE,
+    approvalPage * APPROVAL_PAGE_SIZE
+  );
 
   // 날짜별 특별 일정이 있는 인턴 집합 (기본 외 = flex or 휴가/출장)
   const specialMap: Record<number, Set<string>> = {};
@@ -596,13 +604,13 @@ export default function AdminAttendancePage() {
           {/* 대기중 / 처리완료 토글 */}
           <div className="flex bg-gray-100 rounded-xl p-0.5">
             <button
-              onClick={() => { setShowHistory(false); setApprovalFilter("all"); }}
+              onClick={() => { setShowHistory(false); setApprovalFilter("all"); setApprovalPage(1); }}
               className={`flex-1 py-2 rounded-[10px] text-xs font-semibold transition-colors ${!showHistory ? "bg-white text-gray-900 shadow-sm" : "text-gray-400"}`}
             >
               대기 중
             </button>
             <button
-              onClick={() => { setShowHistory(true); setApprovalFilter("all"); }}
+              onClick={() => { setShowHistory(true); setApprovalFilter("all"); setApprovalPage(1); }}
               className={`flex-1 py-2 rounded-[10px] text-xs font-semibold transition-colors ${showHistory ? "bg-white text-gray-900 shadow-sm" : "text-gray-400"}`}
             >
               처리 완료
@@ -610,25 +618,38 @@ export default function AdminAttendancePage() {
           </div>
 
           {/* 필터 칩 */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {([
-              { key: "all", label: "전체" },
-              { key: "business_trip", label: "출장" },
-              { key: "vacation", label: "휴가" },
-              { key: "attendance_edit", label: "출근 / 퇴근" },
-            ] as const).map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setApprovalFilter(key)}
-                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  approvalFilter === key
-                    ? "bg-[#8dc63f] text-white"
-                    : "bg-white border border-gray-200 text-gray-500"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {([
+                { key: "all", label: "전체" },
+                { key: "business_trip", label: "출장" },
+                { key: "vacation", label: "휴가" },
+                { key: "attendance_edit", label: "출근 / 퇴근" },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => { setApprovalFilter(key); setApprovalPage(1); }}
+                  className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    approvalFilter === key
+                      ? "bg-[#8dc63f] text-white"
+                      : "bg-white border border-gray-200 text-gray-500"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => { setApprovalFilter("with_attachment"); setApprovalPage(1); }}
+              className={`w-full py-2 rounded-xl text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border ${
+                approvalFilter === "with_attachment"
+                  ? "bg-[#8dc63f] text-white border-[#8dc63f]"
+                  : "bg-white border-gray-200 text-gray-500"
+              }`}
+            >
+              <span>📎</span>
+              첨부파일 리스트
+            </button>
           </div>
 
           {approvalLoading ? (
@@ -646,7 +667,33 @@ export default function AdminAttendancePage() {
             </div>
           ) : null}
 
-          {!approvalLoading && filteredRequests.map((req) => {
+          {!approvalLoading && totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 py-1">
+              <button
+                onClick={() => setApprovalPage((p) => Math.max(1, p - 1))}
+                disabled={approvalPage === 1}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-xl leading-none"
+              >‹</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setApprovalPage(p)}
+                  className={`w-8 h-8 rounded-full text-xs font-semibold transition-colors ${
+                    p === approvalPage ? "bg-[#8dc63f] text-white" : "text-gray-500 hover:bg-gray-100"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                onClick={() => setApprovalPage((p) => Math.min(totalPages, p + 1))}
+                disabled={approvalPage === totalPages}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-xl leading-none"
+              >›</button>
+            </div>
+          )}
+
+          {!approvalLoading && paginatedRequests.map((req) => {
             const typeLabel = req.type === "business_trip" ? "출장" : req.type === "vacation" ? "휴가" : "출근 / 퇴근";
             const typeBg = req.type === "business_trip" ? "bg-blue-100 text-blue-700" : req.type === "vacation" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700";
             const isProcessing = processingId === req.id;
@@ -700,6 +747,19 @@ export default function AdminAttendancePage() {
                         <span className="text-gray-400">종류</span>
                         <span className="text-gray-700 font-medium">{req.label}</span>
                       </div>
+                      {req.attachment_url && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">첨부파일</span>
+                          <a
+                            href={req.attachment_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-500 font-medium underline"
+                          >
+                            파일 보기
+                          </a>
+                        </div>
+                      )}
                     </>
                   )}
                   {req.type === "attendance_edit" && (

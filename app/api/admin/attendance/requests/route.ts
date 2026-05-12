@@ -29,14 +29,14 @@ export async function GET(req: Request) {
     const [tripRes, vacRes, editRes] = await Promise.all([
       supabaseAdmin
         .from("business_trip_requests")
-        .select("id, user_id, destination, start_date, end_date, start_time, end_time, reason, status")
+        .select("id, user_id, destination, start_date, end_date, start_time, end_time, reason, status, created_at")
         .in("status", statusFilter)
-        .order("start_date", { ascending: false }),
+        .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("vacation_requests")
-        .select("id, user_id, type, start_date, end_date, reason, status")
+        .select("id, user_id, type, start_date, end_date, reason, status, created_at, attachment_url")
         .in("status", statusFilter)
-        .order("start_date", { ascending: false }),
+        .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("attendance_edit_requests")
         .select("id, user_id, date, direction, requested_time, reason, requested_at, status")
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
       end_time: r.end_time,
       destination: r.destination,
       reason: r.reason,
-      requested_at: r.start_date,
+      requested_at: r.created_at,
     }))
 
     const vacs = (vacRes.data ?? []).map((r) => ({
@@ -89,7 +89,8 @@ export async function GET(req: Request) {
       end_date: r.end_date,
       label: r.type,
       reason: r.reason,
-      requested_at: r.start_date,
+      attachment_url: r.attachment_url as string | null,
+      requested_at: r.created_at,
     }))
 
     const edits = (editRes.data ?? []).map((r) => ({
