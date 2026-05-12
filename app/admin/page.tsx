@@ -5,6 +5,14 @@ import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
 import { getInternColor, buildColorMap } from "@/lib/internColors";
 
+function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 11) return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+  if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return phone;
+}
+
 function getTodayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -49,7 +57,7 @@ export default function AdminHomePage() {
   }, []);
 
   async function fetchUsers() {
-    const res = await fetch("/api/admin/interns");
+    const res = await fetch("/api/admin/users-profile");
     const json = await res.json();
     if (json.interns) setUsers(json.interns);
   }
@@ -191,7 +199,7 @@ export default function AdminHomePage() {
               <div className="flex flex-col gap-1 pl-13">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-12">전화</span>
-                  <span className="text-sm text-gray-700">{user.phone}</span>
+                  <span className="text-sm text-gray-700">{formatPhone(user.phone)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-400 w-12">이메일</span>
