@@ -30,7 +30,7 @@ export default function AdminInquiryPage() {
     const fetchInquiries = async () => {
       const { data } = await supabase
         .from("inquiries")
-        .select("id, user_id, subject, content, created_at, is_processed")
+        .select("id, user_id, subject, content, created_at, is_processed, is_read")
         .order("created_at", { ascending: false });
 
       if (data) {
@@ -56,7 +56,7 @@ export default function AdminInquiryPage() {
         setInquiryItems(items);
         setStatuses(items.map((q, i) => ({
           id: q.id,
-          isNew: !(data[i].is_processed ?? false),
+          isNew: !(data[i].is_read ?? false),
           isProcessed: data[i].is_processed ?? false,
         })));
       }
@@ -74,9 +74,10 @@ export default function AdminInquiryPage() {
     return { ...q, isNew: s.isNew, isProcessed: s.isProcessed };
   });
 
-  const openInquiry = (id: string) => {
+  const openInquiry = async (id: string) => {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false } : s));
     setSelectedId(id);
+    await supabase.from("inquiries").update({ is_read: true }).eq("id", id);
   };
 
   const processInquiry = async (id: string) => {
