@@ -25,7 +25,18 @@ type ToastType = "success" | "error";
 
 export default function HomePage() {
   const { user } = useAuth();
-  const userProfile = { name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" };
+  const [userProfile, setUserProfile] = useState({ name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" });
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("users").select("name, department, position").eq("id", user.id).single().then(({ data }) => {
+      setUserProfile({
+        name: data?.name ?? user.name,
+        department: data?.department ?? user.department,
+        position: data?.position ?? user.position,
+      });
+    });
+  }, [user]);
 
   const [mealUsed, setMealUsed] = useState(0);
   const [mealLimit, setMealLimit] = useState(100000);
