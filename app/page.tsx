@@ -334,7 +334,7 @@ export default function HomePage() {
       )}
 
       {/* 헤더 */}
-      <header className="bg-blue-600 px-5 pt-12 pb-6">
+      <header className="bg-blue-600 px-5 pt-8 pb-3">
         <p className="text-blue-200 text-sm">안녕하세요 👋</p>
         <h2 className="text-white text-xl font-bold mt-0.5">{userProfile.name || "로딩 중"}님</h2>
         <p className="text-blue-200 text-xs mt-1">

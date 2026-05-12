@@ -264,7 +264,7 @@ export default function AttendancePage() {
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
-      <header className="bg-white px-5 pt-12 pb-4 border-b border-gray-100">
+      <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100">
         <h1 className="text-lg font-bold text-gray-900">근태 관리</h1>
         <p className="text-xs text-gray-400 mt-0.5">{monthLabel}</p>
       </header>
