@@ -220,16 +220,12 @@ export default function MealsPage() {
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
             <div className="px-5 pt-3 pb-6">
-              <p className="text-base font-bold text-gray-900 mb-1">승인 요청</p>
+              <p className="text-base font-bold text-gray-900 mb-1">{approvingItem.store_name}</p>
               <p className="text-xs text-gray-400 mb-5">
                 {approvingItem.uploader_name}님이 식대 승인을 요청했습니다
               </p>
 
               <div className="bg-gray-50 rounded-xl p-4 flex flex-col gap-2 mb-6">
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-400">식당</span>
-                  <span className="text-xs font-medium text-gray-700">{approvingItem.store_name}</span>
-                </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-gray-400">날짜</span>
                   <span className="text-xs font-medium text-gray-700">{formatDate(approvingItem.paid_at)}</span>

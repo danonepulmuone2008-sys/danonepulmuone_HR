@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
 
 export async function GET(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
     if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const { data: { user } } = await supabaseAdmin.auth.getUser(token)
+    const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
@@ -24,18 +24,31 @@ export async function GET(req: Request) {
 
     if (usersError) throw usersError
 
-    // 해당 월 영수증 합계 per user
-    const { data: receipts, error: receiptsError } = await supabaseAdmin
+    // 해당 월 approved 영수증 ID 수집
+    const { data: approvedReceipts, error: receiptsError } = await supabaseAdmin
       .from("receipts")
-      .select("uploader_id, total_amount")
+      .select("id")
+      .eq("status", "approved")
       .gte("paid_at", startDate)
       .lt("paid_at", endDate)
 
     if (receiptsError) throw receiptsError
 
+    const approvedIds = (approvedReceipts ?? []).map((r) => r.id)
+
+    // 해당 영수증에서 각 사용자에게 배정된 price 합산
     const usageMap: Record<string, number> = {}
-    for (const r of receipts ?? []) {
-      usageMap[r.uploader_id] = (usageMap[r.uploader_id] ?? 0) + r.total_amount
+    if (approvedIds.length > 0) {
+      const { data: items, error: itemsError } = await supabaseAdmin
+        .from("receipt_items")
+        .select("assigned_user_id, price")
+        .in("receipt_id", approvedIds)
+
+      if (itemsError) throw itemsError
+
+      for (const item of items ?? []) {
+        usageMap[item.assigned_user_id] = (usageMap[item.assigned_user_id] ?? 0) + (item.price ?? 0)
+      }
     }
 
     const result = (users ?? []).map((u) => ({ ...u, used: usageMap[u.id] ?? 0 }))
