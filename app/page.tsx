@@ -371,7 +371,7 @@ export default function HomePage() {
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${
-                  weeklyPercent >= 90 ? "bg-red-500" : weeklyPercent >= 70 ? "bg-orange-400" : "bg-blue-500"
+                  weeklyPercent >= 100 ? "bg-blue-500" : "bg-[#8dc63f]"
                 }`}
                 style={{ width: `${Math.min(weeklyPercent, 100)}%` }}
               />

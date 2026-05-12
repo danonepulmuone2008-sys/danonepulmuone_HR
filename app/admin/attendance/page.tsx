@@ -7,13 +7,13 @@ import { ADMIN_DUMMY } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 
-async function downloadFile(url: string) {
+async function downloadFile(url: string, filename?: string) {
   const res = await fetch(url)
   const blob = await res.blob()
   const blobUrl = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = blobUrl
-  a.download = url.split("/").pop() ?? "attachment"
+  a.download = filename ?? url.split("/").pop() ?? "attachment"
   a.click()
   URL.revokeObjectURL(blobUrl)
 }
@@ -192,8 +192,10 @@ export default function AdminAttendancePage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [approvalPage, setApprovalPage] = useState(1);
+  const [confirmChange, setConfirmChange] = useState<{ req: ApprovalRequest; targetAction: "approved" | "rejected" } | null>(null);
   const APPROVAL_PAGE_SIZE = 5;
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
+  const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
 
   const { interns: dummyInterns, internEvents } = ADMIN_DUMMY;
   const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
@@ -288,8 +290,12 @@ export default function AdminAttendancePage() {
         body: JSON.stringify({ type: req.type, id: req.id, action }),
       });
       if (res.ok) {
-        setRequests((prev) => prev.filter((r) => r.id !== req.id));
-        setPendingCount((c) => Math.max(0, c - 1));
+        if (req.status === "pending") {
+          setRequests((prev) => prev.filter((r) => r.id !== req.id));
+          setPendingCount((c) => Math.max(0, c - 1));
+        } else {
+          setRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: action } : r));
+        }
       }
     } finally {
       setProcessingId(null);
@@ -365,7 +371,13 @@ export default function AdminAttendancePage() {
               <span className="text-sm font-semibold text-gray-900">첨부파일</span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => downloadFile(viewAttachmentUrl)}
+                  onClick={() => {
+                    const ext = viewAttachmentUrl!.split(".").pop() ?? "png";
+                    const filename = viewAttachmentMeta
+                      ? `${viewAttachmentMeta.date}_${viewAttachmentMeta.name}.${ext}`
+                      : viewAttachmentUrl!.split("/").pop() ?? "attachment";
+                    downloadFile(viewAttachmentUrl!, filename);
+                  }}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#8dc63f] text-white text-xs font-semibold"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -387,6 +399,43 @@ export default function AdminAttendancePage() {
               ) : (
                 <img src={viewAttachmentUrl} alt="첨부파일" className="max-w-full object-contain rounded-xl" style={{ maxHeight: "70vh" }} />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmChange && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setConfirmChange(null)}
+        >
+          <div
+            className="bg-white rounded-t-3xl w-full max-w-[390px] px-5 pt-6 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-bold text-gray-900 mb-1">상태 변경</p>
+            <p className="text-sm text-gray-500 mb-6">
+              {confirmChange.targetAction === "rejected" ? "반려" : "승인완료"}로 수정하시겠습니까?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmChange(null)}
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
+              >
+                취소
+              </button>
+              <button
+                onClick={async () => {
+                  const { req, targetAction } = confirmChange;
+                  setConfirmChange(null);
+                  await handleApproval(req, targetAction);
+                }}
+                className={`flex-1 h-11 rounded-xl text-sm text-white font-semibold ${confirmChange.targetAction === "rejected" ? "bg-red-400" : ""}`}
+                style={confirmChange.targetAction === "approved" ? { backgroundColor: "#8dc63f" } : {}}
+              >
+                {confirmChange.targetAction === "rejected" ? "반려" : "승인완료"}
+              </button>
             </div>
           </div>
         </div>
@@ -765,7 +814,12 @@ export default function AdminAttendancePage() {
                   </div>
                   <div className="flex items-center gap-1.5">
                     {showHistory && statusLabel && (
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusBg}`}>{statusLabel}</span>
+                      <button
+                        onClick={() => setConfirmChange({ req, targetAction: req.status === "approved" ? "rejected" : "approved" })}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusBg}`}
+                      >
+                        {statusLabel}
+                      </button>
                     )}
                     <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${typeBg}`}>{typeLabel}</span>
                   </div>
@@ -806,7 +860,10 @@ export default function AdminAttendancePage() {
                         <div className="flex justify-between text-xs">
                           <span className="text-gray-400">첨부파일</span>
                           <button
-                            onClick={() => setViewAttachmentUrl(req.attachment_url!)}
+                            onClick={() => {
+                              setViewAttachmentUrl(req.attachment_url!);
+                              setViewAttachmentMeta({ date: req.requested_at.slice(0, 10), name: req.user_name });
+                            }}
                             className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-400 text-xs font-semibold"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
@@ -855,7 +912,7 @@ export default function AdminAttendancePage() {
                       disabled={isProcessing}
                       className="flex-1 h-10 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition-colors disabled:opacity-40"
                     >
-                      거절
+                      반려
                     </button>
                     <button
                       onClick={() => handleApproval(req, "approved")}
