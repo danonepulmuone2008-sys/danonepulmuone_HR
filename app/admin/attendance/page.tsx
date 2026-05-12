@@ -48,7 +48,6 @@ const INTERN_BG_RGBA = [
 const _now = new Date();
 const CURRENT_YEAR = _now.getFullYear();
 const CURRENT_MONTH = _now.getMonth() + 1;
-const CURRENT_MONTH_STR = `${CURRENT_YEAR}-${String(CURRENT_MONTH).padStart(2, "0")}`;
 const TODAY = _now.getDate();
 
 function buildWeeks(year: number, month: number): (number | null)[][] {
@@ -66,8 +65,6 @@ function buildWeeks(year: number, month: number): (number | null)[][] {
   }
   return weeks;
 }
-
-const WEEKS = buildWeeks(CURRENT_YEAR, CURRENT_MONTH);
 
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -123,6 +120,20 @@ export default function AdminAttendancePage() {
   // 근무 일정 탭 상태
   const [flexSchedules, setFlexSchedules] = useState<RealFlexSchedule[]>([]);
   const [realInterns, setRealInterns] = useState<RealIntern[]>([]);
+  const [calYear, setCalYear] = useState(CURRENT_YEAR);
+  const [calMonth, setCalMonth] = useState(CURRENT_MONTH);
+
+  const calMonthStr = `${calYear}-${String(calMonth).padStart(2, "0")}`;
+  const calWeeks = buildWeeks(calYear, calMonth);
+
+  const prevMonth = () => {
+    if (calMonth === 1) { setCalYear(y => y - 1); setCalMonth(12); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (calMonth === 12) { setCalYear(y => y + 1); setCalMonth(1); }
+    else setCalMonth(m => m + 1);
+  };
 
   // 근무 기록 탭 상태
   const [recordsData, setRecordsData] = useState<RecordsData | null>(null);
@@ -142,10 +153,13 @@ export default function AdminAttendancePage() {
   const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
 
   useEffect(() => {
-    fetch(`/api/admin/schedules?month=${CURRENT_MONTH_STR}`)
+    fetch(`/api/admin/schedules?month=${calMonthStr}`)
       .then((res) => res.json())
       .then((json) => { if (json.flexSchedules) setFlexSchedules(json.flexSchedules); })
       .catch((err) => console.error("[schedules fetch]", err));
+  }, [calMonthStr]);
+
+  useEffect(() => {
     fetch("/api/admin/interns")
       .then((res) => res.json())
       .then((json) => { if (json.interns) setRealInterns(json.interns); })
@@ -241,6 +255,7 @@ export default function AdminAttendancePage() {
   // 날짜별 특별 일정이 있는 인턴 집합 (기본 외 = flex or 휴가/출장)
   const specialMap: Record<number, Set<string>> = {};
   internEvents.forEach((e) => {
+    if (!e.date.startsWith(calMonthStr)) return;
     const day = parseInt(e.date.split("-")[2]);
     if (!specialMap[day]) specialMap[day] = new Set();
     specialMap[day].add(e.internId);
@@ -255,7 +270,7 @@ export default function AdminAttendancePage() {
 
   // 특정 인턴+날짜의 일정 조회
   const getSchedule = (internId: string, day: number) => {
-    const dateKey = `${CURRENT_MONTH_STR}-${String(day).padStart(2, "0")}`;
+    const dateKey = `${calMonthStr}-${String(day).padStart(2, "0")}`;
     const event = internEvents.find((e) => e.internId === internId && e.date === dateKey);
     if (event) return { type: "event" as const, event };
     const intern = scheduleInterns.find((i: RealIntern) => i.id === internId);
@@ -270,7 +285,7 @@ export default function AdminAttendancePage() {
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
       <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100">
         <h1 className="text-lg font-bold text-gray-900">근태 관리</h1>
-        <p className="text-xs text-gray-400 mt-0.5">{CURRENT_YEAR}년 {CURRENT_MONTH}월</p>
+        <p className="text-xs text-gray-400 mt-0.5">{calYear}년 {calMonth}월</p>
       </header>
 
       {/* 탭 */}
@@ -350,29 +365,35 @@ export default function AdminAttendancePage() {
 
           {/* 캘린더 */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p className="text-xs font-medium text-gray-400 mb-3">
-              기본: {DEFAULT_START} ~ {DEFAULT_END}
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1">
+                <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-base leading-none">‹</button>
+                <span className="text-xs font-medium text-gray-700 min-w-[72px] text-center">{calYear}년 {calMonth}월</span>
+                <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-base leading-none">›</button>
+              </div>
+              <span className="text-xs text-gray-400">기본: {DEFAULT_START} ~ {DEFAULT_END}</span>
+            </div>
             <div className="grid grid-cols-7 text-center mb-1">
               {CALENDAR_DAYS.map((d) => (
                 <span key={d} className="text-xs text-gray-400 font-medium py-1">{d}</span>
               ))}
             </div>
             <div className="flex flex-col gap-1">
-              {WEEKS.map((week, wi) => (
+              {calWeeks.map((week: (number | null)[], wi: number) => (
                 <div key={wi} className="grid grid-cols-7">
-                  {week.map((day, di) => {
+                  {week.map((day: number | null, di: number) => {
                     const specials = day ? (specialMap[day] ?? new Set<string>()) : new Set<string>();
                     const tooltipAlign =
                       di <= 1 ? "left-0" : di >= 5 ? "right-0" : "left-1/2 -translate-x-1/2";
+                    const isToday = calYear === CURRENT_YEAR && calMonth === CURRENT_MONTH && day === TODAY;
                     return (
                       <div
                         key={di}
-                        className="relative flex flex-col items-center py-0.5 group"
+                        className="relative flex flex-col items-center py-1 group"
                         onClick={() => { if (day) setSelectedDay(day); }}
                       >
                         <div className={`text-sm rounded-full w-7 h-7 flex items-center justify-center ${
-                          day === TODAY
+                          isToday
                             ? "bg-blue-600 text-white font-bold"
                             : day
                             ? "text-gray-700 hover:bg-gray-100 cursor-pointer"
@@ -380,18 +401,18 @@ export default function AdminAttendancePage() {
                         }`}>
                           {day ?? ""}
                         </div>
-                        {specials.size > 0 && (
-                          <div className="flex gap-px mt-0.5 flex-wrap justify-center max-w-full px-0.5">
-                            {scheduleInterns.map((intern: RealIntern, i: number) =>
-                              specials.has(intern.id) ? (
-                                <span key={intern.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: INTERN_HEX[i] }} />
-                              ) : null
-                            )}
-                          </div>
-                        )}
+                        {/* 도트 영역 — 항상 고정 높이로 렌더링해 셀 크기 통일 */}
+                        <div className="h-4 flex gap-px mt-0.5 flex-wrap justify-center items-center max-w-full px-0.5">
+                          {scheduleInterns.map((intern: RealIntern, i: number) =>
+                            specials.has(intern.id) ? (
+                              <span key={intern.id} className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: INTERN_HEX[i] }} />
+                            ) : null
+                          )}
+                        </div>
+                        {/* hover 툴팁 */}
                         {specials.size > 0 && (
                           <div className={`absolute bottom-full ${tooltipAlign} mb-2 z-50 hidden group-hover:block bg-gray-900 text-white rounded-xl shadow-xl w-52 p-3 pointer-events-none`}>
-                            <p className="text-[10px] text-gray-400 font-medium mb-2">{CURRENT_MONTH}월 {day}일</p>
+                            <p className="text-[10px] text-gray-400 font-medium mb-2">{calMonth}월 {day}일</p>
                             <div className="flex flex-col gap-1.5">
                               {scheduleInterns.map((intern: RealIntern, i: number) => {
                                 if (!specials.has(intern.id)) return null;
@@ -686,7 +707,7 @@ export default function AdminAttendancePage() {
           >
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
               <div>
-                <h3 className="text-base font-bold text-gray-900">{CURRENT_MONTH}월 {selectedDay}일 근무 일정</h3>
+                <h3 className="text-base font-bold text-gray-900">{calMonth}월 {selectedDay}일 근무 일정</h3>
                 <p className="text-xs text-gray-400 mt-0.5">인턴별 근무 계획</p>
               </div>
               <button onClick={() => setSelectedDay(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
