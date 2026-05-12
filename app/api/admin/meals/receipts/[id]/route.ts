@@ -41,8 +41,17 @@ export async function GET(
       userMap = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]))
     }
 
+    let image_url: string | null = null
+    if (receipt.image_path) {
+      const { data: signed } = await supabaseAdmin.storage
+        .from("receipts")
+        .createSignedUrl(receipt.image_path, 3600)
+      image_url = signed?.signedUrl ?? null
+    }
+
     return NextResponse.json({
       ...receipt,
+      image_url,
       uploader_name: userMap[receipt.uploader_id] ?? "알 수 없음",
       items: (items ?? []).map((i) => ({
         ...i,

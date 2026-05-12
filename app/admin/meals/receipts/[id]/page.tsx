@@ -4,6 +4,12 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/components/AuthProvider"
 import AdminBottomNav from "@/components/AdminBottomNav"
+import { supabase } from "@/lib/supabase"
+
+async function getToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ?? ""
+}
 
 const STATUS_LABEL: Record<string, string> = {
   approved: "승인완료",
@@ -33,6 +39,7 @@ interface ReceiptDetail {
   total_amount: number
   status: string
   uploader_name: string
+  image_url: string | null
   items: ReceiptItem[]
 }
 
@@ -46,15 +53,17 @@ export default function AdminReceiptDetailPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!authUser?.token || !id) return
+    if (!authUser?.id || !id) return
     setLoading(true)
-    fetch(`/api/admin/meals/receipts/${id}`, {
-      headers: { Authorization: `Bearer ${authUser.token}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data) setReceipt(data) })
-      .finally(() => setLoading(false))
-  }, [authUser?.token, id])
+    getToken().then((token) =>
+      fetch(`/api/admin/meals/receipts/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => { if (data) setReceipt(data) })
+        .finally(() => setLoading(false))
+    )
+  }, [authUser?.id, id])
 
   if (loading) {
     return (
@@ -105,6 +114,22 @@ export default function AdminReceiptDetailPage() {
             <p className="text-2xl font-bold text-gray-900">{receipt.total_amount.toLocaleString()}원</p>
           </div>
         </div>
+
+        {/* 영수증 이미지 */}
+        {receipt.image_url && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-700">영수증 사진</h2>
+            </div>
+            <div className="p-3">
+              <img
+                src={receipt.image_url}
+                alt="영수증 사진"
+                className="w-full rounded-xl object-contain max-h-[480px]"
+              />
+            </div>
+          </div>
+        )}
 
         {/* 항목 목록 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
