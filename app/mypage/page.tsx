@@ -398,10 +398,7 @@ export default function MyPage() {
       )}
 
       {/* 헤더 */}
-      <header
-        className="flex-shrink-0 px-5 pt-10 pb-4"
-        style={{ background: `linear-gradient(135deg, ${BRAND_BLUE} 0%, #3D8520 100%)` }}
-      >
+      <header className="flex-shrink-0 px-5 pt-10 pb-4 bg-blue-600">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-xl font-bold shadow" style={{ color: BRAND_BLUE }}>
             {saved.name[0]}

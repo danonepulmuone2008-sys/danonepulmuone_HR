@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, ClipboardList, UtensilsCrossed, MessageSquare } from "lucide-react";
-import { ADMIN_DUMMY } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffect, useState } from "react";
 
@@ -17,8 +17,19 @@ const NAV_ITEMS = [
 export default function AdminBottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const unreadCount = ADMIN_DUMMY.inquiries.filter((q) => !q.isRead).length;
+  const [inquiryCount, setInquiryCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    supabase
+      .from("inquiries")
+      .select("id", { count: "exact", head: true })
+      .then(({ count }) => setInquiryCount(count ?? 0));
+
+    const handler = () => setInquiryCount((prev) => Math.max(0, prev - 1));
+    window.addEventListener("inquiryProcessed", handler);
+    return () => window.removeEventListener("inquiryProcessed", handler);
+  }, []);
 
   useEffect(() => {
     if (!user?.token) return;
@@ -46,9 +57,9 @@ export default function AdminBottomNav() {
           >
             <span className="relative inline-flex">
               <Icon size={22} strokeWidth={active ? 2.5 : 1.8} />
-              {isInquiry && unreadCount > 0 && (
+              {isInquiry && inquiryCount > 0 && (
                 <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-bold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-0.5 leading-none">
-                  {unreadCount}
+                  {inquiryCount}
                 </span>
               )}
               {isAttendance && pendingCount > 0 && (
