@@ -316,30 +316,46 @@ export default function MyPage() {
   const [mealAlarmTime, setMealAlarmTime] = useState("12:00");
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
+
   useEffect(() => {
-    const registerPush = async () => {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-      if (Notification.permission !== 'granted') return;
-      try {
-        await navigator.serviceWorker.register('/sw.js');
-        const reg = await navigator.serviceWorker.ready;
-        const existing = await reg.pushManager.getSubscription();
-        const subscription = existing ?? await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-        });
-        if (authUser) {
-          await supabase.from('push_subscriptions').upsert({
-            user_id: authUser.id,
-            subscription: JSON.parse(JSON.stringify(subscription)),
-          }, { onConflict: 'user_id' });
-        }
-      } catch (e) {
-        console.warn('Push subscription failed:', e);
+    if (typeof Notification !== "undefined") {
+      setNotifPermission(Notification.permission);
+    }
+  }, []);
+
+  const subscribeToPush = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    try {
+      await navigator.serviceWorker.register("/sw.js");
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      const subscription = existing ?? await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      });
+      if (authUser) {
+        await supabase.from("push_subscriptions").upsert({
+          user_id: authUser.id,
+          subscription: JSON.parse(JSON.stringify(subscription)),
+        }, { onConflict: "user_id" });
       }
-    };
-    registerPush();
-  }, [authUser]);
+    } catch (e) {
+      console.warn("Push subscription failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (notifPermission === "granted" && authUser) {
+      subscribeToPush();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifPermission, authUser]);
+
+  const requestNotifPermission = async () => {
+    const result = await Notification.requestPermission();
+    setNotifPermission(result);
+  };
 
   useEffect(() => {
     const fetchAlarm = async () => {
@@ -426,6 +442,18 @@ export default function MyPage() {
         {/* 알림 설정 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
           <SectionLabel Icon={Bell} label="알림 설정" color={BRAND_BLUE} />
+          {notifPermission === "default" && (
+            <div className="border-t border-gray-50 px-4 py-3 flex items-center justify-between">
+              <p className="text-sm text-gray-500">알림을 받으려면 허용이 필요해요</p>
+              <button
+                onClick={requestNotifPermission}
+                className="text-xs font-semibold px-3 py-1.5 rounded-full text-white"
+                style={{ background: BRAND_BLUE }}
+              >
+                알림 허용
+              </button>
+            </div>
+          )}
           <AlarmRow Icon={AlarmClock} label="근태" on={alarmOn} time={alarmTime} days={alarmDays} onToggle={() => setAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("근태")} />
           <AlarmRow Icon={Utensils} label="식대" on={mealAlarmOn} time={mealAlarmTime} days={mealAlarmDays} onToggle={() => setMealAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("식대")} />
         </section>

@@ -11,10 +11,11 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 Deno.serve(async () => {
   const now = new Date();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const hh = String(kst.getUTCHours()).padStart(2, "0");
+  const mm = String(kst.getUTCMinutes()).padStart(2, "0");
   const currentTime = `${hh}:${mm}`;
-  const currentDay = ["일", "월", "화", "수", "목", "금", "토"][now.getDay()];
+  const currentDay = ["일", "월", "화", "수", "목", "금", "토"][kst.getUTCDay()];
 
   // 현재 시각에 알람이 설정된 사용자 조회
   const res = await fetch(`${supabaseUrl}/rest/v1/alarm_settings?select=id,alarm_on,alarm_time,alarm_days,meal_alarm_on,meal_alarm_time,meal_alarm_days`, {
@@ -50,8 +51,8 @@ Deno.serve(async () => {
       for (const payload of targets) {
         try {
           await webpush.sendNotification(subscription, JSON.stringify(payload));
-        } catch {
-          // 만료된 구독은 무시
+        } catch (err) {
+          console.error('push failed:', err);
         }
       }
     }
