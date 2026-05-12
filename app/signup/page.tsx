@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { supabase } from "@/lib/supabase";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -49,39 +48,25 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { name, phone, department, position, securityQuestion, securityAnswer } },
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name, phone, department, position, securityQuestion, securityAnswer }),
       });
+      const json = await res.json();
 
-      if (error) {
-        if (error.message.includes("already registered")) {
+      if (!res.ok) {
+        const msg = json?.error ?? "";
+        if (msg.includes("already registered") || msg.includes("already been registered")) {
           setErrorMsg("이미 가입된 이메일입니다");
-        } else if (error.message.includes("Password")) {
+        } else if (msg.includes("Password")) {
           setErrorMsg("비밀번호 형식이 올바르지 않습니다");
-        } else if (error.message.includes("email")) {
+        } else if (msg.includes("email")) {
           setErrorMsg("이메일 형식이 올바르지 않습니다");
         } else {
-          setErrorMsg(error.message);
+          setErrorMsg(msg || "가입 중 오류가 발생했습니다");
         }
         return;
-      }
-
-      if (data.user) {
-        const { error: userError } = await supabase.from("users").insert({
-          id: data.user.id,
-          email,
-          name,
-          phone,
-          department,
-          position,
-        });
-
-        if (userError) {
-          setErrorMsg("사용자 정보 저장 중 오류가 발생했습니다: " + userError.message);
-          return;
-        }
       }
 
       router.push("/login");
