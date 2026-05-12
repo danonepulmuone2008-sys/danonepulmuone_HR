@@ -25,7 +25,18 @@ type ToastType = "success" | "error";
 
 export default function HomePage() {
   const { user } = useAuth();
-  const userProfile = { name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" };
+  const [userProfile, setUserProfile] = useState({ name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" });
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("users").select("name, department, position").eq("id", user.id).single().then(({ data }) => {
+      setUserProfile({
+        name: data?.name ?? user.name,
+        department: data?.department ?? user.department,
+        position: data?.position ?? user.position,
+      });
+    });
+  }, [user]);
 
   const [mealUsed, setMealUsed] = useState(0);
   const [mealLimit, setMealLimit] = useState(100000);
@@ -35,6 +46,7 @@ export default function HomePage() {
   const [clockOut, setClockOut] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [editReason, setEditReason] = useState("");
+  const [editTime, setEditTime] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
@@ -112,11 +124,23 @@ export default function HomePage() {
     setModal(null);
   };
 
-  const handleEditConfirm = () => {
-    if (!modal || modal.type !== "edit" || !editReason.trim()) return;
+  const handleEditConfirm = async () => {
+    if (!modal || modal.type !== "edit" || !editReason.trim() || !editTime) return;
+    if (user) {
+      await supabase.from("attendance_edit_requests").insert({
+        user_id: user.id,
+        date: todayStr,
+        direction: modal.direction,
+        requested_time: editTime,
+        reason: editReason.trim(),
+        requested_at: new Date().toISOString(),
+        status: "pending",
+      });
+    }
     const label = modal.direction === "in" ? "출근" : "퇴근";
     showToast(`${label} 시간 수정 요청이 관리자에게 전송되었습니다.`);
     setEditReason("");
+    setEditTime("");
     setModal(null);
   };
 
@@ -149,19 +173,36 @@ export default function HomePage() {
       const fmt = (d: Date) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-      const { data: weekRecords } = await supabase
-        .from("attendance_records")
-        .select("clock_in, clock_out, lunch_break")
-        .eq("user_id", uid)
-        .gte("date", fmt(monday))
-        .lte("date", fmt(friday));
+      const [{ data: weekRecords }, { data: weekTrips }] = await Promise.all([
+        supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)),
+        supabase.from("business_trip_requests").select("start_date, end_date, start_time, end_time").eq("user_id", uid).eq("status", "approved").lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
+      ]);
 
-      const total = (weekRecords ?? []).reduce((sum, r) => {
+      const attendanceTotal = (weekRecords ?? []).reduce((sum, r) => {
         if (!r.clock_in || !r.clock_out) return sum;
         const h = (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
         return sum + h - (r.lunch_break ? 1 : 0);
       }, 0);
-      setWeeklyHours(Math.round(total * 10) / 10);
+
+      const tripTotal = (weekTrips ?? []).reduce((sum, t) => {
+        if (!t.start_time || !t.end_time) return sum;
+        const isSingleDay = t.start_date === t.end_date;
+        const rangeStart = new Date(Math.max(new Date(t.start_date + "T00:00:00").getTime(), monday.getTime()));
+        const rangeEnd = new Date(Math.min(new Date(t.end_date + "T00:00:00").getTime(), friday.getTime()));
+        let dayHours = 0;
+        for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
+          if (d.getDay() === 0 || d.getDay() === 6) continue;
+          const dateStr = fmt(d);
+          const startStr = isSingleDay || dateStr === t.start_date ? t.start_time : "09:00";
+          const endStr = isSingleDay || dateStr === t.end_date ? t.end_time : "18:00";
+          const [sh, sm] = startStr.split(":").map(Number);
+          const [eh, em] = endStr.split(":").map(Number);
+          dayHours += (eh * 60 + em - sh * 60 - sm) / 60;
+        }
+        return sum + dayHours;
+      }, 0);
+
+      setWeeklyHours(Math.round((attendanceTotal + tripTotal) * 10) / 10);
     })();
   }, [user, todayStr]);
 
@@ -242,24 +283,31 @@ export default function HomePage() {
                   {modal.direction === "in" ? "출근" : "퇴근"} 시간 수정 요청
                 </p>
                 <p className="text-xs text-gray-400 mb-4">수정 요청은 관리자 승인 후 반영됩니다.</p>
+                <p className="text-xs font-medium text-gray-500 mb-1.5">수정 시간</p>
+                <input
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 mb-3"
+                />
                 <p className="text-xs font-medium text-gray-500 mb-1.5">수정 사유</p>
                 <textarea
                   value={editReason}
                   onChange={(e) => setEditReason(e.target.value)}
-                  placeholder="시간과 수정 사유를 입력해주세요"
+                  placeholder="수정 사유를 입력해주세요"
                   rows={3}
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 resize-none mb-4"
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setModal(null); setEditReason(""); }}
+                    onClick={() => { setModal(null); setEditReason(""); setEditTime(""); }}
                     className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium"
                   >
                     취소
                   </button>
                   <button
                     onClick={handleEditConfirm}
-                    disabled={!editReason.trim()}
+                    disabled={!editTime || !editReason.trim()}
                     className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium disabled:opacity-40"
                   >
                     요청 전송
@@ -325,7 +373,7 @@ export default function HomePage() {
                   <p className="text-sm font-bold text-blue-700">{clockIn}</p>
                 </div>
                 <button
-                  onClick={() => setModal({ type: "edit", direction: "in", time: getNow() })}
+                  onClick={() => { setModal({ type: "edit", direction: "in", time: clockIn ?? getNow() }); setEditTime(clockIn ?? ""); }}
                   className="text-[11px] font-medium text-blue-500 bg-blue-100 px-2.5 py-1 rounded-full hover:bg-blue-200 transition-all"
                 >
                   수정
@@ -347,7 +395,7 @@ export default function HomePage() {
                   <p className="text-sm font-bold text-gray-700">{clockOut}</p>
                 </div>
                 <button
-                  onClick={() => setModal({ type: "edit", direction: "out", time: getNow() })}
+                  onClick={() => { setModal({ type: "edit", direction: "out", time: clockOut ?? getNow() }); setEditTime(clockOut ?? ""); }}
                   className="text-[11px] font-medium text-gray-500 bg-gray-200 px-2.5 py-1 rounded-full hover:bg-gray-300 transition-all"
                 >
                   수정

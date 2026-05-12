@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function BusinessTripPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ startDate: "", endDate: "", destination: "", reason: "" });
+  const [form, setForm] = useState({ startDate: "", endDate: "", destination: "", reason: "", startTime: "", endTime: "" });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
 
@@ -30,6 +30,14 @@ export default function BusinessTripPage() {
       showToast("종료일이 시작일보다 빠를 수 없습니다.", true);
       return;
     }
+    if (!form.startTime || !form.endTime) {
+      showToast("출장 시작/종료 시간을 입력해주세요.", true);
+      return;
+    }
+    if (form.startTime >= form.endTime) {
+      showToast("종료 시간이 시작 시간보다 늦어야 합니다.", true);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -44,6 +52,8 @@ export default function BusinessTripPage() {
         destination: form.destination.trim(),
         start_date: form.startDate,
         end_date: form.endDate,
+        start_time: form.startTime,
+        end_time: form.endTime,
         reason: form.reason || null,
       });
 
@@ -97,6 +107,27 @@ export default function BusinessTripPage() {
               placeholder="예) 서울, 부산"
               className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
             />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 시작 시간</label>
+              <input
+                type="time"
+                value={form.startTime}
+                onChange={e => update("startTime", e.target.value)}
+                className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 종료 시간</label>
+              <input
+                type="time"
+                value={form.endTime}
+                min={form.startTime || undefined}
+                onChange={e => update("endTime", e.target.value)}
+                className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+              />
+            </div>
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 사유</label>

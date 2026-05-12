@@ -69,39 +69,45 @@ export async function POST(req: Request) {
       .upload(storagePath, buffer, { contentType: mimeType })
     if (uploadError) throw new Error(`Storage 업로드 실패: ${uploadError.message}`)
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
-    const result = await model.generateContent([
-      { inlineData: { data: base64, mimeType } },
-      PROMPT,
-    ])
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
+      const result = await model.generateContent([
+        { inlineData: { data: base64, mimeType } },
+        PROMPT,
+      ])
 
-    const text = result.response.text().trim()
-    const json = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
-    const parsed = JSON.parse(json)
+      const text = result.response.text().trim()
+      const json = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
+      const parsed = JSON.parse(json)
 
-    const items: ReceiptItem[] = (parsed.items ?? [])
-      .filter((i: ReceiptItem) => i.total > 0 && i.name?.length >= 2)
-      .map((i: ReceiptItem) => ({
-        name: i.name,
-        unitPrice: i.unitPrice || i.total,
-        qty: i.qty || 1,
-        total: i.total,
-      }))
+      const items: ReceiptItem[] = (parsed.items ?? [])
+        .filter((i: ReceiptItem) => i.total > 0 && i.name?.length >= 2)
+        .map((i: ReceiptItem) => ({
+          name: i.name,
+          unitPrice: i.unitPrice || i.total,
+          qty: i.qty || 1,
+          total: i.total,
+        }))
 
-    const totalAmount =
-      parsed.totalAmount || items.reduce((s: number, i: ReceiptItem) => s + i.total, 0)
+      const totalAmount =
+        parsed.totalAmount || items.reduce((s: number, i: ReceiptItem) => s + i.total, 0)
 
-    const response: ParsedReceipt = {
-      storeName: parsed.storeName ?? "",
-      paidAt: parsed.paidAt ?? new Date().toISOString(),
-      items,
-      totalAmount,
-      isLunchTime: checkLunchTime(parsed.paidAt),
+      const response: ParsedReceipt = {
+        storeName: parsed.storeName ?? "",
+        paidAt: parsed.paidAt ?? new Date().toISOString(),
+        items,
+        totalAmount,
+        isLunchTime: checkLunchTime(parsed.paidAt),
+      }
+
+      return NextResponse.json({ ...response, storagePath })
+    } catch (ocrErr) {
+      console.error("[Gemini OCR]", ocrErr)
+      // 이미지는 업로드됐으므로 storagePath를 함께 반환
+      return NextResponse.json({ error: "영수증 인식에 실패했습니다", storagePath }, { status: 422 })
     }
-
-    return NextResponse.json({ ...response, storagePath })
   } catch (err) {
-    console.error("[Gemini OCR]", err)
+    console.error("[OCR upload]", err)
     return NextResponse.json({ error: "영수증 인식에 실패했습니다" }, { status: 500 })
   }
 }

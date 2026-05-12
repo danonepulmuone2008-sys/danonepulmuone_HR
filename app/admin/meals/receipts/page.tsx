@@ -1,193 +1,121 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import Link from "next/link";
-import AdminBottomNav from "@/components/AdminBottomNav";
-import { ADMIN_DUMMY } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/AuthProvider"
+import AdminBottomNav from "@/components/AdminBottomNav"
 
-type FlatReceipt = {
-  id: string;
-  date: string;
-  time: string;
-  store: string;
-  menu: string;
-  amount: number;
-  status: string;
-  internId: string;
-};
-
-function receiptNo(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) & 0x7fffffff;
-  return String(hash).slice(0, 8).padStart(8, "0");
+const STATUS_LABEL: Record<string, string> = {
+  approved: "승인완료",
+  pending: "승인대기",
+  rejected: "반려",
+}
+const STATUS_COLOR: Record<string, string> = {
+  approved: "text-green-500",
+  pending: "text-orange-400",
+  rejected: "text-red-400",
 }
 
-function storePhone(store: string): string {
-  let hash = 0;
-  for (let i = 0; i < store.length; i++) hash = (hash * 31 + store.charCodeAt(i)) & 0x7fffffff;
-  const p1 = (hash % 9000) + 1000;
-  const p2 = ((hash >> 4) % 9000) + 1000;
-  return `02-${p1}-${p2}`;
+interface ReceiptSummary {
+  id: string
+  store_name: string
+  paid_at: string
+  total_amount: number
+  status: string
+  uploader_name: string
+  extra_assignee_count: number
 }
 
-function MockReceipt({ r }: { r: FlatReceipt }) {
-  return (
-    <div className="flex justify-center py-2">
-      <div
-        className="relative bg-[#fffef8] px-6 py-6 w-[260px]"
-        style={{
-          fontFamily: "'Courier New', Courier, monospace",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.18)",
-          transform: "rotate(-0.4deg)",
-        }}
-      >
-        <div
-          className="absolute top-0 left-0 w-full h-2 bg-gray-50"
-          style={{
-            backgroundImage: "radial-gradient(circle at 6px 0, transparent 6px, #fffef8 6px)",
-            backgroundSize: "12px 8px",
-          }}
-        />
-        <div className="text-center mb-4 mt-1">
-          <p className="font-bold text-[13px] tracking-tight">{r.store}</p>
-          <p className="text-[10px] text-gray-500 mt-0.5">서울 강남구 수서동 123-4</p>
-          <p className="text-[10px] text-gray-500">{storePhone(r.store)}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">사업자번호: 123-45-{receiptNo(r.id).slice(0, 5)}</p>
-        </div>
-        <div className="border-t border-dashed border-gray-300 my-2" />
-        <div className="text-[10px] text-gray-500 mb-1 space-y-0.5">
-          <div className="flex justify-between">
-            <span>영수증번호</span>
-            <span>{receiptNo(r.id)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>거래일시</span>
-            <span>{r.date.replace(/-/g, "/")} {r.time}</span>
-          </div>
-        </div>
-        <div className="border-t border-dashed border-gray-300 my-2" />
-        <div className="text-[11px] mb-1">
-          <div className="flex justify-between gap-2">
-            <span className="truncate">{r.menu}</span>
-            <span className="flex-shrink-0 font-medium">{r.amount.toLocaleString()}</span>
-          </div>
-        </div>
-        <div className="border-t border-dashed border-gray-300 my-2" />
-        <div className="space-y-0.5 text-[11px]">
-          <div className="flex justify-between font-bold">
-            <span>합  계</span>
-            <span>{r.amount.toLocaleString()}원</span>
-          </div>
-          <div className="flex justify-between text-gray-500">
-            <span>부가세</span>
-            <span>{Math.round(r.amount / 11).toLocaleString()}원</span>
-          </div>
-          <div className="flex justify-between text-gray-500">
-            <span>카드결제</span>
-            <span>{r.amount.toLocaleString()}원</span>
-          </div>
-        </div>
-        <div className="border-t border-dashed border-gray-300 my-3" />
-        <div className="text-[10px] text-gray-500 space-y-0.5 mb-3">
-          <div className="flex justify-between">
-            <span>카드번호</span>
-            <span>****-****-****-{receiptNo(r.id).slice(4, 8)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>승인번호</span>
-            <span>{receiptNo(r.id).slice(0, 6)}</span>
-          </div>
-        </div>
-        <div className="border-t border-dashed border-gray-300 mb-3" />
-        <p className="text-center text-[11px] text-gray-400 tracking-widest">* 감사합니다 *</p>
-        <div
-          className="absolute bottom-0 left-0 w-full h-2 bg-gray-50"
-          style={{
-            backgroundImage: "radial-gradient(circle at 6px 8px, transparent 6px, #fffef8 6px)",
-            backgroundSize: "12px 8px",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
+export default function AdminReceiptsArchivePage() {
+  const router = useRouter()
+  const { user: authUser } = useAuth()
 
-export default function AdminReceiptsPage() {
-  const { internMeals } = ADMIN_DUMMY;
-  const [selectedReceipt, setSelectedReceipt] = useState<FlatReceipt | null>(null);
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+  const [receipts, setReceipts] = useState<ReceiptSummary[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const allReceipts: FlatReceipt[] = [];
-  internMeals.forEach((m) => {
-    m.receipts.forEach((r) => {
-      allReceipts.push({ ...r, internId: m.internId });
-    });
-  });
-  allReceipts.sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  const fetchReceipts = useCallback(async () => {
+    if (!authUser?.token) return
+    setLoading(true)
+    try {
+      const res = await fetch(
+        `/api/admin/meals/receipts?year=${year}&month=${month}`,
+        { headers: { Authorization: `Bearer ${authUser.token}` } }
+      )
+      if (res.ok) setReceipts(await res.json())
+    } finally {
+      setLoading(false)
+    }
+  }, [authUser?.token, year, month])
+
+  useEffect(() => { fetchReceipts() }, [fetchReceipts])
+
+  function prevMonth() {
+    if (month === 1) { setYear((y) => y - 1); setMonth(12) }
+    else setMonth((m) => m - 1)
+  }
+  function nextMonth() {
+    if (month === 12) { setYear((y) => y + 1); setMonth(1) }
+    else setMonth((m) => m + 1)
+  }
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
-      <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100 flex items-center gap-3">
-        <Link href="/admin/meals" className="text-gray-400 text-xl leading-none">‹</Link>
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">영수증 보관함</h1>
-          <p className="text-xs text-gray-400 mt-0.5">탭하면 영수증 사진 확인</p>
-        </div>
+      <header className="bg-white px-4 pt-5 pb-3 border-b border-gray-100 flex items-center gap-2">
+        <button
+          onClick={() => router.back()}
+          className="w-8 h-8 flex items-center justify-center text-gray-500 text-2xl leading-none"
+        >
+          ‹
+        </button>
+        <h1 className="text-lg font-bold text-gray-900">영수증 보관함</h1>
       </header>
 
-      <div className="px-4 pt-3">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          {allReceipts.map((r, i) => {
-            const [, m, d] = r.date.split("-");
-            return (
-              <button
-                key={r.id}
-                className={`flex items-center w-full px-4 py-3 text-left active:bg-gray-50 transition-colors ${
-                  i < allReceipts.length - 1 ? "border-b border-gray-50" : ""
-                }`}
-                onClick={() => setSelectedReceipt(r)}
-              >
-                <span className="text-xs text-gray-400 flex-shrink-0 w-[80px]">
-                  {parseInt(m)}/{parseInt(d)} {r.time}
-                </span>
-                <span className="text-sm font-medium text-gray-800 flex-1 truncate px-2">
-                  {r.store}
-                </span>
-                <span className="text-sm font-bold text-blue-500 flex-shrink-0">
-                  {r.amount.toLocaleString()}원
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100">
+        <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center text-gray-400 text-2xl leading-none">‹</button>
+        <span className="text-sm font-semibold text-gray-700">{year}년 {month}월</span>
+        <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center text-gray-400 text-2xl leading-none">›</button>
       </div>
 
-      {/* 영수증 사진 바텀시트 */}
-      {selectedReceipt !== null && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
-          onClick={() => setSelectedReceipt(null)}
-        >
-          <div
-            className="bg-gray-100 rounded-t-2xl w-full max-w-[390px] pb-10 max-h-[85vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-200 bg-white rounded-t-2xl flex-shrink-0">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">영수증 사진</h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {selectedReceipt.date.replace(/-/g, "/")} {selectedReceipt.time} · {selectedReceipt.store}
-                </p>
+      <div className="flex flex-col gap-2 px-4 pt-3">
+        {loading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl h-20 animate-pulse border border-gray-100" />
+          ))
+        ) : receipts.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-12">영수증이 없습니다</p>
+        ) : (
+          receipts.map((r) => {
+            const d = new Date(r.paid_at)
+            const dateStr = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+            return (
+              <div
+                key={r.id}
+                className="bg-white rounded-2xl px-4 py-3 border border-gray-100 shadow-sm flex items-center justify-between gap-3 cursor-pointer active:scale-[0.98] transition-all"
+                onClick={() => router.push(`/admin/meals/receipts/${r.id}`)}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-400">
+                    {dateStr} · {r.uploader_name}{r.extra_assignee_count > 0 ? ` 외 ${r.extra_assignee_count}명` : ""}
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900 mt-0.5 truncate">{r.store_name}</p>
+                  <span className={`text-xs ${STATUS_COLOR[r.status] ?? "text-gray-400"}`}>
+                    {STATUS_LABEL[r.status] ?? r.status}
+                  </span>
+                </div>
+                <div className="text-right shrink-0 flex items-center gap-2">
+                  <p className="text-base font-bold text-gray-800">{r.total_amount.toLocaleString()}원</p>
+                  <span className="text-gray-300 text-lg">›</span>
+                </div>
               </div>
-              <button onClick={() => setSelectedReceipt(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
-            </div>
-            <div className="overflow-y-auto flex-1 py-4">
-              <MockReceipt r={selectedReceipt} />
-            </div>
-          </div>
-        </div>
-      )}
+            )
+          })
+        )}
+      </div>
 
       <AdminBottomNav />
     </div>
-  );
+  )
 }

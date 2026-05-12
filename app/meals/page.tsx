@@ -4,7 +4,6 @@ import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import WeeklyReceiptList from "@/components/WeeklyReceiptList";
 import { getMealLimit } from "@/lib/holidays";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Check, X } from "lucide-react";
 
@@ -48,40 +47,12 @@ export default function MealsPage() {
 
   const fetchPending = useCallback(async () => {
     if (!user) return;
-    const { data: items } = await supabase
-      .from("receipt_items")
-      .select("id, item_name, price, receipt_id")
-      .eq("assigned_user_id", user.id)
-      .eq("status", "pending");
-
-    if (!items?.length) { setPendingItems([]); return; }
-
-    const receiptIds = [...new Set(items.map((i) => i.receipt_id))];
-    const { data: receiptRows } = await supabase
-      .from("receipts")
-      .select("id, store_name, paid_at, uploader_id")
-      .in("id", receiptIds);
-
-    const uploaderIds = [...new Set((receiptRows ?? []).map((r) => r.uploader_id))];
-    const { data: uploaderRows } = await supabase
-      .from("users")
-      .select("id, name")
-      .in("id", uploaderIds);
-
-    const combined: PendingItem[] = items.map((item) => {
-      const receipt = receiptRows?.find((r) => r.id === item.receipt_id);
-      const uploader = uploaderRows?.find((u) => u.id === receipt?.uploader_id);
-      return {
-        id: item.id,
-        item_name: item.item_name,
-        price: item.price,
-        receipt_id: item.receipt_id,
-        store_name: receipt?.store_name ?? "가맹점 미인식",
-        paid_at: receipt?.paid_at ?? "",
-        uploader_name: uploader?.name ?? "알 수 없음",
-      };
+    const res = await fetch("/api/meals/pending", {
+      headers: { Authorization: `Bearer ${user.token}` },
     });
-    setPendingItems(combined);
+    if (!res.ok) { setPendingItems([]); return; }
+    const data = await res.json();
+    setPendingItems(Array.isArray(data) ? data : []);
   }, [user]);
 
   useEffect(() => {
@@ -97,7 +68,7 @@ export default function MealsPage() {
       headers: { Authorization: `Bearer ${user.token}` },
     })
       .then((r) => r.json())
-      .then((rows: { id: string; store_name: string | null; paid_at: string; total_amount: number; status: string }[]) => {
+      .then((rows: { id: string; store_name: string | null; paid_at: string; my_amount: number; status: string }[]) => {
         if (!Array.isArray(rows)) return;
         setReceipts(rows.map((r) => {
           const dt = new Date(r.paid_at);
@@ -107,7 +78,7 @@ export default function MealsPage() {
             time: `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`,
             store: r.store_name ?? "가맹점 미인식",
             menu: "",
-            amount: r.total_amount ?? 0,
+            amount: r.my_amount ?? 0,
             status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
           };
         }));
@@ -249,16 +220,12 @@ export default function MealsPage() {
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
             <div className="px-5 pt-3 pb-6">
-              <p className="text-base font-bold text-gray-900 mb-1">승인 요청</p>
+              <p className="text-base font-bold text-gray-900 mb-1">{approvingItem.store_name}</p>
               <p className="text-xs text-gray-400 mb-5">
                 {approvingItem.uploader_name}님이 식대 승인을 요청했습니다
               </p>
 
               <div className="bg-gray-50 rounded-xl p-4 flex flex-col gap-2 mb-6">
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-400">식당</span>
-                  <span className="text-xs font-medium text-gray-700">{approvingItem.store_name}</span>
-                </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-gray-400">날짜</span>
                   <span className="text-xs font-medium text-gray-700">{formatDate(approvingItem.paid_at)}</span>

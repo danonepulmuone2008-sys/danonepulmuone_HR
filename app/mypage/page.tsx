@@ -159,11 +159,11 @@ const TimePicker = ({ time, onChange }: { time: string; onChange: (t: string) =>
 
         {/* 분 */}
         <div className="flex flex-col items-center">
-          <ArrowBtn onClick={() => setM(m + 5)} up />
+          <ArrowBtn onClick={() => setM(m + 1)} up />
           <span className="text-5xl font-bold w-20 text-center" style={{ color: BRAND_BLUE }}>
             {pad(m)}
           </span>
-          <ArrowBtn onClick={() => setM(m - 5)} up={false} />
+          <ArrowBtn onClick={() => setM(m - 1)} up={false} />
         </div>
       </div>
     </div>
@@ -238,20 +238,24 @@ export default function MyPage() {
 
   /* 프로필 */
   const [showEdit, setShowEdit] = useState(false);
+  const [toast, setToast] = useState("");
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
   const [form, setForm] = useState({ name: "", department: "", position: "", phone: "", email: "" });
   const [saved, setSaved] = useState({ ...form });
 
   useEffect(() => {
     if (!authUser) return;
-    const profile = {
-      name: authUser.name,
-      department: authUser.department,
-      position: authUser.position,
-      phone: authUser.phone,
-      email: authUser.email,
-    };
-    setForm(profile);
-    setSaved(profile);
+    supabase.from("users").select("name, department, position, phone").eq("id", authUser.id).single().then(({ data }) => {
+      const profile = {
+        name: data?.name ?? authUser.name,
+        department: data?.department ?? authUser.department,
+        position: data?.position || "인턴",
+        phone: data?.phone ?? authUser.phone,
+        email: authUser.email,
+      };
+      setForm(profile);
+      setSaved(profile);
+    });
   }, [authUser]);
 
   /* 로그아웃 확인 */
@@ -312,6 +316,47 @@ export default function MyPage() {
   const [mealAlarmTime, setMealAlarmTime] = useState("12:00");
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      setNotifPermission(Notification.permission);
+    }
+  }, []);
+
+  const subscribeToPush = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    try {
+      await navigator.serviceWorker.register("/sw.js");
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      const subscription = existing ?? await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      });
+      if (authUser) {
+        await supabase.from("push_subscriptions").upsert({
+          user_id: authUser.id,
+          subscription: JSON.parse(JSON.stringify(subscription)),
+        }, { onConflict: "user_id" });
+      }
+    } catch (e) {
+      console.warn("Push subscription failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (notifPermission === "granted" && authUser) {
+      subscribeToPush();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifPermission, authUser]);
+
+  const requestNotifPermission = async () => {
+    const result = await Notification.requestPermission();
+    setNotifPermission(result);
+  };
+
   useEffect(() => {
     const fetchAlarm = async () => {
       if (!authUser) return;
@@ -361,12 +406,17 @@ export default function MyPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
+      {toast && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className="flex items-center gap-2 bg-white text-gray-800 text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-100">
+            <span className="text-green-500 text-base">✓</span>
+            {toast}
+          </div>
+        </div>
+      )}
 
       {/* 헤더 */}
-      <header
-        className="flex-shrink-0 px-5 pt-10 pb-4"
-        style={{ background: `linear-gradient(135deg, ${BRAND_BLUE} 0%, #3D8520 100%)` }}
-      >
+      <header className="flex-shrink-0 px-5 pt-10 pb-4 bg-blue-600">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-xl font-bold shadow" style={{ color: BRAND_BLUE }}>
             {saved.name[0]}
@@ -392,6 +442,18 @@ export default function MyPage() {
         {/* 알림 설정 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
           <SectionLabel Icon={Bell} label="알림 설정" color={BRAND_BLUE} />
+          {notifPermission === "default" && (
+            <div className="border-t border-gray-50 px-4 py-3 flex items-center justify-between">
+              <p className="text-sm text-gray-500">알림을 받으려면 허용이 필요해요</p>
+              <button
+                onClick={requestNotifPermission}
+                className="text-xs font-semibold px-3 py-1.5 rounded-full text-white"
+                style={{ background: BRAND_BLUE }}
+              >
+                알림 허용
+              </button>
+            </div>
+          )}
           <AlarmRow Icon={AlarmClock} label="근태" on={alarmOn} time={alarmTime} days={alarmDays} onToggle={() => setAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("근태")} />
           <AlarmRow Icon={Utensils} label="식대" on={mealAlarmOn} time={mealAlarmTime} days={mealAlarmDays} onToggle={() => setMealAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("식대")} />
         </section>
@@ -410,8 +472,8 @@ export default function MyPage() {
 
         {/* 로그아웃 + 회원탈퇴 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
-          <MenuItem Icon={LogOut} label="로그아웃" danger onClick={() => setShowLogout(true)} />
-          <MenuItem Icon={Trash2} label="회원 탈퇴" danger onClick={() => setShowWithdraw(true)} />
+          <MenuItem Icon={LogOut} label="로그아웃" onClick={() => setShowLogout(true)} />
+          <MenuItem Icon={Trash2} label="회원탈퇴" onClick={() => setShowWithdraw(true)} />
         </section>
 
       </div>
@@ -454,9 +516,10 @@ export default function MyPage() {
               <button
                 onClick={async () => {
                   if (!authUser) return;
-                  await supabase.from("users").upsert({ id: authUser.id, ...form });
+                  await supabase.from("users").update({ name: form.name, department: form.department, position: form.position, phone: form.phone }).eq("id", authUser.id);
                   setSaved({ ...form });
                   setShowEdit(false);
+                  showToast("프로필이 수정되었습니다.");
                 }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: BRAND_BLUE }}

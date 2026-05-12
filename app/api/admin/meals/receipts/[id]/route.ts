@@ -1,0 +1,130 @@
+import { NextResponse } from "next/server"
+import { supabase, supabaseAdmin } from "@/lib/supabase"
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const { data: receipt, error: receiptError } = await supabaseAdmin
+      .from("receipts")
+      .select("id, store_name, paid_at, total_amount, status, uploader_id, image_path")
+      .eq("id", id)
+      .single()
+
+    if (receiptError) throw receiptError
+    if (!receipt) return NextResponse.json({ error: "영수증을 찾을 수 없습니다" }, { status: 404 })
+
+    const { data: items, error: itemsError } = await supabaseAdmin
+      .from("receipt_items")
+      .select("id, item_name, unit_price, qty, price, assigned_user_id, status")
+      .eq("receipt_id", id)
+
+    if (itemsError) throw itemsError
+
+    const allUserIds = [
+      receipt.uploader_id,
+      ...((items ?? []).map((i) => i.assigned_user_id).filter(Boolean)),
+    ]
+    const uniqueIds = [...new Set(allUserIds)]
+    let userMap: Record<string, string> = {}
+    if (uniqueIds.length > 0) {
+      const { data: users } = await supabaseAdmin
+        .from("users").select("id, name").in("id", uniqueIds)
+      userMap = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]))
+    }
+
+    return NextResponse.json({
+      ...receipt,
+      uploader_name: userMap[receipt.uploader_id] ?? "알 수 없음",
+      items: (items ?? []).map((i) => ({
+        ...i,
+        assignee_name: userMap[i.assigned_user_id] ?? "알 수 없음",
+      })),
+    })
+  } catch (err) {
+    console.error("[admin/meals/receipts/[id] GET]", err)
+    return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+const { userId, totalAmount, itemId, price } = await req.json()
+
+if (itemId) {
+  if (typeof price !== "number" || price < 0) {
+    return NextResponse.json({ error: "올바른 금액을 입력해주세요" }, { status: 400 })
+  }
+
+  const { error } = await supabaseAdmin
+    .from("receipt_items")
+    .update({ price })
+    .eq("id", itemId)
+    .eq("receipt_id", id)
+
+  if (error) throw error
+
+  return NextResponse.json({ success: true })
+}
+
+if (!userId || typeof totalAmount !== "number" || totalAmount < 0) {
+  return NextResponse.json({ error: "올바른 값을 입력해주세요" }, { status: 400 })
+}
+
+    // 해당 영수증에서 이 유저에게 배정된 항목 조회
+    const { data: items, error: fetchError } = await supabaseAdmin
+      .from("receipt_items")
+      .select("id, price")
+      .eq("receipt_id", id)
+      .eq("assigned_user_id", userId)
+
+    if (fetchError) throw fetchError
+    if (!items || items.length === 0) {
+      return NextResponse.json({ error: "해당 항목이 없습니다" }, { status: 404 })
+    }
+
+    if (items.length === 1) {
+      // 항목이 1개면 직접 업데이트
+      const { error } = await supabaseAdmin
+        .from("receipt_items")
+        .update({ price: totalAmount })
+        .eq("id", items[0].id)
+      if (error) throw error
+    } else {
+      // 항목이 여러 개면 현재 비율 유지하며 분배
+      const currentTotal = items.reduce((s, i) => s + (i.price ?? 0), 0)
+      for (const item of items) {
+        const ratio    = currentTotal > 0 ? (item.price ?? 0) / currentTotal : 1 / items.length
+        const newPrice = Math.round(totalAmount * ratio)
+        const { error } = await supabaseAdmin
+          .from("receipt_items")
+          .update({ price: newPrice })
+          .eq("id", item.id)
+        if (error) throw error
+      }
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error("[admin/meals/receipts PATCH]", err)
+    return NextResponse.json({ error: "수정에 실패했습니다" }, { status: 500 })
+  }
+}

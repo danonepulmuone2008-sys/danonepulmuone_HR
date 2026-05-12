@@ -1,58 +1,92 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { ADMIN_DUMMY } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
-const CATEGORY_COLOR: Record<string, string> = {
-  "출퇴근 시간 수정": "bg-green-100 text-green-700",
-  "휴가/출장 신청": "bg-teal-100 text-teal-700",
-  "식대 수정": "bg-emerald-100 text-emerald-700",
-  "기타 문의": "bg-lime-50 text-lime-600",
-};
-
-const INTERN_COLORS = ["bg-blue-500", "bg-green-500", "bg-orange-400", "bg-purple-500", "bg-pink-500"];
+const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
 
 type InquiryStatus = { id: string; isNew: boolean; isProcessed: boolean };
 
-export default function AdminInquiryPage() {
-  const { interns } = ADMIN_DUMMY;
+type InquiryItem = {
+  id: string;
+  category: string;
+  subject: string;
+  internId: string;
+  senderName: string;
+  content: string;
+  date: string;
+  time: string;
+  isRead: boolean;
+};
 
-  // isNew = 아직 클릭 안 한 새 문의 (N 뱃지)
-  // isProcessed = 처리 완료 버튼 눌렀을 때
-  const [statuses, setStatuses] = useState<InquiryStatus[]>(
-    ADMIN_DUMMY.inquiries.map((q) => ({
-      id: q.id,
-      isNew: !q.isRead,
-      isProcessed: q.isRead,
-    }))
-  );
+export default function AdminInquiryPage() {
+  const [inquiryItems, setInquiryItems] = useState<InquiryItem[]>([]);
+  const [statuses, setStatuses] = useState<InquiryStatus[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"미처리" | "처리완료">("미처리");
 
-  const inquiries = ADMIN_DUMMY.inquiries.map((q) => {
-    const s = statuses.find((s) => s.id === q.id)!;
+  useEffect(() => {
+    const fetchInquiries = async () => {
+      const { data } = await supabase
+        .from("inquiries")
+        .select("id, user_id, subject, content, created_at, is_processed, is_read")
+        .order("created_at", { ascending: false });
+
+      if (data) {
+        const userIds = [...new Set(data.map((d: any) => d.user_id).filter(Boolean))];
+        const { data: users } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", userIds);
+        const userMap: Record<string, string> = {};
+        (users ?? []).forEach((u: any) => { userMap[u.id] = u.name; });
+
+        const items: InquiryItem[] = data.map((d: any) => ({
+          id: d.id,
+          category: "기타 문의",
+          subject: d.subject ?? "",
+          internId: d.user_id ?? "",
+          senderName: userMap[d.user_id] ?? "알 수 없음",
+          content: d.content ?? "",
+          date: (() => { const dt = new Date(d.created_at); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`; })(),
+          time: (() => { const dt = new Date(d.created_at); return `${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`; })(),
+          isRead: false,
+        }));
+        setInquiryItems(items);
+        setStatuses(items.map((q, i) => ({
+          id: q.id,
+          isNew: !(data[i].is_read ?? false),
+          isProcessed: data[i].is_processed ?? false,
+        })));
+      }
+    };
+    fetchInquiries();
+  }, []);
+
+  const internColor = (internId: string) => {
+    const hash = internId.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    return INTERN_HEX[hash % INTERN_HEX.length];
+  };
+
+  const inquiries = inquiryItems.map((q) => {
+    const s = statuses.find((s) => s.id === q.id) ?? { isNew: true, isProcessed: false };
     return { ...q, isNew: s.isNew, isProcessed: s.isProcessed };
   });
 
-  const internColor = (internId: string) => {
-    const idx = interns.findIndex((i) => i.id === internId);
-    return INTERN_COLORS[idx] ?? "bg-gray-400";
-  };
-
-  // 카드 클릭: N 뱃지만 제거 (미처리 유지) + 상세 열기
-  const openInquiry = (id: string) => {
+  const openInquiry = async (id: string) => {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false } : s));
     setSelectedId(id);
+    await supabase.from("inquiries").update({ is_read: true }).eq("id", id);
   };
 
-  // 처리 완료 버튼: 처리완료로 이동
-  const processInquiry = (id: string) => {
+  const processInquiry = async (id: string) => {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false, isProcessed: true } : s));
     setSelectedId(null);
+    window.dispatchEvent(new CustomEvent("inquiryProcessed"));
+    await supabase.from("inquiries").update({ is_processed: true }).eq("id", id);
   };
 
-  const newCount = inquiries.filter((q) => q.isNew).length;
   const unprocCount = inquiries.filter((q) => !q.isProcessed).length;
   const procCount = inquiries.filter((q) => q.isProcessed).length;
   const filtered = inquiries.filter((q) => activeTab === "미처리" ? !q.isProcessed : q.isProcessed);
@@ -63,9 +97,9 @@ export default function AdminInquiryPage() {
       <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-bold text-gray-900">문의함</h1>
-          {newCount > 0 && (
+          {unprocCount > 0 && (
             <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-              {newCount}
+              {unprocCount}
             </span>
           )}
         </div>
@@ -106,7 +140,6 @@ export default function AdminInquiryPage() {
               className="relative bg-white rounded-2xl shadow-sm border border-gray-100 cursor-pointer active:scale-[0.98] transition-all overflow-visible"
               onClick={() => openInquiry(q.id)}
             >
-              {/* N 뱃지: 새 문의만 표시 */}
               {q.isNew && (
                 <div className="absolute -top-px -left-px bg-red-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-tl-2xl rounded-br-xl z-10 leading-none pointer-events-none">
                   N
@@ -115,23 +148,16 @@ export default function AdminInquiryPage() {
 
               <div className="px-4 pt-3.5 pb-2">
                 <div className="flex items-start gap-3">
-                  {/* 왼쪽 */}
                   <div className="flex-1 min-w-0">
-                    <div className="mb-1">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[q.category] ?? "bg-gray-100 text-gray-500"}`}>
-                        {q.category}
-                      </span>
-                    </div>
                     <p className="text-sm font-semibold text-gray-900 truncate mb-1">{q.subject}</p>
                     <div className="flex items-center gap-1.5 mb-1">
-                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 ${internColor(q.internId)}`}>
+                      <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0" style={{ backgroundColor: internColor(q.internId) }}>
                         {q.senderName.slice(0, 1)}
                       </div>
                       <span className="text-xs text-gray-500">{q.senderName}</span>
                     </div>
                     <p className="text-xs text-gray-400 line-clamp-1">{q.content}</p>
                   </div>
-                  {/* 오른쪽 */}
                   <div className="flex flex-col items-end flex-shrink-0 gap-1 pt-0.5">
                     <p className="text-[11px] text-gray-400 whitespace-nowrap">
                       {q.date.slice(5).replace("-", "/")} {q.time}
@@ -139,7 +165,6 @@ export default function AdminInquiryPage() {
                   </div>
                 </div>
               </div>
-
             </div>
           ))
         )}
@@ -152,19 +177,14 @@ export default function AdminInquiryPage() {
           onClick={() => setSelectedId(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-24"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-gray-100 gap-3">
               <div className="flex-1 min-w-0">
-                <div className="mb-1.5">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[selected.category] ?? "bg-gray-100 text-gray-500"}`}>
-                    {selected.category}
-                  </span>
-                </div>
                 <h3 className="text-base font-bold text-gray-900">{selected.subject}</h3>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <div className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 ${internColor(selected.internId)}`}>
+                  <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0" style={{ backgroundColor: internColor(selected.internId) }}>
                     {selected.senderName.slice(0, 1)}
                   </div>
                   <p className="text-xs text-gray-400">
@@ -180,7 +200,6 @@ export default function AdminInquiryPage() {
             <div className="px-5 pt-5 pb-4">
               <p className="text-sm text-gray-700 leading-relaxed">{selected.content}</p>
             </div>
-            {/* 바텀시트 내 처리 완료 버튼 */}
             {!selected.isProcessed && (
               <div className="px-5 pb-2">
                 <button
