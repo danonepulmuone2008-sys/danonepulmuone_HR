@@ -46,19 +46,12 @@ type User = {
   email: string;
 };
 
-type AttendanceRecord = {
-  user_id: string;
-  date: string;
-  clock_in: string | null;
-  clock_out: string | null;
-  lunch_break: boolean | null;
-};
 
 export default function AdminHomePage() {
   const router = useRouter();
 
   const [users, setUsers] = useState<User[]>([]);
-  const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord[]>([]);
+  const [todayStatusMap, setTodayStatusMap] = useState<Record<string, "출근" | "퇴근">>({});
   const [showLogout, setShowLogout] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState(getTodayStr());
@@ -79,26 +72,35 @@ export default function AdminHomePage() {
   }
 
   async function fetchTodayAttendance() {
-    const { data } = await supabase
-      .from("attendance_records")
-      .select("user_id, date, clock_in, clock_out, lunch_break")
-      .eq("date", getTodayStr());
-    if (data) setTodayAttendance(data);
+    const res = await fetch("/api/admin/attendance/today");
+    const json = await res.json();
+    if (json.statusMap) setTodayStatusMap(json.statusMap);
   }
 
   function getAttendanceStatus(userId: string): "출근" | "퇴근" | null {
-    const record = todayAttendance.find((r) => r.user_id === userId);
-    if (!record || !record.clock_in) return null;
-    return record.clock_out ? "퇴근" : "출근";
+    return todayStatusMap[userId] ?? null;
   }
 
   function openEdit(userId: string) {
-    const record = todayAttendance.find((r) => r.user_id === userId);
-    setEditDate(getTodayStr());
-    setEditCheckIn(record?.clock_in ? toTimeStr(record.clock_in) : "");
-    setEditCheckOut(record?.clock_out ? toTimeStr(record.clock_out) : "");
-    setEditLunchBreak(record?.lunch_break ?? true);
+    const today = getTodayStr();
+    setEditDate(today);
+    setEditCheckIn("");
+    setEditCheckOut("");
+    setEditLunchBreak(true);
     setEditUserId(userId);
+    supabase
+      .from("attendance_records")
+      .select("clock_in, clock_out, lunch_break")
+      .eq("user_id", userId)
+      .eq("date", today)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setEditCheckIn(data.clock_in ? toTimeStr(data.clock_in) : "");
+          setEditCheckOut(data.clock_out ? toTimeStr(data.clock_out) : "");
+          setEditLunchBreak(data.lunch_break ?? true);
+        }
+      });
   }
 
   async function handleDateChange(date: string) {
@@ -185,6 +187,8 @@ export default function AdminHomePage() {
                   <span
                     className={`text-sm font-semibold px-3 py-1.5 rounded-full ${
                       status === "출근"
+                        ? "bg-orange-100 text-orange-500"
+                        : status === "퇴근"
                         ? "bg-green-100 text-green-700"
                         : "bg-gray-100 text-gray-500"
                     }`}
