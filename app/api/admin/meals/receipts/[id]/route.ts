@@ -67,10 +67,27 @@ export async function PATCH(
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const { userId, totalAmount } = await req.json()
-    if (!userId || typeof totalAmount !== "number" || totalAmount < 0) {
-      return NextResponse.json({ error: "올바른 값을 입력해주세요" }, { status: 400 })
-    }
+const { userId, totalAmount, itemId, price } = await req.json()
+
+if (itemId) {
+  if (typeof price !== "number" || price < 0) {
+    return NextResponse.json({ error: "올바른 금액을 입력해주세요" }, { status: 400 })
+  }
+
+  const { error } = await supabaseAdmin
+    .from("receipt_items")
+    .update({ price })
+    .eq("id", itemId)
+    .eq("receipt_id", id)
+
+  if (error) throw error
+
+  return NextResponse.json({ success: true })
+}
+
+if (!userId || typeof totalAmount !== "number" || totalAmount < 0) {
+  return NextResponse.json({ error: "올바른 값을 입력해주세요" }, { status: 400 })
+}
 
     // 해당 영수증에서 이 유저에게 배정된 항목 조회
     const { data: items, error: fetchError } = await supabaseAdmin
