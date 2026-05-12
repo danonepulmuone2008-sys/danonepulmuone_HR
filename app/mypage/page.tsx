@@ -245,13 +245,13 @@ export default function MyPage() {
 
   useEffect(() => {
     if (!authUser) return;
-    supabase.from("users").select("name, department, position, phone").eq("id", authUser.id).single().then(({ data }) => {
+    supabase.from("users").select("name, department, position, phone, email").eq("id", authUser.id).single().then(({ data }) => {
       const profile = {
         name: data?.name ?? authUser.name,
         department: data?.department ?? authUser.department,
         position: data?.position || "인턴",
         phone: data?.phone ?? authUser.phone,
-        email: authUser.email,
+        email: data?.email ?? authUser.email,
       };
       setForm(profile);
       setSaved(profile);
@@ -293,8 +293,6 @@ export default function MyPage() {
     if (authUser) {
       await supabase.from("inquiries").insert({ user_id: authUser.id, subject: inquiry.subject, content: inquiry.content });
     }
-    const mailto = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(`[인턴 문의] ${inquiry.subject}`)}&body=${encodeURIComponent(`보내는 사람: ${saved.name} (${saved.department} · ${saved.position})\n\n${inquiry.content}`)}`;
-    window.location.href = mailto;
     setInquirySent(true);
   };
 
@@ -652,9 +650,6 @@ export default function MyPage() {
               <div className="flex flex-col items-center py-10 px-5 gap-3">
                 <span className="text-4xl">✅</span>
                 <p className="text-base font-bold text-gray-800">문의가 전송되었습니다</p>
-                <p className="text-xs text-gray-400 text-center">
-                  관리자가 확인 후 등록된 이메일로<br />답변 드릴 예정입니다.
-                </p>
                 <button
                   onClick={closeInquiry}
                   className="mt-4 w-full py-3 rounded-xl text-white font-semibold text-sm"
