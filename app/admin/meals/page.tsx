@@ -5,6 +5,12 @@ import Link from "next/link";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { getMonthlyBusinessDays } from "@/lib/holidays";
 import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
+
+async function getToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? "";
+}
 
 const now = new Date();
 const year = now.getFullYear();
@@ -63,48 +69,52 @@ export default function AdminMealsPage() {
   const [savingLimit, setSavingLimit] = useState(false);
 
   const fetchLimit = useCallback(async () => {
-    if (!authUser?.token) return;
+    const token = await getToken();
+    if (!token) return;
     setLimitLoading(true);
     try {
       const res = await fetch(`/api/admin/meals/limit?year=${year}&month=${month}`, {
-        headers: { Authorization: `Bearer ${authUser.token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setLimitInfo(await res.json());
     } finally {
       setLimitLoading(false);
     }
-  }, [authUser?.token]);
+  }, []);
 
   useEffect(() => {
-    if (!authUser?.token) return;
+    if (!authUser) return;
     fetchLimit();
     (async () => {
       setUsersLoading(true);
       try {
+        const token = await getToken();
+        if (!token) return;
         const res = await fetch(`/api/admin/users?year=${year}&month=${month}`, {
-          headers: { Authorization: `Bearer ${authUser.token}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) setUsers(await res.json());
       } finally {
         setUsersLoading(false);
       }
     })();
-  }, [authUser?.token, fetchLimit]);
+  }, [authUser?.id, fetchLimit]);
 
   const fetchReceipts = useCallback(async (userId: string) => {
-    if (!authUser?.token) return;
+    const token = await getToken();
+    if (!token) return;
     setReceiptsLoading(true);
     setReceipts([]);
     try {
       const res = await fetch(
         `/api/admin/meals/receipts?userId=${userId}&year=${year}&month=${month}`,
-        { headers: { Authorization: `Bearer ${authUser.token}` } }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.ok) setReceipts(await res.json());
     } finally {
       setReceiptsLoading(false);
     }
-  }, [authUser?.token]);
+  }, []);
 
   function openSheet(userId: string) {
     setSelectedUserId(userId);
@@ -131,13 +141,14 @@ export default function AdminMealsPage() {
   async function saveAmount(receiptId: string) {
     const amount = Number(editValue.replace(/,/g, ""));
     if (isNaN(amount) || amount < 0) return;
-    if (!authUser?.token) return;
+    const token = await getToken();
+    if (!token) return;
     setSavingId(receiptId);
     try {
       const res = await fetch(`/api/admin/meals/receipts/${receiptId}`, {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${authUser.token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ userId: selectedUserId, totalAmount: amount }),
@@ -170,7 +181,8 @@ export default function AdminMealsPage() {
   }
 
   async function saveLimit() {
-    if (!authUser?.token) return;
+    const token = await getToken();
+    if (!token) return;
     const dailyLimit   = Number(editDailyLimit);
     const businessDays = Number(editBusinessDays);
     const holidayCount = Number(editHolidayCount) || 0;
@@ -180,7 +192,7 @@ export default function AdminMealsPage() {
       const res = await fetch("/api/admin/meals/limit", {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${authUser.token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ year, month, dailyLimit, businessDays, holidayCount }),
