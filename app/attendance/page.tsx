@@ -154,19 +154,20 @@ export default function AttendancePage() {
 
     const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status")
-        .eq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
+        .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
-        .eq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
+        .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("vacation_requests").select("id, user_id, type, start_date, end_date, status")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("business_trip_requests").select("id, user_id, destination, start_date, end_date, status")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
-      supabase.from("users").select("id, name"),
+      supabase.from("users").select("id, name").eq("is_active", true),
     ]);
 
     const nameMap = Object.fromEntries((usersRes.data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
+    const activeIds = new Set(Object.keys(nameMap));
 
     const map: Record<number, CalEvent[]> = {};
     myVacRes.data?.forEach(v => {
@@ -190,7 +191,7 @@ export default function AttendancePage() {
     setEventMap(map);
 
     const newTeamMap: Record<number, TeamCalEntry[]> = {};
-    allVacRes.data?.forEach(v => {
+    allVacRes.data?.filter(v => activeIds.has(v.user_id)).forEach(v => {
       const name = nameMap[v.user_id] ?? "팀원";
       for (let d = new Date(v.start_date + "T00:00:00"); d <= new Date(v.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
@@ -200,7 +201,7 @@ export default function AttendancePage() {
         }
       }
     });
-    allTripRes.data?.forEach(t => {
+    allTripRes.data?.filter(t => activeIds.has(t.user_id)).forEach(t => {
       const name = nameMap[t.user_id] ?? "팀원";
       for (let d = new Date(t.start_date + "T00:00:00"); d <= new Date(t.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
@@ -213,7 +214,7 @@ export default function AttendancePage() {
     setTeamMap(newTeamMap);
 
     const newFlexMap: Record<number, FlexEntry[]> = {};
-    flexRes.data?.forEach(f => {
+    flexRes.data?.filter(f => activeIds.has(f.user_id)).forEach(f => {
       const day = parseInt(f.date.split("-")[2]);
       if (!newFlexMap[day]) newFlexMap[day] = [];
       newFlexMap[day].push({ id: f.id, userId: f.user_id, userName: f.user_name, startTime: f.start_time, endTime: f.end_time });

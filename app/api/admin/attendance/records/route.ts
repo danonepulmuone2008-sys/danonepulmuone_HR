@@ -32,6 +32,7 @@ export async function GET(req: Request) {
       .from("users")
       .select("id, name")
       .neq("role", "admin")
+      .eq("is_active", true)
       .order("name", { ascending: true })
 
     if (usersError) throw new Error(usersError.message)

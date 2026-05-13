@@ -1,22 +1,23 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 
-const ADMIN_EMAIL = "danone.hradmin@pulmuone.com";
-
 export async function GET() {
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("id, name, email, phone")
+      .neq("role", "admin")
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+
     if (error) throw new Error(error.message);
 
-    const interns = (data.users ?? [])
-      .filter((u) => u.email !== ADMIN_EMAIL)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .map((u) => ({
-        id: u.id,
-        name: (u.user_metadata?.name ?? u.user_metadata?.full_name ?? u.email ?? ""),
-        email: u.email ?? "",
-        phone: u.user_metadata?.phone ?? u.phone ?? "",
-      }));
+    const interns = (data ?? []).map((u) => ({
+      id: u.id,
+      name: u.name ?? "",
+      email: u.email ?? "",
+      phone: u.phone ?? "",
+    }));
 
     return NextResponse.json({ interns });
   } catch (err) {
