@@ -113,7 +113,6 @@ export default function AdminMealsPage() {
   const [showLimitEdit, setShowLimitEdit] = useState(false);
   const [editDailyLimit, setEditDailyLimit] = useState("");
   const [editBusinessDays, setEditBusinessDays] = useState("");
-  const [editHolidayCount, setEditHolidayCount] = useState("");
   const [savingLimit, setSavingLimit] = useState(false);
 
   const fetchLimit = useCallback(async () => {
@@ -255,7 +254,6 @@ async function saveItemAmount(receiptId: string, itemId: string) {
     if (!limitInfo) return;
     setEditDailyLimit(String(limitInfo.dailyLimit));
     setEditBusinessDays(String(limitInfo.businessDays));
-    setEditHolidayCount(String(limitInfo.holidayCount));
     setShowLimitEdit(true);
   }
 
@@ -264,7 +262,6 @@ async function saveItemAmount(receiptId: string, itemId: string) {
     if (!token) return;
     const dailyLimit   = Number(editDailyLimit);
     const businessDays = Number(editBusinessDays);
-    const holidayCount = Number(editHolidayCount) || 0;
     if (!dailyLimit || !businessDays) return;
     setSavingLimit(true);
     try {
@@ -274,7 +271,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ year: viewYear, month: viewMonth, dailyLimit, businessDays, holidayCount }),
+        body: JSON.stringify({ year: viewYear, month: viewMonth, dailyLimit, businessDays }),
       });
       if (!res.ok) return;
       await fetchLimit();
@@ -338,7 +335,6 @@ async function saveItemAmount(receiptId: string, itemId: string) {
               {limitInfo && (
                 <p className="text-xs text-gray-400 mt-0.5">
                   {limitInfo.dailyLimit.toLocaleString()}원 × {limitInfo.businessDays}일
-                  {limitInfo.holidayCount > 0 && ` (공휴일 ${limitInfo.holidayCount}일 제외)`}
                 </p>
               )}
             </div>
@@ -635,34 +631,18 @@ async function saveItemAmount(receiptId: string, itemId: string) {
                 </div>
               </div>
 
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">영업일 수</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={editBusinessDays}
-                      onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditBusinessDays(e.target.value); } }}
-                      className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
-                      placeholder={String(getMonthlyBusinessDays(viewYear, viewMonth))}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">공휴일 수</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={editHolidayCount}
-                      onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditHolidayCount(e.target.value); } }}
-                      className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
-                      placeholder="0"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
-                  </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">영업일 수</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={editBusinessDays}
+                    onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditBusinessDays(e.target.value); } }}
+                    className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
+                    placeholder={String(getMonthlyBusinessDays(viewYear, viewMonth))}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
                 </div>
               </div>
 

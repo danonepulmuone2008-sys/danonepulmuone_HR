@@ -262,23 +262,14 @@ export default function MyPage() {
   const [showLogout, setShowLogout] = useState(false);
 
   /* 회원 탈퇴 */
-  const WITHDRAW_REASONS = [
-    "인턴 기간이 종료되어서",
-    "서비스 이용이 불편해서",
-    "개인정보 보호를 위해",
-    "더 이상 이용하지 않아서",
-    "기타",
-  ];
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawStep, setWithdrawStep] = useState(1);
-  const [withdrawReason, setWithdrawReason] = useState("");
   const [withdrawAgree, setWithdrawAgree] = useState(false);
   const [withdrawPw, setWithdrawPw] = useState("");
 
   const closeWithdraw = () => {
     setShowWithdraw(false);
     setWithdrawStep(1);
-    setWithdrawReason("");
     setWithdrawAgree(false);
     setWithdrawPw("");
   };
@@ -546,7 +537,7 @@ export default function MyPage() {
               <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">새 비밀번호 조건</p>
                 {[
-                  { label: "9자 이상",   met: pw.next.length >= 9 },
+                  { label: "6자 이상",   met: pw.next.length >= 6 },
                   { label: "영문자 포함", met: /[a-zA-Z]/.test(pw.next) },
                   { label: "숫자 포함",  met: /[0-9]/.test(pw.next) },
                 ].map(({ label, met }) => (
@@ -587,7 +578,7 @@ export default function MyPage() {
                   setShowPwChange(false);
                 }}
                 disabled={
-                  !pw.current || pw.next.length < 9 ||
+                  !pw.current || pw.next.length < 6 ||
                   !/[a-zA-Z]/.test(pw.next) || !/[0-9]/.test(pw.next) ||
                   pw.next !== pw.confirm
                 }
@@ -717,10 +708,10 @@ export default function MyPage() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-                  {withdrawStep} / 3
+                  {withdrawStep} / 2
                 </span>
                 <p className="text-base font-bold text-gray-800">
-                  {withdrawStep === 1 ? "탈퇴 안내" : withdrawStep === 2 ? "탈퇴 사유" : "최종 확인"}
+                  {withdrawStep === 1 ? "탈퇴 안내" : "최종 확인"}
                 </p>
               </div>
               <button onClick={closeWithdraw} className="text-gray-400 text-xl leading-none">✕</button>
@@ -776,47 +767,8 @@ export default function MyPage() {
               </>
             )}
 
-            {/* ── STEP 2: 탈퇴 사유 ── */}
+            {/* ── STEP 2: 최종 확인 ── */}
             {withdrawStep === 2 && (
-              <>
-                <div className="px-5 py-4 flex flex-col gap-2">
-                  <p className="text-xs text-gray-400 mb-1">탈퇴 사유를 선택해주세요 (선택)</p>
-                  {WITHDRAW_REASONS.map((reason) => (
-                    <button
-                      key={reason}
-                      onClick={() => setWithdrawReason(reason)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left"
-                      style={{
-                        borderColor: withdrawReason === reason ? "#EF4444" : "#E5E7EB",
-                        background: withdrawReason === reason ? "#FEF2F2" : "#fff",
-                      }}
-                    >
-                      <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                        style={{ borderColor: withdrawReason === reason ? "#EF4444" : "#D1D5DB" }}>
-                        {withdrawReason === reason && (
-                          <span className="w-2 h-2 rounded-full" style={{ background: "#EF4444" }} />
-                        )}
-                      </span>
-                      <span className="text-sm text-gray-700">{reason}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="px-5 pb-8 flex gap-3">
-                  <button onClick={() => setWithdrawStep(1)}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold border border-gray-200 text-gray-500">
-                    이전
-                  </button>
-                  <button onClick={() => setWithdrawStep(3)}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
-                    style={{ background: "#EF4444" }}>
-                    다음
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── STEP 3: 최종 확인 ── */}
-            {withdrawStep === 3 && (
               <>
                 <div className="px-5 py-4 flex flex-col gap-4">
                   <div>

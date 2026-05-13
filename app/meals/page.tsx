@@ -33,6 +33,7 @@ export default function MealsPage() {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
+
   const [totalLimit, setTotalLimit] = useState(0);
   const [mealUsed, setMealUsed] = useState(0);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -55,6 +56,13 @@ export default function MealsPage() {
 
   useEffect(() => {
     if (!user) return;
+    fetch("/api/meals/limit", {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => { if (data.monthlyLimit !== undefined) setTotalLimit(data.monthlyLimit); })
+      .catch(() => {});
+
     fetch("/api/meals/usage", {
       headers: { Authorization: `Bearer ${user.token}` },
     })
