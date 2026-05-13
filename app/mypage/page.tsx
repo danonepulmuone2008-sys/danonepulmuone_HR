@@ -726,7 +726,7 @@ export default function MyPage() {
                     <span className="text-lg mt-0.5">🔒</span>
                     <p className="text-xs text-orange-500 font-medium leading-relaxed">
                       탈퇴 시 계정이 <span className="font-bold">즉시 비활성화</span>되어 로그인이 불가능해집니다.<br />
-                      단, 데이터는 <span className="font-bold">1년간 보관</span>되며 관리자를 통해 복구 요청이 가능합니다.
+                      단, 데이터는 <span className="font-bold">3년간 보관</span>되며 관리자를 통해 복구 요청이 가능합니다.
                     </p>
                   </div>
                   {/* 비활성화 항목 */}
@@ -741,7 +741,7 @@ export default function MyPage() {
                   </div>
                   {/* 보관 항목 */}
                   <div className="flex flex-col gap-1.5">
-                    <p className="text-xs font-semibold text-gray-500">1년간 보관 후 완전 삭제 (복구 가능)</p>
+                    <p className="text-xs font-semibold text-gray-500">3년간 보관 후 완전 삭제 (복구 가능)</p>
                     {["프로필 및 계정 정보", "근태 기록 전체", "식대 사용 내역"].map((item) => (
                       <div key={item} className="flex items-center gap-2">
                         <span className="text-xs" style={{ color: BRAND_GREEN }}>●</span>
@@ -790,7 +790,7 @@ export default function MyPage() {
                       {withdrawAgree && <span className="text-white text-xs font-bold">✓</span>}
                     </span>
                     <span className="text-xs text-gray-500 leading-relaxed">
-                      탈퇴 시 계정이 비활성화되며, 데이터는 1년간 보관 후 완전 삭제됨을 확인했습니다.
+                      탈퇴 시 계정이 비활성화되며, 데이터는 3년간 보관 후 완전 삭제됨을 확인했습니다.
                     </span>
                   </button>
                 </div>
