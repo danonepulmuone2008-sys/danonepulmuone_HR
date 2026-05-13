@@ -582,7 +582,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
         </div>
 
         <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-500">내 담당 합계</span>
+          <span className="text-xs font-medium text-gray-500">담당 합계</span>
           <span className="text-sm font-bold text-green-600">
             {r.my_amount.toLocaleString()}원
           </span>
