@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { data: receipt, error: receiptError } = await supabaseAdmin
       .from("receipts")
-      .select("id, store_name, paid_at, total_amount, is_lunch_time, status, image_path, uploader_id")
+      .select("id, store_name, paid_at, total_amount, is_lunch_time, status, source, image_path, uploader_id")
       .eq("id", id)
       .single()
     if (receiptError || !receipt) return NextResponse.json({ error: "영수증 없음" }, { status: 404 })
@@ -65,6 +65,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       total_amount: receipt.total_amount,
       is_lunch_time: receipt.is_lunch_time,
       status: receipt.status,
+      source: receipt.source ?? "manual",
       image_url: imageUrl,
       uploader_name: uploaderRow?.name ?? "알 수 없음",
       items: (itemRows ?? []).map((item) => ({
