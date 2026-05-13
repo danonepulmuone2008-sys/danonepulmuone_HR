@@ -130,7 +130,7 @@ export default function ReceiptDetailPage() {
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">점심 시간</span>
               <span className={`font-medium ${receipt.is_lunch_time ? "text-green-600" : "text-orange-500"}`}>
-                {receipt.is_lunch_time ? "검증 통과" : "시간 외 결제"}
+                {receipt.is_lunch_time ? "시간 내 결제" : "시간 외 결제"}
               </span>
             </div>
             <div className="flex justify-between text-sm border-t border-gray-50 pt-2 mt-1">

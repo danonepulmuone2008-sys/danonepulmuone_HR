@@ -36,12 +36,18 @@ interface ParsedReceipt {
   isLunchTime: boolean
 }
 
+function nowKST(): string {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}T${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}:${pad(kst.getUTCSeconds())}+09:00`
+}
+
 function checkLunchTime(isoString: string | null): boolean {
   if (!isoString) return false
   try {
     const date = new Date(isoString)
     const kstMins = (date.getUTCHours() * 60 + date.getUTCMinutes() + 9 * 60) % (24 * 60)
-    return kstMins >= 11 * 60 + 30 && kstMins <= 14 * 60
+    return kstMins >= 12 * 60 + 30 && kstMins <= 13 * 60 + 30
   } catch {
     return false
   }
@@ -99,19 +105,20 @@ export async function POST(req: Request) {
       const totalAmount =
         parsed.totalAmount || items.reduce((s: number, i: ReceiptItem) => s + i.total, 0)
 
+      const paidAt = parsed.paidAt ?? nowKST()
       const response: ParsedReceipt = {
         storeName: parsed.storeName ?? "",
-        paidAt: parsed.paidAt ?? new Date().toISOString(),
+        paidAt,
         items,
         totalAmount,
-        isLunchTime: checkLunchTime(parsed.paidAt),
+        isLunchTime: checkLunchTime(paidAt),
       }
 
       return NextResponse.json({ ...response, storagePath })
     } catch (ocrErr) {
       console.error("[Gemini OCR]", ocrErr)
       // 이미지는 업로드됐으므로 storagePath를 함께 반환
-      return NextResponse.json({ error: "영수증 인식에 실패했습니다", storagePath }, { status: 422 })
+      return NextResponse.json({ error: "영수증 인식에 실패했습니다", storagePath, paidAt: nowKST() }, { status: 422 })
     }
   } catch (err) {
     console.error("[OCR upload]", err)

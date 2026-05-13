@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server"
 import { supabase, supabaseAdmin } from "@/lib/supabase"
 
+function checkLunchTime(isoString: string | null): boolean {
+  if (!isoString) return false
+  try {
+    const date = new Date(isoString)
+    const kstMins = (date.getUTCHours() * 60 + date.getUTCMinutes() + 9 * 60) % (24 * 60)
+    return kstMins >= 12 * 60 + 30 && kstMins <= 13 * 60 + 30
+  } catch {
+    return false
+  }
+}
+
 interface ItemPayload {
   name: string
   unitPrice: number
@@ -79,7 +90,7 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const body: SaveReceiptPayload = await req.json()
-    const { source, storagePath, storeName, paidAt, totalAmount, isLunchTime, ocrRaw, items } = body
+    const { source, storagePath, storeName, paidAt, totalAmount, ocrRaw, items } = body
 
     if (!items?.length) {
       return NextResponse.json({ error: "항목이 없습니다" }, { status: 400 })
@@ -101,7 +112,7 @@ export async function POST(req: Request) {
         store_name: storeName || null,
         paid_at: paidAt,
         total_amount: totalAmount,
-        is_lunch_time: isLunchTime ?? false,
+        is_lunch_time: checkLunchTime(paidAt),
         ocr_raw_response: ocrRaw ?? null,
         status: receiptStatus,
       })
