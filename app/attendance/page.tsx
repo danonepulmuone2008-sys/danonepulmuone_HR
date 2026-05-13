@@ -152,7 +152,7 @@ export default function AttendancePage() {
     const startDate = `${calYear}-${m}-01`;
     const endDate = `${calYear}-${m}-${String(daysInMonth).padStart(2, "0")}`;
 
-    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes] = await Promise.all([
+    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status")
         .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
@@ -164,6 +164,8 @@ export default function AttendancePage() {
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
       supabase.from("users").select("id, name").eq("is_active", true),
+      supabase.from("vacation_requests").select("id, type, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
+      supabase.from("business_trip_requests").select("id, destination, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
     ]);
 
     const nameMap = Object.fromEntries((usersRes.data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
@@ -222,8 +224,8 @@ export default function AttendancePage() {
     setFlexMap(newFlexMap);
 
     const reqList: RequestItem[] = [
-      ...(myVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status) })),
-      ...(myTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status) })),
+      ...(reqVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status) })),
+      ...(reqTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status) })),
     ].sort((a, b) => b.date.localeCompare(a.date));
     setRequests(reqList);
   }, [calYear, calMonth]);
