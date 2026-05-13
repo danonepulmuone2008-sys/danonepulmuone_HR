@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
@@ -126,8 +126,10 @@ function getHalfDayWorkTime(label: string): string {
 
 export default function AdminAttendancePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval">("schedule");
+  const initialTab = (searchParams.get("tab") as "schedule" | "records" | "approval") ?? "schedule";
+  const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval">(initialTab);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
 
