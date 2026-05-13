@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { supabaseAdmin } from "@/lib/supabase"
+import sharp from "sharp"
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -62,11 +63,17 @@ export async function POST(req: Request) {
     const base64 = buffer.toString("base64")
     const mimeType = file.type as "image/jpeg" | "image/png" | "image/webp"
 
-    const ext = file.name.split(".").pop() ?? "jpg"
-    const storagePath = `${user.id}/${Date.now()}.${ext}`
+    // OCR용 원본 유지, 저장용만 압축 (최대 1200px, JPEG quality 75)
+    const compressedBuffer = await sharp(buffer)
+      .rotate()
+      .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 75 })
+      .toBuffer()
+
+    const storagePath = `${user.id}/${Date.now()}.jpg`
     const { error: uploadError } = await supabaseAdmin.storage
       .from("receipts")
-      .upload(storagePath, buffer, { contentType: mimeType })
+      .upload(storagePath, compressedBuffer, { contentType: "image/jpeg" })
     if (uploadError) throw new Error(`Storage 업로드 실패: ${uploadError.message}`)
 
     try {

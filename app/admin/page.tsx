@@ -232,15 +232,16 @@ export default function AdminHomePage() {
       {/* 수정 바텀시트 */}
       {editUserId && editUser && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-12"
           onClick={() => setEditUserId(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col"
+            style={{ maxHeight: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* 헤더 */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold"
@@ -261,7 +262,7 @@ export default function AdminHomePage() {
             </div>
 
             {/* 출퇴근 시간 수정 */}
-            <div className="px-5 pt-4">
+            <div className="px-5 pt-4 overflow-y-auto flex-1 pb-10">
               <div className="mb-4">
                 <label className="text-xs text-gray-500 mb-1.5 block">날짜</label>
                 <input

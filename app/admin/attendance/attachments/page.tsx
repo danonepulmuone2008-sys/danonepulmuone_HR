@@ -26,18 +26,18 @@ interface AttachmentItem {
   attachment_url: string
 }
 
-async function downloadFile(url: string) {
+async function downloadFile(url: string, filename?: string) {
   const res = await fetch(url)
   const blob = await res.blob()
   const blobUrl = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = blobUrl
-  a.download = url.split("/").pop() ?? "attachment"
+  a.download = filename ?? url.split("/").pop() ?? "attachment"
   a.click()
   URL.revokeObjectURL(blobUrl)
 }
 
-function FileViewerModal({ url, onClose }: { url: string; onClose: () => void }) {
+function FileViewerModal({ url, meta, onClose }: { url: string; meta?: { date: string; name: string }; onClose: () => void }) {
   const isPdf = url.toLowerCase().includes(".pdf")
   return (
     <div
@@ -54,7 +54,11 @@ function FileViewerModal({ url, onClose }: { url: string; onClose: () => void })
           <span className="text-sm font-semibold text-gray-900">첨부파일</span>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => downloadFile(url)}
+              onClick={() => {
+                const ext = url.split(".").pop() ?? "png";
+                const filename = meta ? `${meta.date}_${meta.name}.${ext}` : url.split("/").pop() ?? "attachment";
+                downloadFile(url, filename);
+              }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#8dc63f] text-white text-xs font-semibold"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -90,6 +94,7 @@ export default function AttendanceAttachmentsPage() {
   const [items, setItems] = useState<AttachmentItem[]>([])
   const [loading, setLoading] = useState(true)
   const [viewUrl, setViewUrl] = useState<string | null>(null)
+  const [viewMeta, setViewMeta] = useState<{ date: string; name: string } | null>(null)
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
@@ -115,7 +120,7 @@ export default function AttendanceAttachmentsPage() {
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
-      {viewUrl && <FileViewerModal url={viewUrl} onClose={() => setViewUrl(null)} />}
+      {viewUrl && <FileViewerModal url={viewUrl} meta={viewMeta ?? undefined} onClose={() => { setViewUrl(null); setViewMeta(null); }} />}
 
       <header className="bg-white px-4 pt-5 pb-3 border-b border-gray-100 flex items-center gap-2">
         <button
@@ -150,7 +155,10 @@ export default function AttendanceAttachmentsPage() {
             return (
               <button
                 key={item.id}
-                onClick={() => setViewUrl(item.attachment_url)}
+                onClick={() => {
+                  setViewUrl(item.attachment_url);
+                  setViewMeta({ date: item.created_at.slice(0, 10), name: item.user_name });
+                }}
                 className="bg-white rounded-2xl px-4 py-3 border border-gray-100 shadow-sm flex items-center justify-between gap-3 active:scale-[0.98] transition-all text-left w-full"
               >
                 <div className="flex-1 min-w-0">

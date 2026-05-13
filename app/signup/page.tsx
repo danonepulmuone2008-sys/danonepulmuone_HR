@@ -3,6 +3,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
+function formatPhoneDisplay(digits: string): string {
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+}
+
 export default function SignupPage() {
   const router = useRouter();
 
@@ -147,17 +153,17 @@ export default function SignupPage() {
           <input
             type="tel"
             required
-            value={phone}
+            value={formatPhoneDisplay(phone)}
             onChange={(e) => {
-              const val = e.target.value;
-              if (/\D/.test(val)) {
+              const raw = e.target.value;
+              if (/[^\d\-]/.test(raw)) {
                 setPhoneError("숫자만 입력 가능합니다");
               } else {
                 setPhoneError("");
               }
-              setPhone(val.replace(/\D/g, ""));
+              setPhone(raw.replace(/\D/g, "").slice(0, 11));
             }}
-            placeholder="전화번호"
+            placeholder="010-0000-0000"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
           {phoneError && (
