@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { supabase, supabaseAdmin } from "@/lib/supabase"
 import { requireAdmin } from "@/lib/auth"
-import { getMealLimit, getMonthlyBusinessDays } from "@/lib/holidays"
+import { calcBusinessDaysForPolicy } from "@/lib/holidays"
 
 export async function GET(req: Request) {
   try {
@@ -30,17 +30,29 @@ export async function GET(req: Request) {
       })
     }
 
-    // DB 미등록 → holidays.ts 계산값으로 폴백
-    const businessDays  = getMonthlyBusinessDays(year, month)
-    const dailyLimit    = 10000
-    const monthlyLimit  = getMealLimit(year, month)
+    // DB 미등록 → holidays.ts 계산 후 자동 저장
+    const dailyLimit = 10000
+    const { businessDays, holidayCount } = calcBusinessDaysForPolicy(year, month)
+    const monthlyLimit = dailyLimit * businessDays
+
+    await supabaseAdmin.from("monthly_meal_limits").upsert(
+      {
+        target_month:       targetMonth,
+        daily_meal_limit:   dailyLimit,
+        business_days:      businessDays,
+        holiday_count:      holidayCount,
+        monthly_meal_limit: monthlyLimit,
+        updated_at:         new Date().toISOString(),
+      },
+      { onConflict: "target_month", ignoreDuplicates: true }
+    )
 
     return NextResponse.json({
-      source:       "calculated",
+      source: "calculated",
       monthlyLimit,
       dailyLimit,
       businessDays,
-      holidayCount: 0,
+      holidayCount,
     })
   } catch (err) {
     console.error("[admin/meals/limit GET]", err)

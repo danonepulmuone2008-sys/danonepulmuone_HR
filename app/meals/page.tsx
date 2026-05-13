@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import WeeklyReceiptList from "@/components/WeeklyReceiptList";
-import { getMealLimit } from "@/lib/holidays";
 import { useAuth } from "@/components/AuthProvider";
 import { Check, X } from "lucide-react";
 
@@ -34,15 +33,14 @@ export default function MealsPage() {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
-  const totalLimit = getMealLimit(year, month);
-
+  const [totalLimit, setTotalLimit] = useState(0);
   const [mealUsed, setMealUsed] = useState(0);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [approvingItem, setApprovingItem] = useState<PendingItem | null>(null);
   const [actioning, setActioning] = useState(false);
 
-  const mealPercent = Math.round((mealUsed / totalLimit) * 100);
+  const mealPercent = totalLimit > 0 ? Math.round((mealUsed / totalLimit) * 100) : 0;
   const remaining = totalLimit - mealUsed;
 
   const fetchPending = useCallback(async () => {
@@ -61,7 +59,10 @@ export default function MealsPage() {
       headers: { Authorization: `Bearer ${user.token}` },
     })
       .then((r) => r.json())
-      .then((data) => { if (data.used !== undefined) setMealUsed(data.used); })
+      .then((data) => {
+        if (data.used !== undefined) setMealUsed(data.used);
+        if (data.totalLimit !== undefined) setTotalLimit(data.totalLimit);
+      })
       .catch(() => {});
 
     fetch("/api/meals/receipts", {
