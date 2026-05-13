@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import WeeklyReceiptList from "@/components/WeeklyReceiptList";
-import { getMealLimit } from "@/lib/holidays";
 import { useAuth } from "@/components/AuthProvider";
 import { Check, X } from "lucide-react";
 
@@ -34,8 +33,8 @@ export default function MealsPage() {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
-  const totalLimit = getMealLimit(year, month);
 
+  const [totalLimit, setTotalLimit] = useState(0);
   const [mealUsed, setMealUsed] = useState(0);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
@@ -57,6 +56,13 @@ export default function MealsPage() {
 
   useEffect(() => {
     if (!user) return;
+    fetch("/api/meals/limit", {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => { if (data.monthlyLimit !== undefined) setTotalLimit(data.monthlyLimit); })
+      .catch(() => {});
+
     fetch("/api/meals/usage", {
       headers: { Authorization: `Bearer ${user.token}` },
     })
