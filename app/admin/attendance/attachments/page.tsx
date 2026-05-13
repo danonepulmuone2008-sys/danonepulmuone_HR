@@ -124,7 +124,7 @@ export default function AttendanceAttachmentsPage() {
 
       <header className="bg-white px-4 pt-5 pb-3 border-b border-gray-100 flex items-center gap-2">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push("/admin/attendance?tab=approval")}
           className="w-8 h-8 flex items-center justify-center text-gray-500 text-2xl leading-none"
         >
           ‹
