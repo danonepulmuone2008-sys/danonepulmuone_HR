@@ -9,6 +9,14 @@ function calcHours(clockIn: string | null, clockOut: string | null, lunchBreak: 
   return Math.round(adjusted * 10) / 10
 }
 
+function calcTripHours(startTime: string, endTime: string): number | null {
+  const [sh, sm] = startTime.split(":").map(Number)
+  const [eh, em] = endTime.split(":").map(Number)
+  const diff = (eh * 60 + em - sh * 60 - sm) / 60
+  if (diff <= 0) return null
+  return Math.round(diff * 10) / 10
+}
+
 // GET /api/admin/attendance/records?monday=2026-05-04
 export async function GET(req: Request) {
   try {
@@ -61,7 +69,7 @@ export async function GET(req: Request) {
         .gte("end_date", monday),
       supabaseAdmin
         .from("business_trip_requests")
-        .select("user_id, start_date, end_date")
+        .select("user_id, start_date, end_date, start_time, end_time")
         .in("user_id", userIds)
         .eq("status", "approved")
         .lte("start_date", friday)
@@ -77,10 +85,19 @@ export async function GET(req: Request) {
         }
       }
     }
+    // 출장 시간 맵: user_id__date → trip hours
+    const tripHoursMap: Record<string, number> = {}
     for (const t of tripRows ?? []) {
+      const isSingleDay = t.start_date === t.end_date
       for (const date of weekDates) {
         if (t.start_date <= date && date <= t.end_date) {
           vacMap[`${t.user_id}__${date}`] = "business_trip"
+          if (t.start_time && t.end_time) {
+            const startStr = isSingleDay || t.start_date === date ? t.start_time : "09:00"
+            const endStr   = isSingleDay || t.end_date   === date ? t.end_time   : "18:00"
+            const h = calcTripHours(startStr, endStr)
+            if (h !== null) tripHoursMap[`${t.user_id}__${date}`] = h
+          }
         }
       }
     }
@@ -92,6 +109,14 @@ export async function GET(req: Request) {
       recMap[key] = {
         hours: calcHours(row.clock_in, row.clock_out, row.lunch_break),
         checkedIn: !!row.clock_in && !row.clock_out,
+      }
+    }
+    // 출장 시간을 attendance 시간에 합산 (사용자 화면과 동일한 방식)
+    for (const [key, tripH] of Object.entries(tripHoursMap)) {
+      if (recMap[key]) {
+        recMap[key] = { ...recMap[key], hours: Math.round(((recMap[key].hours ?? 0) + tripH) * 10) / 10 }
+      } else {
+        recMap[key] = { hours: tripH, checkedIn: false }
       }
     }
 
