@@ -537,7 +537,7 @@ export default function MyPage() {
               <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">새 비밀번호 조건</p>
                 {[
-                  { label: "9자 이상",   met: pw.next.length >= 9 },
+                  { label: "6자 이상",   met: pw.next.length >= 6 },
                   { label: "영문자 포함", met: /[a-zA-Z]/.test(pw.next) },
                   { label: "숫자 포함",  met: /[0-9]/.test(pw.next) },
                 ].map(({ label, met }) => (
@@ -578,7 +578,7 @@ export default function MyPage() {
                   setShowPwChange(false);
                 }}
                 disabled={
-                  !pw.current || pw.next.length < 9 ||
+                  !pw.current || pw.next.length < 6 ||
                   !/[a-zA-Z]/.test(pw.next) || !/[0-9]/.test(pw.next) ||
                   pw.next !== pw.confirm
                 }
