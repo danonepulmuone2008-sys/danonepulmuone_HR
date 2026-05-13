@@ -474,9 +474,9 @@ export default function AttendancePage() {
           : `${calMonth + 1}월 ${selectedDay}일`;
         const modalSub = modalMode === "flex-add" ? "나의 근무 시간을 입력하세요" : "해당 날의 전체 일정";
         return (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={closeModal}>
-            <div className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8" onClick={closeModal}>
+            <div className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col" style={{ maxHeight: "80vh" }} onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   {modalMode !== "detail" && (
                     <button onClick={goBack} className="text-gray-400 hover:text-gray-600 mr-1">←</button>
@@ -490,7 +490,7 @@ export default function AttendancePage() {
               </div>
 
               {modalMode === "detail" && (
-                <div className="px-5 pt-4 max-h-[60vh] overflow-y-auto">
+                <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
                   {dayFlex.length > 0 && (
                     <div className="mb-4">
                       <p className="text-xs font-semibold text-purple-500 mb-2">유연근무</p>
@@ -554,7 +554,7 @@ export default function AttendancePage() {
               {modalMode === "flex-add" && (() => {
                 const flexTimeInvalid = !!flexInput.startTime && !!flexInput.endTime && flexInput.endTime <= flexInput.startTime;
                 return (
-                  <div className="px-5 pt-4">
+                  <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
                     <div className="flex gap-3 mb-1">
                       <div className="flex-1">
                         <label className="text-xs text-gray-500 mb-1.5 block">시작 시간</label>
