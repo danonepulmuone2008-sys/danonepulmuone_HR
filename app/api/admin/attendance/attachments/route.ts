@@ -22,13 +22,15 @@ export async function GET(req: Request) {
 
   const userIds = [...new Set((data ?? []).map((r) => r.user_id))]
   let nameMap: Record<string, string> = {}
+  let activeUserIds = new Set<string>()
   if (userIds.length > 0) {
-    const { data: users } = await supabaseAdmin.from("users").select("id, name").in("id", userIds)
+    const { data: users } = await supabaseAdmin.from("users").select("id, name").in("id", userIds).eq("is_active", true)
     nameMap = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]))
+    activeUserIds = new Set((users ?? []).map((u) => u.id))
   }
 
   return NextResponse.json(
-    (data ?? []).map((r) => ({
+    (data ?? []).filter((r) => activeUserIds.has(r.user_id)).map((r) => ({
       id: r.id,
       user_name: nameMap[r.user_id] ?? "알 수 없음",
       type: r.type,

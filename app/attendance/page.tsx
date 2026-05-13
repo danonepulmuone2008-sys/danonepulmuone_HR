@@ -152,21 +152,24 @@ export default function AttendancePage() {
     const startDate = `${calYear}-${m}-01`;
     const endDate = `${calYear}-${m}-${String(daysInMonth).padStart(2, "0")}`;
 
-    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes] = await Promise.all([
+    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status")
-        .eq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
+        .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
-        .eq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate),
+        .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("vacation_requests").select("id, user_id, type, start_date, end_date, status")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("business_trip_requests").select("id, user_id, destination, start_date, end_date, status")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
-      supabase.from("users").select("id, name"),
+      supabase.from("users").select("id, name").eq("is_active", true),
+      supabase.from("vacation_requests").select("id, type, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
+      supabase.from("business_trip_requests").select("id, destination, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
     ]);
 
     const nameMap = Object.fromEntries((usersRes.data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
+    const activeIds = new Set(Object.keys(nameMap));
 
     const map: Record<number, CalEvent[]> = {};
     myVacRes.data?.forEach(v => {
@@ -190,7 +193,7 @@ export default function AttendancePage() {
     setEventMap(map);
 
     const newTeamMap: Record<number, TeamCalEntry[]> = {};
-    allVacRes.data?.forEach(v => {
+    allVacRes.data?.filter(v => activeIds.has(v.user_id)).forEach(v => {
       const name = nameMap[v.user_id] ?? "팀원";
       for (let d = new Date(v.start_date + "T00:00:00"); d <= new Date(v.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
@@ -200,7 +203,7 @@ export default function AttendancePage() {
         }
       }
     });
-    allTripRes.data?.forEach(t => {
+    allTripRes.data?.filter(t => activeIds.has(t.user_id)).forEach(t => {
       const name = nameMap[t.user_id] ?? "팀원";
       for (let d = new Date(t.start_date + "T00:00:00"); d <= new Date(t.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
@@ -213,7 +216,7 @@ export default function AttendancePage() {
     setTeamMap(newTeamMap);
 
     const newFlexMap: Record<number, FlexEntry[]> = {};
-    flexRes.data?.forEach(f => {
+    flexRes.data?.filter(f => activeIds.has(f.user_id)).forEach(f => {
       const day = parseInt(f.date.split("-")[2]);
       if (!newFlexMap[day]) newFlexMap[day] = [];
       newFlexMap[day].push({ id: f.id, userId: f.user_id, userName: f.user_name, startTime: f.start_time, endTime: f.end_time });
@@ -221,8 +224,8 @@ export default function AttendancePage() {
     setFlexMap(newFlexMap);
 
     const reqList: RequestItem[] = [
-      ...(myVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status) })),
-      ...(myTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status) })),
+      ...(reqVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status) })),
+      ...(reqTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status) })),
     ].sort((a, b) => b.date.localeCompare(a.date));
     setRequests(reqList);
   }, [calYear, calMonth]);
@@ -264,7 +267,7 @@ export default function AttendancePage() {
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
-      <header className="bg-white px-5 pt-12 pb-4 border-b border-gray-100">
+      <header className="bg-white px-5 pt-8 pb-3 border-b border-gray-100">
         <h1 className="text-lg font-bold text-gray-900">근태 관리</h1>
         <p className="text-xs text-gray-400 mt-0.5">{monthLabel}</p>
       </header>
@@ -473,9 +476,9 @@ export default function AttendancePage() {
           : `${calMonth + 1}월 ${selectedDay}일`;
         const modalSub = modalMode === "flex-add" ? "나의 근무 시간을 입력하세요" : "해당 날의 전체 일정";
         return (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={closeModal}>
-            <div className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8" onClick={closeModal}>
+            <div className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col" style={{ maxHeight: "80vh" }} onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   {modalMode !== "detail" && (
                     <button onClick={goBack} className="text-gray-400 hover:text-gray-600 mr-1">←</button>
@@ -489,7 +492,7 @@ export default function AttendancePage() {
               </div>
 
               {modalMode === "detail" && (
-                <div className="px-5 pt-4 max-h-[60vh] overflow-y-auto">
+                <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
                   {dayFlex.length > 0 && (
                     <div className="mb-4">
                       <p className="text-xs font-semibold text-purple-500 mb-2">유연근무</p>
@@ -553,7 +556,7 @@ export default function AttendancePage() {
               {modalMode === "flex-add" && (() => {
                 const flexTimeInvalid = !!flexInput.startTime && !!flexInput.endTime && flexInput.endTime <= flexInput.startTime;
                 return (
-                  <div className="px-5 pt-4">
+                  <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
                     <div className="flex gap-3 mb-1">
                       <div className="flex-1">
                         <label className="text-xs text-gray-500 mb-1.5 block">시작 시간</label>

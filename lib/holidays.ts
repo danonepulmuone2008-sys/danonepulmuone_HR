@@ -34,12 +34,12 @@ const KOREAN_HOLIDAYS: Record<number, string[]> = {
     "2026-05-25", // 부처님오신날 대체공휴일
     "2026-06-03", // 지방선거일
     "2026-06-06", // 현충일
+    "2026-07-17", // 제헌절
     "2026-08-15", // 광복절 (토요일)
     "2026-08-17", // 광복절 대체공휴일 (월)
     "2026-09-24", // 추석연휴
     "2026-09-25", // 추석
-    "2026-09-26", // 추석연휴 (토요일)
-    "2026-09-28", // 추석 대체공휴일
+    "2026-09-26", // 추석연휴 (토요일, 대체공휴일 없음 — 연휴일의 토요일 겹침은 대체 미적용)
     "2026-10-03", // 개천절 (토요일)
     "2026-10-05", // 개천절 대체공휴일 (월)
     "2026-10-09", // 한글날
@@ -67,6 +67,41 @@ export function getMonthlyBusinessDays(year: number, month: number): number {
   }
 
   return count;
+}
+
+export function getMonthlyHolidayCount(year: number, month: number): number {
+  const holidays = getHolidaySet(year);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let count = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dow = new Date(year, month - 1, day).getDay();
+    if (dow === 0 || dow === 6) continue;
+    const key = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (holidays.has(key)) count++;
+  }
+  return count;
+}
+
+// meal_policy 옵션을 반영한 한 번의 루프로 영업일·공휴일 수 동시 계산
+export function calcBusinessDaysForPolicy(
+  year: number,
+  month: number,
+  opts: { includeHoliday?: boolean; includeWeekend?: boolean } = {}
+): { businessDays: number; holidayCount: number } {
+  const includeHoliday = opts.includeHoliday ?? false
+  const includeWeekend = opts.includeWeekend ?? false
+  const holidays = includeHoliday ? new Set<string>() : getHolidaySet(year)
+  const daysInMonth = new Date(year, month, 0).getDate()
+  let businessDays = 0
+  let holidayCount = 0
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dow = new Date(year, month - 1, day).getDay()
+    if (!includeWeekend && (dow === 0 || dow === 6)) continue
+    const key = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    if (holidays.has(key)) { holidayCount++; continue }
+    businessDays++
+  }
+  return { businessDays, holidayCount }
 }
 
 // 영업일 * 10,000원

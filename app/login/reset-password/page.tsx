@@ -14,7 +14,7 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setErrorMsg("");
 
-    if (password.length < 6) { setErrorMsg("비밀번호는 6자 이상이어야 합니다"); return; }
+    if (password.length < 6 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) { setErrorMsg("비밀번호 조건에 부합하지 않습니다"); return; }
     if (password !== passwordConfirm) { setErrorMsg("비밀번호가 일치하지 않습니다"); return; }
 
     setLoading(true);
@@ -51,12 +51,24 @@ export default function ResetPasswordPage() {
           <input
             type="password"
             required
-            minLength={6}
             value={password}
             onChange={(e) => { setPassword(e.target.value); setErrorMsg(""); }}
-            placeholder="새로 설정할 비밀번호 (6자 이상)"
+            placeholder="새로 설정할 비밀번호"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {password.length > 0 && (
+            <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
+              {[
+                { label: "6자 이상", met: password.length >= 6 },
+                { label: "영문자 포함", met: /[a-zA-Z]/.test(password) },
+                { label: "숫자 포함", met: /[0-9]/.test(password) },
+              ].map(({ label, met }) => (
+                <p key={label} className="text-xs flex items-center gap-1.5" style={{ color: met ? "#62a83a" : "#9CA3AF" }}>
+                  <span>{met ? "✓" : "○"}</span>{label}
+                </p>
+              ))}
+            </div>
+          )}
           <input
             type="password"
             required
@@ -65,6 +77,11 @@ export default function ResetPasswordPage() {
             placeholder="비밀번호 확인"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {passwordConfirm.length > 0 && (
+            password === passwordConfirm
+              ? <p className="text-xs text-green-600 px-1">비밀번호가 일치합니다</p>
+              : <p className="text-xs text-red-500 px-1">비밀번호가 일치하지 않습니다</p>
+          )}
 
           {errorMsg && (
             <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{errorMsg}</p>

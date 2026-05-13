@@ -181,14 +181,15 @@ export default function AdminInquiryPage() {
       {/* 문의 상세 바텀시트 */}
       {selectedId !== null && selected && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-12"
           onClick={() => setSelectedId(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-24"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col"
+            style={{ maxHeight: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-gray-100 gap-3">
+            <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-gray-100 gap-3 flex-shrink-0">
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-bold text-gray-900">{selected.subject}</h3>
                 <div className="flex items-center gap-1.5 mt-1">
@@ -205,11 +206,11 @@ export default function AdminInquiryPage() {
                 className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl flex-shrink-0"
               >×</button>
             </div>
-            <div className="px-5 pt-5 pb-4">
+            <div className="px-5 pt-5 pb-4 overflow-y-auto flex-1">
               <p className="text-sm text-gray-700 leading-relaxed">{selected.content}</p>
             </div>
             {!selected.isProcessed && (
-              <div className="px-5 pb-2">
+              <div className="px-5 pb-6 flex-shrink-0">
                 <button
                   onClick={() => processInquiry(selected.id)}
                   className="w-full py-3.5 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"

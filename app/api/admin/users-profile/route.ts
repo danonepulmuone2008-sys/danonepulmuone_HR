@@ -7,7 +7,8 @@ export async function GET() {
       .from("users")
       .select("id, name, email, phone, created_at")
       .neq("role", "admin")
-      .order("created_at", { ascending: false });
+      .eq("is_active", true)
+      .order("name", { ascending: true });
 
     if (error) throw new Error(error.message);
 

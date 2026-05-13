@@ -49,6 +49,7 @@ export default function HomePage() {
   const [editTime, setEditTime] = useState("");
   const [editLunchBreak, setEditLunchBreak] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
+  const [clockBlockReason, setClockBlockReason] = useState<string | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
   const [lunchBreak, setLunchBreak] = useState(true);
@@ -84,6 +85,36 @@ export default function HomePage() {
     if (direction === "out" && !clockIn) {
       showToast("아직 출근을 하지 않았습니다.", "error");
       return;
+    }
+
+    if (direction === "in" && user) {
+      const [{ data: vacations }, { data: flexEntry }] = await Promise.all([
+        supabase.from("vacation_requests")
+          .select("type")
+          .eq("user_id", user.id)
+          .eq("status", "approved")
+          .lte("start_date", todayStr)
+          .gte("end_date", todayStr)
+          .limit(1),
+        supabase.from("flex_schedules")
+          .select("start_time, end_time")
+          .eq("user_id", user.id)
+          .eq("date", todayStr)
+          .maybeSingle(),
+      ]);
+
+      if (vacations && vacations.length > 0) {
+        setClockBlockReason("휴가 등록일입니다.");
+        return;
+      }
+
+      if (flexEntry) {
+        const currentTime = getNow();
+        if (currentTime < flexEntry.start_time || currentTime > flexEntry.end_time) {
+          setClockBlockReason(`유연근무 설정 시간(${flexEntry.start_time} ~ ${flexEntry.end_time}) 외 출근입니다.`);
+          return;
+        }
+      }
     }
 
     setNetworkChecking(true);
@@ -245,6 +276,22 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 출근 불가 팝업 */}
+      {clockBlockReason && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <p className="text-base font-bold text-gray-900 text-center mb-1">출근이 불가합니다.</p>
+            <p className="text-sm text-gray-500 text-center mb-5">사유: {clockBlockReason}</p>
+            <button
+              onClick={() => setClockBlockReason(null)}
+              className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 모달 */}
       {modal && (
         <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center px-6">
@@ -334,7 +381,7 @@ export default function HomePage() {
       )}
 
       {/* 헤더 */}
-      <header className="bg-blue-600 px-5 pt-12 pb-6">
+      <header className="bg-blue-600 px-5 pt-8 pb-3">
         <p className="text-blue-200 text-sm">안녕하세요 👋</p>
         <h2 className="text-white text-xl font-bold mt-0.5">{userProfile.name || "로딩 중"}님</h2>
         <p className="text-blue-200 text-xs mt-1">

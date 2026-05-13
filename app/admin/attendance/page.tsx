@@ -1,12 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { ADMIN_DUMMY } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
-import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors";
+import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors"
+import { supabase } from "@/lib/supabase";
+
+function toTimestamptz(date: string, time: string): string {
+  return `${date}T${time}:00+09:00`
+}
+
+function toTimeStr(ts: string | null): string {
+  if (!ts) return ""
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+}
 
 async function downloadFile(url: string, filename?: string) {
   const res = await fetch(url)
@@ -51,7 +61,7 @@ type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
   records: Record<string, { hours: number | null; checkedIn: boolean }>
-  vacations: Record<string, boolean>
+  vacations: Record<string, "vacation" | "business_trip">
 }
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -127,8 +137,10 @@ function getHalfDayWorkTime(label: string): string {
 
 export default function AdminAttendancePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval">("schedule");
+  const initialTab = (searchParams.get("tab") as "schedule" | "records" | "approval") ?? "schedule";
+  const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval">(initialTab);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
 
@@ -170,8 +182,16 @@ export default function AdminAttendancePage() {
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
 
-  const { interns: dummyInterns, internEvents } = ADMIN_DUMMY;
-  const scheduleInterns = realInterns.length > 0 ? realInterns : dummyInterns;
+  // 근무 기록 수정 상태
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editCheckIn, setEditCheckIn] = useState("");
+  const [editCheckOut, setEditCheckOut] = useState("");
+  const [editLunchBreak, setEditLunchBreak] = useState(true);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const scheduleInterns = realInterns;
   const colorMap = buildColorMap(scheduleInterns);
 
   useEffect(() => {
@@ -276,6 +296,64 @@ export default function AdminAttendancePage() {
     }
   }
 
+  async function openEditForRecord(userId: string, userName: string, date: string) {
+    setEditDate(date);
+    setEditCheckIn("");
+    setEditCheckOut("");
+    setEditLunchBreak(true);
+    setEditUserName(userName);
+    setEditUserId(userId);
+    const { data } = await supabase
+      .from("attendance_records")
+      .select("clock_in, clock_out, lunch_break")
+      .eq("user_id", userId)
+      .eq("date", date)
+      .single();
+    if (data) {
+      setEditCheckIn(data.clock_in ? toTimeStr(data.clock_in) : "");
+      setEditCheckOut(data.clock_out ? toTimeStr(data.clock_out) : "");
+      setEditLunchBreak(data.lunch_break ?? true);
+    }
+  }
+
+  async function handleEditDateChange(date: string) {
+    setEditDate(date);
+    if (!editUserId) return;
+    const { data } = await supabase
+      .from("attendance_records")
+      .select("clock_in, clock_out, lunch_break")
+      .eq("user_id", editUserId)
+      .eq("date", date)
+      .single();
+    setEditCheckIn(data?.clock_in ? toTimeStr(data.clock_in) : "");
+    setEditCheckOut(data?.clock_out ? toTimeStr(data.clock_out) : "");
+    setEditLunchBreak(data?.lunch_break ?? true);
+  }
+
+  async function saveAttendanceRecord() {
+    if (!editUserId) return;
+    setEditSaving(true);
+    const res = await fetch("/api/admin/attendance-with-lunch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: editUserId,
+        date: editDate,
+        clock_in: editCheckIn ? toTimestamptz(editDate, editCheckIn) : null,
+        clock_out: editCheckOut ? toTimestamptz(editDate, editCheckOut) : null,
+        lunch_break: editLunchBreak,
+      }),
+    });
+    if (res.ok) {
+      setEditUserId(null);
+      await fetchRecords();
+    } else {
+      const { error } = await res.json();
+      alert("저장 중 오류가 발생했습니다: " + error);
+    }
+    setEditSaving(false);
+  }
+
   const filteredRequests = requests.filter((r) => {
     if (approvalFilter === "all") return true;
     if (approvalFilter === "with_attachment") return r.type === "vacation" && !!(r as { attachment_url?: string | null }).attachment_url;
@@ -289,12 +367,6 @@ export default function AdminAttendancePage() {
 
   // 날짜별 특별 일정이 있는 인턴 집합 (기본 외 = flex or 휴가/출장)
   const specialMap: Record<number, Set<string>> = {};
-  internEvents.forEach((e) => {
-    if (!e.date.startsWith(calMonthStr)) return;
-    const day = parseInt(e.date.split("-")[2]);
-    if (!specialMap[day]) specialMap[day] = new Set();
-    specialMap[day].add(e.internId);
-  });
   flexSchedules.forEach((f) => {
     const intern = scheduleInterns.find((i: RealIntern) => i.name === f.user_name);
     if (!intern) return;
@@ -313,8 +385,6 @@ export default function AdminAttendancePage() {
   // 특정 인턴+날짜의 일정 조회
   const getSchedule = (internId: string, day: number) => {
     const dateKey = `${calMonthStr}-${String(day).padStart(2, "0")}`;
-    const event = internEvents.find((e) => e.internId === internId && e.date === dateKey);
-    if (event) return { type: "event" as const, event };
     const approved = approvedEvents.find((e) => e.user_id === internId && e.date === dateKey);
     if (approved) return {
       type: "event" as const,
@@ -652,16 +722,26 @@ export default function AdminAttendancePage() {
                           if (dayIsHoliday[di]) {
                             return <span key={di} className="text-xs text-center text-gray-300">−</span>;
                           }
+                          const vacType = recordsData.vacations[`${u.id}__${date}`];
+                          const vacLabel = vacType === "business_trip" ? "출장" : vacType === "vacation" ? "휴가" : null;
+                          if (vacLabel) {
+                            const hasHours = rec?.hours !== null && rec?.hours !== undefined;
+                            const isCheckedIn = rec?.checkedIn && date === todayStr;
+                            const sub = hasHours ? `${rec!.hours}h` : isCheckedIn ? "출근" : null;
+                            return (
+                              <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="flex flex-col items-center justify-center w-full hover:bg-green-50 rounded transition-colors leading-none">
+                                <span className="text-[9px] font-semibold text-green-500">{vacLabel}</span>
+                                {sub && <span className={`text-[8px] font-medium ${isCheckedIn && !hasHours ? "text-orange-400" : "text-gray-400"}`}>{sub}</span>}
+                              </button>
+                            );
+                          }
                           if (rec?.checkedIn && date === todayStr) {
-                            return <span key={di} className="text-[10px] text-center font-semibold text-orange-400">출근</span>;
+                            return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-[10px] text-center font-semibold text-orange-400 w-full hover:bg-orange-50 rounded transition-colors">출근</button>;
                           }
                           if (rec?.hours !== null && rec?.hours !== undefined) {
-                            return <span key={di} className="text-xs text-center font-semibold text-gray-700">{rec.hours}</span>;
+                            return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center font-semibold text-gray-700 w-full hover:bg-gray-50 rounded transition-colors">{rec.hours}</button>;
                           }
-                          if (recordsData.vacations[`${u.id}__${date}`]) {
-                            return <span key={di} className="text-[10px] text-center font-semibold text-green-500">휴가</span>;
-                          }
-                          return <span key={di} className="text-xs text-center text-gray-400">−</span>;
+                          return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center text-gray-400 w-full hover:bg-gray-50 rounded transition-colors">−</button>;
                         })}
                         <span className={`text-xs font-bold text-right ${totalRounded === 0 ? "text-gray-400" : metGoal ? "text-[#8dc63f]" : "text-gray-700"}`}>
                           {totalRounded > 0 ? `${totalRounded}h` : "−"}
@@ -907,11 +987,12 @@ export default function AdminAttendancePage() {
       {/* 날짜 상세 바텀시트 (근무 일정 탭) */}
       {selectedDay !== null && activeTab === "schedule" && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-12"
           onClick={() => setSelectedDay(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col max-h-[70vh]"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col"
+            style={{ maxHeight: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -968,6 +1049,86 @@ export default function AdminAttendancePage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 근무 기록 수정 바텀시트 */}
+      {editUserId && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40"
+          onClick={() => setEditUserId(null)}
+        >
+          <div
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col"
+            style={{ maxHeight: "80vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                  style={{ backgroundColor: getInternColor(colorMap.get(editUserId) ?? 0) }}
+                >
+                  {editUserName.slice(0, 1)}
+                </div>
+                <h3 className="text-base font-bold text-gray-900">{editUserName} 수정</h3>
+              </div>
+              <button
+                onClick={() => setEditUserId(null)}
+                className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="px-5 pt-4 overflow-y-auto flex-1 pb-10">
+              <div className="mb-4">
+                <label className="text-xs text-gray-500 mb-1.5 block">날짜</label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => handleEditDateChange(e.target.value)}
+                  className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                />
+              </div>
+              <div className="flex gap-3 mb-5">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 mb-1.5 block">출근 시간</label>
+                  <input
+                    type="time"
+                    value={editCheckIn}
+                    onChange={(e) => setEditCheckIn(e.target.value)}
+                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 mb-1.5 block">퇴근 시간</label>
+                  <input
+                    type="time"
+                    value={editCheckOut}
+                    onChange={(e) => setEditCheckOut(e.target.value)}
+                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-3 mb-5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editLunchBreak}
+                  onChange={(e) => setEditLunchBreak(e.target.checked)}
+                  className="w-5 h-5 rounded accent-[#8dc63f]"
+                />
+                <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
+              </label>
+              <button
+                onClick={saveAttendanceRecord}
+                disabled={editSaving}
+                className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+                style={{ backgroundColor: "#8dc63f" }}
+              >
+                {editSaving ? "저장 중..." : "저장"}
+              </button>
             </div>
           </div>
         </div>

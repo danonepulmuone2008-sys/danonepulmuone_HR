@@ -5,23 +5,6 @@ import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
 import { getInternColor, buildColorMap } from "@/lib/internColors";
 
-function getTodayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-// "09:02" + "2026-05-11" → "2026-05-11T09:02:00+09:00"
-function toTimestamptz(date: string, time: string): string {
-  return `${date}T${time}:00+09:00`;
-}
-
-// "2026-05-11T09:02:00+09:00" → "09:02"
-function toTimeStr(ts: string | null): string {
-  if (!ts) return "";
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
 type User = {
   id: string;
   name: string;
@@ -29,19 +12,12 @@ type User = {
   email: string;
 };
 
-
 export default function AdminHomePage() {
   const router = useRouter();
 
   const [users, setUsers] = useState<User[]>([]);
   const [todayStatusMap, setTodayStatusMap] = useState<Record<string, "출근" | "퇴근">>({});
   const [showLogout, setShowLogout] = useState(false);
-  const [editUserId, setEditUserId] = useState<string | null>(null);
-  const [editDate, setEditDate] = useState(getTodayStr());
-  const [editCheckIn, setEditCheckIn] = useState("");
-  const [editCheckOut, setEditCheckOut] = useState("");
-  const [editLunchBreak, setEditLunchBreak] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -64,75 +40,12 @@ export default function AdminHomePage() {
     return todayStatusMap[userId] ?? null;
   }
 
-  function openEdit(userId: string) {
-    const today = getTodayStr();
-    setEditDate(today);
-    setEditCheckIn("");
-    setEditCheckOut("");
-    setEditLunchBreak(true);
-    setEditUserId(userId);
-    supabase
-      .from("attendance_records")
-      .select("clock_in, clock_out, lunch_break")
-      .eq("user_id", userId)
-      .eq("date", today)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setEditCheckIn(data.clock_in ? toTimeStr(data.clock_in) : "");
-          setEditCheckOut(data.clock_out ? toTimeStr(data.clock_out) : "");
-          setEditLunchBreak(data.lunch_break ?? true);
-        }
-      });
-  }
-
-  async function handleDateChange(date: string) {
-    setEditDate(date);
-    if (!editUserId) return;
-    const { data } = await supabase
-      .from("attendance_records")
-      .select("clock_in, clock_out, lunch_break")
-      .eq("user_id", editUserId)
-      .eq("date", date)
-      .single();
-    setEditCheckIn(data?.clock_in ? toTimeStr(data.clock_in) : "");
-    setEditCheckOut(data?.clock_out ? toTimeStr(data.clock_out) : "");
-    setEditLunchBreak(data?.lunch_break ?? true);
-  }
-
-  async function saveAttendance() {
-    if (!editUserId) return;
-    setSaving(true);
-    const res = await fetch("/api/admin/attendance-with-lunch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: editUserId,
-        date: editDate,
-        clock_in: editCheckIn ? toTimestamptz(editDate, editCheckIn) : null,
-        clock_out: editCheckOut ? toTimestamptz(editDate, editCheckOut) : null,
-        lunch_break: editLunchBreak,
-      }),
-    });
-
-    if (res.ok) {
-      await fetchTodayAttendance();
-      setEditUserId(null);
-    } else {
-      const { error } = await res.json();
-      alert("저장 중 오류가 발생했습니다: " + error);
-    }
-    setSaving(false);
-  }
-
   async function handleLogout() {
     await supabase.auth.signOut();
     router.push("/login");
   }
 
   const colorMap = buildColorMap(users);
-  const editUser = users.find((u) => u.id === editUserId);
-  const editUserIndex = colorMap.get(editUserId ?? "") ?? 0;
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
@@ -168,25 +81,17 @@ export default function AdminHomePage() {
                   </div>
                   <p className="text-base font-bold text-gray-900">{user.name}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1.5">
-                  <span
-                    className={`text-sm font-semibold px-3 py-1.5 rounded-full ${
-                      status === "출근"
-                        ? "bg-orange-100 text-orange-500"
-                        : status === "퇴근"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-500"
-                    }`}
-                  >
-                    {status ?? "미출근"}
-                  </span>
-                  <button
-                    onClick={() => openEdit(user.id)}
-                    className="text-base text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    ✏️
-                  </button>
-                </div>
+                <span
+                  className={`text-sm font-semibold px-3 py-1.5 rounded-full ${
+                    status === "출근"
+                      ? "bg-orange-100 text-orange-500"
+                      : status === "퇴근"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {status ?? "미출근"}
+                </span>
               </div>
               <div className="flex flex-col gap-1 pl-13">
                 <div className="flex items-center gap-2">
@@ -203,7 +108,6 @@ export default function AdminHomePage() {
         })}
       </div>
 
-      {/* 로그아웃 확인 */}
       {showLogout && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl px-6 py-5 mx-6 shadow-xl w-full max-w-xs">
@@ -223,91 +127,6 @@ export default function AdminHomePage() {
                 style={{ backgroundColor: "#8dc63f" }}
               >
                 예
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 수정 바텀시트 */}
-      {editUserId && editUser && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
-          onClick={() => setEditUserId(null)}
-        >
-          <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 헤더 */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold"
-                  style={{ backgroundColor: getInternColor(editUserIndex) }}
-                >
-                  {editUser.name.slice(0, 1)}
-                </div>
-                <h3 className="text-base font-bold text-gray-900">
-                  {editUser.name} 수정
-                </h3>
-              </div>
-              <button
-                onClick={() => setEditUserId(null)}
-                className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* 출퇴근 시간 수정 */}
-            <div className="px-5 pt-4">
-              <div className="mb-4">
-                <label className="text-xs text-gray-500 mb-1.5 block">날짜</label>
-                <input
-                  type="date"
-                  value={editDate}
-                  onChange={(e) => handleDateChange(e.target.value)}
-                  className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                />
-              </div>
-              <div className="flex gap-3 mb-5">
-                <div className="flex-1">
-                  <label className="text-xs text-gray-500 mb-1.5 block">출근 시간</label>
-                  <input
-                    type="time"
-                    value={editCheckIn}
-                    onChange={(e) => setEditCheckIn(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs text-gray-500 mb-1.5 block">퇴근 시간</label>
-                  <input
-                    type="time"
-                    value={editCheckOut}
-                    onChange={(e) => setEditCheckOut(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                  />
-                </div>
-              </div>
-              <label className="flex items-center gap-3 mb-5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editLunchBreak}
-                  onChange={(e) => setEditLunchBreak(e.target.checked)}
-                  className="w-5 h-5 rounded accent-[#8dc63f]"
-                />
-                <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
-              </label>
-
-              <button
-                onClick={saveAttendance}
-                disabled={saving}
-                className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-                style={{ backgroundColor: "#8dc63f" }}
-              >
-                {saving ? "저장 중..." : "저장"}
               </button>
             </div>
           </div>

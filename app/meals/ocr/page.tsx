@@ -431,7 +431,7 @@ export default function OcrPage() {
             <div className={`rounded-2xl px-4 py-3 flex items-center gap-2 text-sm ${result.isLunchTime ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-600"}`}>
               <span>{result.isLunchTime ? "🕐" : "⚠️"}</span>
               <div>
-                <p className="font-medium">{result.isLunchTime ? "점심 시간 검증 통과" : "점심 시간 외 결제"}</p>
+                <p className="font-medium">{result.isLunchTime ? "시간 내 결제" : "시간 외 결제"}</p>
                 <p className="text-xs mt-0.5 opacity-70">
                   {result.isLunchTime ? "11:30~14:00 사이에 결제됨" : "점심 시간(11:30~14:00) 외에 결제됨"}
                 </p>

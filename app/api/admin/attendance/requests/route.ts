@@ -56,15 +56,18 @@ export async function GET(req: Request) {
     const uniqueIds = [...new Set(allUserIds)]
 
     let nameMap: Record<string, string> = {}
+    let activeUserIds = new Set<string>()
     if (uniqueIds.length > 0) {
       const { data: users } = await supabaseAdmin
         .from("users")
         .select("id, name")
         .in("id", uniqueIds)
+        .eq("is_active", true)
       nameMap = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]))
+      activeUserIds = new Set((users ?? []).map((u) => u.id))
     }
 
-    const trips = (tripRes.data ?? []).map((r) => ({
+    const trips = (tripRes.data ?? []).filter((r) => activeUserIds.has(r.user_id)).map((r) => ({
       id: r.id,
       type: "business_trip" as const,
       status: r.status as string,
@@ -79,7 +82,7 @@ export async function GET(req: Request) {
       requested_at: r.created_at,
     }))
 
-    const vacs = (vacRes.data ?? []).map((r) => ({
+    const vacs = (vacRes.data ?? []).filter((r) => activeUserIds.has(r.user_id)).map((r) => ({
       id: r.id,
       type: "vacation" as const,
       status: r.status as string,
@@ -93,7 +96,7 @@ export async function GET(req: Request) {
       requested_at: r.created_at,
     }))
 
-    const edits = (editRes.data ?? []).map((r) => ({
+    const edits = (editRes.data ?? []).filter((r) => activeUserIds.has(r.user_id)).map((r) => ({
       id: r.id,
       type: "attendance_edit" as const,
       status: r.status as string,
