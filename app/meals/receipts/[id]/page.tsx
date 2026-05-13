@@ -24,6 +24,7 @@ type ReceiptDetail = {
   total_amount: number;
   is_lunch_time: boolean;
   status: string;
+  source: string;
   image_url: string | null;
   uploader_name: string;
   items: ReceiptItem[];
@@ -122,7 +123,9 @@ export default function ReceiptDetailPage() {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">입력 방식</span>
-              <span className="font-medium text-gray-700">{receipt.image_url ? "OCR 인식" : "수기 입력"}</span>
+              <span className={`font-medium ${receipt.source === "ocr" ? "text-green-600" : "text-gray-700"}`}>
+                {receipt.source === "ocr" ? "OCR 인식 성공" : "수기 입력"}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-400">점심 시간</span>

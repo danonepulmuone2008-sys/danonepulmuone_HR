@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const body: SaveReceiptPayload = await req.json()
-    const { storagePath, storeName, paidAt, totalAmount, isLunchTime, ocrRaw, items } = body
+    const { source, storagePath, storeName, paidAt, totalAmount, isLunchTime, ocrRaw, items } = body
 
     if (!items?.length) {
       return NextResponse.json({ error: "항목이 없습니다" }, { status: 400 })
@@ -96,6 +96,7 @@ export async function POST(req: Request) {
       .from("receipts")
       .insert({
         uploader_id: user.id,
+        source: source ?? "manual",
         image_path: storagePath ?? null,
         store_name: storeName || null,
         paid_at: paidAt,
