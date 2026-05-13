@@ -50,21 +50,37 @@ export async function GET(req: Request) {
 
     if (attError) throw new Error(attError.message)
 
-    // 해당 주 승인된 휴가 조회
-    const { data: vacationRows } = await supabaseAdmin
-      .from("vacation_requests")
-      .select("user_id, start_date, end_date")
-      .in("user_id", userIds)
-      .eq("status", "approved")
-      .lte("start_date", friday)
-      .gte("end_date", monday)
+    // 해당 주 승인된 휴가 및 출장 조회
+    const [{ data: vacationRows }, { data: tripRows }] = await Promise.all([
+      supabaseAdmin
+        .from("vacation_requests")
+        .select("user_id, start_date, end_date")
+        .in("user_id", userIds)
+        .eq("status", "approved")
+        .lte("start_date", friday)
+        .gte("end_date", monday),
+      supabaseAdmin
+        .from("business_trip_requests")
+        .select("user_id, start_date, end_date")
+        .in("user_id", userIds)
+        .eq("status", "approved")
+        .lte("start_date", friday)
+        .gte("end_date", monday),
+    ])
 
-    // 휴가 맵: user_id__date → true
-    const vacMap: Record<string, boolean> = {}
+    // 휴가/출장 맵: user_id__date → "vacation" | "business_trip"
+    const vacMap: Record<string, "vacation" | "business_trip"> = {}
     for (const v of vacationRows ?? []) {
       for (const date of weekDates) {
         if (v.start_date <= date && date <= v.end_date) {
-          vacMap[`${v.user_id}__${date}`] = true
+          vacMap[`${v.user_id}__${date}`] = "vacation"
+        }
+      }
+    }
+    for (const t of tripRows ?? []) {
+      for (const date of weekDates) {
+        if (t.start_date <= date && date <= t.end_date) {
+          vacMap[`${t.user_id}__${date}`] = "business_trip"
         }
       }
     }
