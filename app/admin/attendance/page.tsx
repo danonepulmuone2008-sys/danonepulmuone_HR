@@ -61,7 +61,7 @@ type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
   records: Record<string, { hours: number | null; checkedIn: boolean }>
-  vacations: Record<string, boolean>
+  vacations: Record<string, "vacation" | "business_trip">
 }
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -722,14 +722,24 @@ export default function AdminAttendancePage() {
                           if (dayIsHoliday[di]) {
                             return <span key={di} className="text-xs text-center text-gray-300">−</span>;
                           }
+                          const vacType = recordsData.vacations[`${u.id}__${date}`];
+                          const vacLabel = vacType === "business_trip" ? "출장" : vacType === "vacation" ? "휴가" : null;
+                          if (vacLabel) {
+                            const hasHours = rec?.hours !== null && rec?.hours !== undefined;
+                            const isCheckedIn = rec?.checkedIn && date === todayStr;
+                            const sub = hasHours ? `${rec!.hours}h` : isCheckedIn ? "출근" : null;
+                            return (
+                              <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="flex flex-col items-center justify-center w-full hover:bg-green-50 rounded transition-colors leading-none">
+                                <span className="text-[9px] font-semibold text-green-500">{vacLabel}</span>
+                                {sub && <span className={`text-[8px] font-medium ${isCheckedIn && !hasHours ? "text-orange-400" : "text-gray-400"}`}>{sub}</span>}
+                              </button>
+                            );
+                          }
                           if (rec?.checkedIn && date === todayStr) {
                             return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-[10px] text-center font-semibold text-orange-400 w-full hover:bg-orange-50 rounded transition-colors">출근</button>;
                           }
                           if (rec?.hours !== null && rec?.hours !== undefined) {
                             return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center font-semibold text-gray-700 w-full hover:bg-gray-50 rounded transition-colors">{rec.hours}</button>;
-                          }
-                          if (recordsData.vacations[`${u.id}__${date}`]) {
-                            return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-[10px] text-center font-semibold text-green-500 w-full hover:bg-green-50 rounded transition-colors">휴가</button>;
                           }
                           return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center text-gray-400 w-full hover:bg-gray-50 rounded transition-colors">−</button>;
                         })}
