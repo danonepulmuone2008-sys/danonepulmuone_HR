@@ -600,22 +600,20 @@ async function saveItemAmount(receiptId: string, itemId: string) {
       {/* 식대 한도 수정 바텀시트 */}
       {showLimitEdit && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-12"
           onClick={() => !savingLimit && setShowLimitEdit(false)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col"
+            style={{ maxHeight: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-gray-200" />
-            </div>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <h3 className="text-base font-bold text-gray-900">{viewYear}년 {viewMonth}월 식대 한도 설정</h3>
               <button onClick={() => setShowLimitEdit(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
             </div>
 
-            <div className="px-5 pt-4 flex flex-col gap-4">
+            <div className="px-5 pt-4 flex flex-col gap-4 overflow-y-auto flex-1 pb-10">
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1.5 block">하루 식대 한도</label>
                 <div className="relative">
