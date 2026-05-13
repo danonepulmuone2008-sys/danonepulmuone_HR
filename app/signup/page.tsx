@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -26,6 +26,7 @@ export default function SignupPage() {
   const [emailError, setEmailError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [nameError, setNameError] = useState("");
+  const isComposing = useRef(false);
 
   const SECURITY_QUESTIONS = [
     "기억에 남는 추억의 장소는?",
@@ -54,8 +55,8 @@ export default function SignupPage() {
       setErrorMsg("비밀번호가 일치하지 않습니다");
       return;
     }
-    if (password.length < 6) {
-      setErrorMsg("비밀번호는 6자 이상이어야 합니다");
+    if (password.length < 6 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setErrorMsg("비밀번호 조건에 부합하지 않습니다");
       return;
     }
 
@@ -135,14 +136,28 @@ export default function SignupPage() {
             type="text"
             required
             value={name}
+            onCompositionStart={() => { isComposing.current = true; }}
+            onCompositionEnd={(e) => {
+              isComposing.current = false;
+              const val = e.currentTarget.value;
+              if (/[^가-힣a-zA-Z]/.test(val)) {
+                setNameError("한글, 영문만 입력 가능합니다");
+                setName(val.replace(/[^가-힣a-zA-Z]/g, ""));
+              } else {
+                setNameError("");
+                setName(val);
+              }
+            }}
             onChange={(e) => {
+              if (isComposing.current) { setName(e.target.value); return; }
               const val = e.target.value;
               if (/[^가-힣a-zA-Z]/.test(val)) {
                 setNameError("한글, 영문만 입력 가능합니다");
+                setName(val.replace(/[^가-힣a-zA-Z]/g, ""));
               } else {
                 setNameError("");
+                setName(val);
               }
-              setName(val.replace(/[^가-힣a-zA-Z]/g, ""));
             }}
             placeholder="이름"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
@@ -188,12 +203,24 @@ export default function SignupPage() {
           <input
             type="password"
             required
-            minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호 (6자 이상)"
+            placeholder="비밀번호"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {password.length > 0 && (
+            <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
+              {[
+                { label: "6자 이상", met: password.length >= 6 },
+                { label: "영문자 포함", met: /[a-zA-Z]/.test(password) },
+                { label: "숫자 포함", met: /[0-9]/.test(password) },
+              ].map(({ label, met }) => (
+                <p key={label} className="text-xs flex items-center gap-1.5" style={{ color: met ? "#62a83a" : "#9CA3AF" }}>
+                  <span>{met ? "✓" : "○"}</span>{label}
+                </p>
+              ))}
+            </div>
+          )}
           <input
             type="password"
             required
@@ -202,6 +229,11 @@ export default function SignupPage() {
             placeholder="비밀번호 확인"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {passwordConfirm.length > 0 && (
+            password === passwordConfirm
+              ? <p className="text-xs text-green-600 px-1">비밀번호가 일치합니다</p>
+              : <p className="text-xs text-red-500 px-1">비밀번호가 일치하지 않습니다</p>
+          )}
           <select
             required
             value={securityQuestion}
