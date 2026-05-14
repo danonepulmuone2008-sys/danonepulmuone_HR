@@ -41,6 +41,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       .from("receipt_items")
       .select("id, item_name, unit_price, qty, price, status, responded_at, assigned_user_id")
       .eq("receipt_id", id)
+      .order("id")
 
     const assigneeIds = [...new Set((itemRows ?? []).map((i) => i.assigned_user_id))]
     const { data: userRows } = assigneeIds.length > 0
