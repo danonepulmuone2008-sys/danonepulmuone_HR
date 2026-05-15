@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Camera } from "lucide-react";
-import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
+import { getMondayOfWeek, getWorkingDaysInWeek, getMealLimit } from "@/lib/holidays";
 
 function fmtHM(h: number): string {
   const totalMin = Math.round(h * 60);
@@ -242,15 +242,38 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) return;
-    fetch("/api/meals/usage", {
-      headers: { Authorization: `Bearer ${user.token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.used !== undefined) setMealUsed(data.used);
-        if (data.totalLimit !== undefined) setMealLimit(data.totalLimit);
-      })
-      .catch(() => {});
+    (async () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const startOfMonth = year + '-' + String(month).padStart(2, '0') + '-01';
+      const startOfNext = month === 12
+        ? (year + 1) + '-01-01'
+        : year + '-' + String(month + 1).padStart(2, '0') + '-01';
+
+      const { data: approvedReceipts } = await supabase
+        .from('receipts')
+        .select('id')
+        .eq('status', 'approved')
+        .gte('paid_at', startOfMonth)
+        .lt('paid_at', startOfNext);
+
+      const receiptIds = (approvedReceipts ?? []).map((r) => r.id);
+
+      const { data: myItems } = receiptIds.length > 0
+        ? await supabase.from('receipt_items').select('price').in('receipt_id', receiptIds)
+        : { data: [] };
+
+      setMealUsed((myItems ?? []).reduce((sum, r) => sum + (r.price ?? 0), 0));
+
+      const { data: limitRow } = await supabase
+        .from('monthly_meal_limits')
+        .select('monthly_meal_limit')
+        .eq('target_month', startOfMonth)
+        .maybeSingle();
+
+      setMealLimit(limitRow?.monthly_meal_limit ?? getMealLimit(year, month));
+    })();
   }, [user]);
 
   return (

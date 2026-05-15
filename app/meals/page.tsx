@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
+import { getMealLimit } from "@/lib/holidays";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import WeeklyReceiptList from "@/components/WeeklyReceiptList";
@@ -46,53 +48,95 @@ export default function MealsPage() {
 
   const fetchPending = useCallback(async () => {
     if (!user) return;
-    const res = await fetch("/api/meals/pending", {
-      headers: { Authorization: `Bearer ${user.token}` },
-    });
-    if (!res.ok) { setPendingItems([]); return; }
-    const data = await res.json();
-    setPendingItems(Array.isArray(data) ? data : []);
+    const { data: items } = await supabase
+      .from("receipt_items")
+      .select("id, item_name, price, receipt_id")
+      .eq("status", "pending");
+    if (!items?.length) { setPendingItems([]); return; }
+    const receiptIds = [...new Set(items.map((i) => i.receipt_id))];
+    const { data: receiptRows } = await supabase
+      .from("receipts")
+      .select("id, store_name, paid_at, uploader_id")
+      .in("id", receiptIds);
+    const uploaderIds = [...new Set((receiptRows ?? []).map((r) => r.uploader_id))];
+    const { data: uploaderRows } = uploaderIds.length > 0
+      ? await supabase.from("users").select("id, name").in("id", uploaderIds)
+      : { data: [] };
+    setPendingItems(items.map((item) => {
+      const receipt = receiptRows?.find((r) => r.id === item.receipt_id);
+      const uploader = uploaderRows?.find((u) => u.id === receipt?.uploader_id);
+      return {
+        id: item.id,
+        item_name: item.item_name,
+        price: item.price,
+        receipt_id: item.receipt_id,
+        store_name: receipt?.store_name ?? "가맹점 미인식",
+        paid_at: receipt?.paid_at ?? "",
+        uploader_name: uploader?.name ?? "알 수 없음",
+      };
+    }));
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    fetch("/api/meals/limit", {
-      headers: { Authorization: `Bearer ${user.token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => { if (data.monthlyLimit !== undefined) setTotalLimit(data.monthlyLimit); })
-      .catch(() => {});
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const startOfMonth = year + '-' + String(month).padStart(2, '0') + '-01';
+    const startOfNext = month === 12
+      ? (year + 1) + '-01-01'
+      : year + '-' + String(month + 1).padStart(2, '0') + '-01';
 
-    fetch("/api/meals/usage", {
-      headers: { Authorization: `Bearer ${user.token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.used !== undefined) setMealUsed(data.used);
-        if (data.totalLimit !== undefined) setTotalLimit(data.totalLimit);
-      })
-      .catch(() => {});
+    // 한도 조회
+    supabase
+      .from("monthly_meal_limits")
+      .select("monthly_meal_limit")
+      .eq("target_month", startOfMonth)
+      .maybeSingle()
+      .then(({ data }) => setTotalLimit(data?.monthly_meal_limit ?? getMealLimit(year, month)));
 
-    fetch("/api/meals/receipts", {
-      headers: { Authorization: `Bearer ${user.token}` },
-    })
-      .then((r) => r.json())
-      .then((rows: { id: string; store_name: string | null; paid_at: string; my_amount: number; status: string }[]) => {
-        if (!Array.isArray(rows)) return;
-        setReceipts(rows.map((r) => {
-          const dt = new Date(r.paid_at);
-          return {
-            id: r.id,
-            date: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`,
-            time: `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`,
-            store: r.store_name ?? "가맹점 미인식",
-            menu: "",
-            amount: r.my_amount ?? 0,
-            status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
-          };
-        }));
-      })
-      .catch(() => {});
+    // 사용금액 조회
+    (async () => {
+      const { data: approvedReceipts } = await supabase
+        .from("receipts")
+        .select("id")
+        .eq("status", "approved")
+        .gte("paid_at", startOfMonth)
+        .lt("paid_at", startOfNext);
+      const receiptIds = (approvedReceipts ?? []).map((r) => r.id);
+      const { data: myItems } = receiptIds.length > 0
+        ? await supabase.from("receipt_items").select("price").in("receipt_id", receiptIds)
+        : { data: [] };
+      setMealUsed((myItems ?? []).reduce((sum, r) => sum + (r.price ?? 0), 0));
+    })().catch(() => {});
+
+    // 영수증 목록 조회
+    (async () => {
+      const { data: myReceiptItems } = await supabase
+        .from("receipt_items")
+        .select("receipt_id, price");
+      const myAmountMap: Record<string, number> = {};
+      for (const item of myReceiptItems ?? []) {
+        myAmountMap[String(item.receipt_id)] = (myAmountMap[String(item.receipt_id)] ?? 0) + (item.price ?? 0);
+      }
+      const { data: rows } = await supabase
+        .from("receipts")
+        .select("id, store_name, paid_at, total_amount, status")
+        .order("paid_at", { ascending: false });
+      if (!Array.isArray(rows)) return;
+      setReceipts(rows.map((r) => {
+        const dt = new Date(r.paid_at);
+        return {
+          id: String(r.id),
+          date: dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'),
+          time: String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0'),
+          store: r.store_name ?? "가맹점 미인식",
+          menu: "",
+          amount: myAmountMap[String(r.id)] ?? r.total_amount ?? 0,
+          status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
+        };
+      }));
+    })().catch(() => {});
 
     fetchPending();
   }, [user, fetchPending]);
