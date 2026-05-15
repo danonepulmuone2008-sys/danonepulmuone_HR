@@ -251,6 +251,7 @@ export default function AttendancePage() {
     if (!selectedDay || !flexInput.startTime || !flexInput.endTime || !userId || !user) return;
     if (flexInput.startTime >= flexInput.endTime) return;
     const dateStr = `${calYear}-${calMm}-${String(selectedDay).padStart(2, "0")}`;
+    if (new Date(calYear, calMonth, selectedDay) < new Date(currentYear, currentMonth, todayDate)) return;
     await supabase.from("flex_schedules").upsert(
       { user_id: userId, user_name: user.name, date: dateStr, start_time: flexInput.startTime, end_time: flexInput.endTime },
       { onConflict: "user_id,date" }
@@ -462,6 +463,7 @@ export default function AttendancePage() {
         const dayFlex = flexMap[selectedDay] ?? [];
         const dayTeam = teamMap[selectedDay] ?? [];
         const myFlexForDay = dayFlex.find(f => f.userId === userId);
+        const isSelectedDayPast = new Date(calYear, calMonth, selectedDay) < new Date(currentYear, currentMonth, todayDate);
         const closeModal = () => {
           setSelectedDay(null);
           setModalMode("detail");
@@ -504,7 +506,7 @@ export default function AttendancePage() {
                               <span className="text-sm font-semibold text-gray-800">{fe.userId === userId ? "나" : fe.userName}</span>
                               <span className="text-sm text-purple-600 font-medium">{fe.startTime} ~ {fe.endTime}</span>
                             </div>
-                            {fe.userId === userId && (
+                            {fe.userId === userId && !isSelectedDayPast && (
                               <button onClick={() => handleFlexDelete(fe.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded-lg hover:bg-red-50 transition-colors">삭제</button>
                             )}
                           </div>
@@ -543,12 +545,16 @@ export default function AttendancePage() {
                     <p className="text-sm text-gray-400 text-center py-6">등록된 일정이 없습니다</p>
                   )}
                   <div className="mt-2 mb-1">
-                    <button
-                      onClick={() => { if (myFlexForDay) setFlexInput({ startTime: myFlexForDay.startTime, endTime: myFlexForDay.endTime }); setModalMode("flex-add"); }}
-                      className="w-full py-3.5 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
-                    >
-                      {myFlexForDay ? "유연근무 수정" : "유연근무 등록"}
-                    </button>
+                    {isSelectedDayPast ? (
+                      <p className="text-xs text-gray-400 text-center py-3">지난 날짜는 수정할 수 없습니다</p>
+                    ) : (
+                      <button
+                        onClick={() => { if (myFlexForDay) setFlexInput({ startTime: myFlexForDay.startTime, endTime: myFlexForDay.endTime }); setModalMode("flex-add"); }}
+                        className="w-full py-3.5 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
+                      >
+                        {myFlexForDay ? "유연근무 수정" : "유연근무 등록"}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
