@@ -39,8 +39,8 @@ export default function HomePage() {
   }, [user]);
 
   const [mealUsed, setMealUsed] = useState(0);
-  const [mealLimit, setMealLimit] = useState(100000);
-  const mealPercent = Math.round((mealUsed / mealLimit) * 100);
+  const [mealLimit, setMealLimit] = useState(0);
+  const mealPercent = mealLimit > 0 ? Math.round((mealUsed / mealLimit) * 100) : 0;
 
   const [clockIn, setClockIn] = useState<string | null>(null);
   const [clockOut, setClockOut] = useState<string | null>(null);
