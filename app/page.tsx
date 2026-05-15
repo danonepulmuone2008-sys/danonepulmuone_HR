@@ -88,7 +88,7 @@ export default function HomePage() {
     }
 
     if (direction === "in" && user) {
-      const [{ data: vacations }, { data: flexEntry }] = await Promise.all([
+      const [{ data: vacations }, { data: flexEntry }, { data: businessTrips }] = await Promise.all([
         supabase.from("vacation_requests")
           .select("type")
           .eq("user_id", user.id)
@@ -101,11 +101,28 @@ export default function HomePage() {
           .eq("user_id", user.id)
           .eq("date", todayStr)
           .maybeSingle(),
+        supabase.from("business_trip_requests")
+          .select("start_time, end_time, destination")
+          .eq("user_id", user.id)
+          .eq("status", "approved")
+          .lte("start_date", todayStr)
+          .gte("end_date", todayStr),
       ]);
 
       if (vacations && vacations.length > 0) {
         setClockBlockReason("휴가 등록일입니다.");
         return;
+      }
+
+      if (businessTrips && businessTrips.length > 0) {
+        const currentTime = getNow();
+        const onTrip = businessTrips.some(
+          (t) => currentTime >= t.start_time && currentTime <= t.end_time
+        );
+        if (onTrip) {
+          setClockBlockReason("출장 중인 시간입니다.");
+          return;
+        }
       }
 
       if (flexEntry) {
