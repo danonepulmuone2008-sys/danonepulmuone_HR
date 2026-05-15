@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/components/AuthProvider"
 import AdminBottomNav from "@/components/AdminBottomNav"
 import { supabase } from "@/lib/supabase"
+import { Download } from "lucide-react"
 
 async function getToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -53,6 +54,25 @@ export default function AdminReceiptDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  async function downloadImage() {
+    if (!receipt?.image_url) return
+    const d = new Date(receipt.paid_at)
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const filename = `${String(d.getFullYear()).slice(2)}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}시${pad(d.getMinutes())}분_영수증.jpg`
+    try {
+      const res = await fetch(receipt.image_url)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert("다운로드에 실패했습니다")
+    }
+  }
 
   async function deleteReceipt() {
     const token = await getToken()
@@ -141,8 +161,11 @@ export default function AdminReceiptDetailPage() {
         {/* 영수증 이미지 */}
         {receipt.image_url && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-gray-700">영수증 사진</h2>
+              <button onClick={downloadImage} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <Download size={18} />
+              </button>
             </div>
             <div className="p-3">
               <img

@@ -24,6 +24,7 @@ export async function GET(
       .from("receipt_items")
       .select("id, item_name, unit_price, qty, price, assigned_user_id, status")
       .eq("receipt_id", id)
+      .order("id")
 
     if (itemsError) throw itemsError
 
