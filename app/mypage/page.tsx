@@ -234,7 +234,7 @@ const AlarmModal = ({
 
 /* ───────────────────── 메인 ───────────────────── */
 export default function MyPage() {
-  const { user: authUser } = useAuth();
+  const { user: authUser, refreshUser } = useAuth();
 
   /* 프로필 */
   const [showEdit, setShowEdit] = useState(false);
@@ -509,6 +509,7 @@ export default function MyPage() {
                   setSaved({ ...form });
                   setShowEdit(false);
                   showToast("프로필이 수정되었습니다.");
+                  await refreshUser();
                 }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: BRAND_BLUE }}
