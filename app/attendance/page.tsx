@@ -12,7 +12,7 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string };
 type RequestItem = { id: string; type: "vacation" | "business_trip"; label: string; date: string; status: string };
-type DayData = { day: string; hours: number };
+type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string };
 
@@ -123,14 +123,23 @@ export default function AttendancePage() {
         .lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
     ]);
 
+    const fmtTime = (ts: string) => {
+      const d = new Date(ts);
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    };
+
     const days = DAY_LABELS.map((day, i) => {
       const data = attendanceRows[i];
       const date = weekDates[i];
       let hours = 0;
+      let clockIn: string | undefined;
+      let clockOut: string | undefined;
       if (data?.clock_in && data?.clock_out) {
         const diff = new Date(data.clock_out).getTime() - new Date(data.clock_in).getTime();
         hours = Math.round(diff / 36000) / 100;
         if (data.lunch_break) hours = Math.max(0, hours - 1);
+        clockIn = fmtTime(data.clock_in);
+        clockOut = fmtTime(data.clock_out);
       }
       const trip = (trips ?? []).find(t => t.start_date <= date && t.end_date >= date && t.start_time && t.end_time);
       if (trip) {
@@ -140,8 +149,9 @@ export default function AttendancePage() {
         const [sh, sm] = startStr.split(":").map(Number);
         const [eh, em] = endStr.split(":").map(Number);
         hours += (eh * 60 + em - sh * 60 - sm) / 60;
+        if (!clockIn) { clockIn = startStr; clockOut = endStr; }
       }
-      return { day, hours };
+      return { day, hours, clockIn, clockOut };
     });
     setWeekDays(days);
   }, []);
@@ -298,10 +308,17 @@ export default function AttendancePage() {
           </div>
           <div className="flex justify-between items-end gap-2">
             {weekDays.map(d => (
-              <div key={d.day} className="flex flex-col items-center flex-1 gap-1.5">
+              <div key={d.day} className="flex flex-col items-center flex-1 gap-1.5 group">
                 <span className="text-xs text-gray-500 font-medium h-4 flex items-center">{d.hours > 0 ? fmtHM(d.hours) : ""}</span>
-                <div className="w-full h-16 bg-gray-100 rounded-lg flex items-end overflow-hidden">
+                <div className="relative w-full h-16 bg-gray-100 rounded-lg flex items-end">
                   <div className={`w-full rounded-lg transition-all duration-500 ${d.hours > 0 ? "bg-blue-500" : ""}`} style={{ height: d.hours > 0 ? `${(d.hours / MAX_DAY_HOURS) * 100}%` : "0%" }} />
+                  {d.clockIn && d.clockOut && (
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                      <span className="bg-gray-900/80 text-white text-xs px-2 py-1 rounded-lg whitespace-nowrap">
+                        {d.clockIn!.replace(":", "시")}분~{d.clockOut!.replace(":", "시")}분
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <span className="text-xs text-gray-400">{d.day}</span>
               </div>
