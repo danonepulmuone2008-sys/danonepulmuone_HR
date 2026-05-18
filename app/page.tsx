@@ -128,8 +128,11 @@ export default function HomePage() {
 
       if (flexEntry) {
         const currentTime = getNow();
-        if (currentTime < flexEntry.start_time || currentTime > flexEntry.end_time) {
-          setClockBlockReason(`유연근무 설정 시간(${flexEntry.start_time} ~ ${flexEntry.end_time}) 외 출근입니다.`);
+        const [sh, sm] = flexEntry.start_time.split(":").map(Number);
+        const totalMins = Math.max(0, sh * 60 + sm - 30);
+        const flexStartMinus30 = `${String(Math.floor(totalMins / 60)).padStart(2, "0")}:${String(totalMins % 60).padStart(2, "0")}`;
+        if (currentTime < flexStartMinus30 || currentTime > flexEntry.end_time) {
+          setClockBlockReason(`유연근무 설정 시간(${flexEntry.start_time} ~ ${flexEntry.end_time}) 외 출근입니다. (출근 가능: ${flexStartMinus30} ~ ${flexEntry.end_time})`);
           return;
         }
       }

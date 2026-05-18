@@ -120,3 +120,32 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const userId = decodeJwtSub(token)
+    if (!userId) return NextResponse.json({ error: "JWT 디코딩 실패" }, { status: 401 })
+
+    const { type, id } = await req.json()
+    if (!type || !id) return NextResponse.json({ error: "올바른 값을 입력해주세요" }, { status: 400 })
+
+    const tableMap: Record<string, string> = {
+      business_trip: "business_trip_requests",
+      vacation: "vacation_requests",
+      attendance_edit: "attendance_edit_requests",
+    }
+    const table = tableMap[type]
+    if (!table) return NextResponse.json({ error: "올바른 타입이 아닙니다" }, { status: 400 })
+
+    const { error } = await supabaseAdmin.from(table).delete().eq("id", id)
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error("[admin attendance requests DELETE]", err)
+    return NextResponse.json({ error: "삭제에 실패했습니다" }, { status: 500 })
+  }
+}

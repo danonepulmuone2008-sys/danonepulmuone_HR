@@ -178,6 +178,7 @@ export default function AdminAttendancePage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [approvalPage, setApprovalPage] = useState(1);
   const [confirmChange, setConfirmChange] = useState<{ req: ApprovalRequest; targetAction: "approved" | "rejected" } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ApprovalRequest | null>(null);
   const APPROVAL_PAGE_SIZE = 5;
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
@@ -270,6 +271,22 @@ export default function AdminAttendancePage() {
       setApprovalError(`네트워크 오류: ${String(e)}`);
     } finally {
       setApprovalLoading(false);
+    }
+  }
+
+  async function handleDeleteRequest(req: ApprovalRequest) {
+    setProcessingId(req.id);
+    try {
+      const token = user?.token;
+      if (!token) return;
+      const res = await fetch("/api/admin/attendance/requests", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type: req.type, id: req.id }),
+      });
+      if (res.ok) setRequests((prev) => prev.filter((r) => r.id !== req.id));
+    } finally {
+      setProcessingId(null);
     }
   }
 
@@ -443,6 +460,40 @@ export default function AdminAttendancePage() {
               ) : (
                 <img src={viewAttachmentUrl} alt="첨부파일" className="max-w-full object-contain rounded-xl" style={{ maxHeight: "70vh" }} />
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div
+            className="bg-white rounded-t-3xl w-full max-w-[390px] px-5 pt-6 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-bold text-gray-900 mb-1">요청 삭제</p>
+            <p className="text-sm text-gray-500 mb-6">삭제 후 복구할 수 없습니다. 삭제하시겠습니까?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
+              >
+                취소
+              </button>
+              <button
+                onClick={async () => {
+                  const req = confirmDelete;
+                  setConfirmDelete(null);
+                  await handleDeleteRequest(req);
+                }}
+                className="flex-1 h-11 rounded-xl text-sm text-white font-semibold bg-red-400"
+              >
+                삭제
+              </button>
             </div>
           </div>
         </div>
@@ -975,6 +1026,17 @@ export default function AdminAttendancePage() {
                       style={{ backgroundColor: "#8dc63f" }}
                     >
                       승인
+                    </button>
+                  </div>
+                )}
+                {showHistory && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setConfirmDelete(req)}
+                      disabled={isProcessing}
+                      className="text-xs text-red-400 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    >
+                      삭제
                     </button>
                   </div>
                 )}
