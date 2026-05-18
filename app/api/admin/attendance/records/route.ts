@@ -103,12 +103,15 @@ export async function GET(req: Request) {
     }
 
     // user_id + date 키로 맵 생성
-    const recMap: Record<string, { hours: number | null; checkedIn: boolean }> = {}
+    const recMap: Record<string, { hours: number | null; checkedIn: boolean; clockIn?: string; clockOut?: string; lunchBreak?: boolean }> = {}
     for (const row of attendanceRows ?? []) {
       const key = `${row.user_id}__${row.date}`
       recMap[key] = {
         hours: calcHours(row.clock_in, row.clock_out, row.lunch_break),
         checkedIn: !!row.clock_in && !row.clock_out,
+        clockIn: row.clock_in ?? undefined,
+        clockOut: row.clock_out ?? undefined,
+        lunchBreak: row.lunch_break ?? undefined,
       }
     }
     // 출장 시간을 attendance 시간에 합산 (사용자 화면과 동일한 방식)

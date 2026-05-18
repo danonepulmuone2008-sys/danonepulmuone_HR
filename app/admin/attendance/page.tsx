@@ -60,7 +60,7 @@ type RecordsUser = { id: string; name: string }
 type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
-  records: Record<string, { hours: number | null; checkedIn: boolean }>
+  records: Record<string, { hours: number | null; checkedIn: boolean; clockIn?: string; clockOut?: string; lunchBreak?: boolean }>
   vacations: Record<string, "vacation" | "business_trip">
 }
 
@@ -314,37 +314,33 @@ export default function AdminAttendancePage() {
   }
 
   async function openEditForRecord(userId: string, userName: string, date: string) {
-    setEditDate(date);
-    setEditCheckIn("");
-    setEditCheckOut("");
-    setEditLunchBreak(true);
     setEditUserName(userName);
     setEditUserId(userId);
-    const { data } = await supabase
-      .from("attendance_records")
-      .select("clock_in, clock_out, lunch_break")
-      .eq("user_id", userId)
-      .eq("date", date)
-      .single();
-    if (data) {
-      setEditCheckIn(data.clock_in ? toTimeStr(data.clock_in) : "");
-      setEditCheckOut(data.clock_out ? toTimeStr(data.clock_out) : "");
-      setEditLunchBreak(data.lunch_break ?? true);
-    }
+    setEditDate(date);
+    const rec = recordsData?.records[`${userId}__${date}`];
+    setEditCheckIn(rec?.clockIn ? toTimeStr(rec.clockIn) : "");
+    setEditCheckOut(rec?.clockOut ? toTimeStr(rec.clockOut) : "");
+    setEditLunchBreak(rec?.lunchBreak ?? true);
   }
 
   async function handleEditDateChange(date: string) {
     setEditDate(date);
     if (!editUserId) return;
-    const { data } = await supabase
-      .from("attendance_records")
-      .select("clock_in, clock_out, lunch_break")
-      .eq("user_id", editUserId)
-      .eq("date", date)
-      .single();
-    setEditCheckIn(data?.clock_in ? toTimeStr(data.clock_in) : "");
-    setEditCheckOut(data?.clock_out ? toTimeStr(data.clock_out) : "");
-    setEditLunchBreak(data?.lunch_break ?? true);
+    const token = user?.token;
+    if (!token) return;
+    const res = await fetch(`/api/admin/attendance/record?userId=${editUserId}&date=${date}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setEditCheckIn(data.clock_in ? toTimeStr(data.clock_in) : "");
+      setEditCheckOut(data.clock_out ? toTimeStr(data.clock_out) : "");
+      setEditLunchBreak(data.lunch_break ?? true);
+    } else {
+      setEditCheckIn("");
+      setEditCheckOut("");
+      setEditLunchBreak(true);
+    }
   }
 
   async function saveAttendanceRecord() {
