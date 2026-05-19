@@ -26,6 +26,7 @@ export default function AdminInquiryPage() {
   const [activeTab, setActiveTab] = useState<"미처리" | "처리완료">("미처리");
   const [allUsers, setAllUsers] = useState<{ id: string }[]>([]);
   const [toast, setToast] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/interns")
@@ -93,6 +94,15 @@ export default function AdminInquiryPage() {
     setTimeout(() => setToast(""), 2500);
     window.dispatchEvent(new CustomEvent("inquiryProcessed"));
     await supabase.from("inquiries").update({ is_processed: true, is_read: true }).eq("id", id);
+  };
+
+  const deleteInquiry = async (id: string) => {
+    await supabase.from("inquiries").delete().eq("id", id);
+    setInquiryItems((prev) => prev.filter((q) => q.id !== id));
+    setStatuses((prev) => prev.filter((s) => s.id !== id));
+    setConfirmDelete(null);
+    setToast("삭제되었습니다.");
+    setTimeout(() => setToast(""), 2500);
   };
 
   const unprocCount = inquiries.filter((q) => !q.isProcessed).length;
@@ -181,7 +191,7 @@ export default function AdminInquiryPage() {
       {/* 문의 상세 바텀시트 */}
       {selectedId !== null && selected && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-12"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-14"
           onClick={() => setSelectedId(null)}
         >
           <div
@@ -209,7 +219,7 @@ export default function AdminInquiryPage() {
             <div className="px-5 pt-5 pb-4 overflow-y-auto flex-1">
               <p className="text-sm text-gray-700 leading-relaxed">{selected.content}</p>
             </div>
-            {!selected.isProcessed && (
+            {!selected.isProcessed ? (
               <div className="px-5 pb-6 flex-shrink-0">
                 <button
                   onClick={() => processInquiry(selected.id)}
@@ -218,7 +228,45 @@ export default function AdminInquiryPage() {
                   처리 완료
                 </button>
               </div>
+            ) : (
+              <div className="px-5 pb-6 flex-shrink-0">
+                <button
+                  onClick={() => { setSelectedId(null); setConfirmDelete(selected.id); }}
+                  className="w-full py-3.5 text-red-400 border border-red-200 rounded-2xl text-sm font-semibold hover:bg-red-50 active:scale-95 transition-all"
+                >
+                  삭제
+                </button>
+              </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {confirmDelete !== null && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-6"
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-xs px-6 py-6 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold text-gray-900 text-center">문의를 삭제하시겠습니까?</p>
+            <p className="text-xs text-gray-400 text-center">삭제된 문의는 복구할 수 없습니다.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 h-10 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => deleteInquiry(confirmDelete)}
+                className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
+              >
+                삭제
+              </button>
+            </div>
           </div>
         </div>
       )}
