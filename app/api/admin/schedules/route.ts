@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const { data: activeUsers } = await supabaseAdmin
       .from("users")
       .select("id")
-      .neq("role", "admin")
+      .eq("role", "employee")
       .eq("is_active", true);
     const activeIds = (activeUsers ?? []).map((u) => u.id);
 
