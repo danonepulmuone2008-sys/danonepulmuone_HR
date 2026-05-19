@@ -14,6 +14,7 @@ type User = {
   position: string;
   role: string;
   is_active: boolean;
+  approver: boolean;
 };
 
 type EditForm = {
@@ -24,6 +25,7 @@ type EditForm = {
   email: string;
   role: string;
   is_active: boolean;
+  approver: boolean;
 };
 
 async function getToken(): Promise<string> {
@@ -81,6 +83,7 @@ export default function AdminHomePage() {
       email: user.email ?? "",
       role: user.role ?? "employee",
       is_active: user.is_active,
+      approver: user.approver ?? false,
     });
   }
 
@@ -236,6 +239,17 @@ export default function AdminHomePage() {
                       <button key={r} onClick={() => setEditForm((f) => f ? { ...f, role: r } : f)}
                         className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.role === r ? "bg-blue-500 text-white border-blue-500" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
                         {r === "employee" ? "직원" : "관리자"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">휴가/출장 승인 권한</label>
+                  <div className="flex gap-2">
+                    {([true, false] as const).map((v) => (
+                      <button key={String(v)} onClick={() => setEditForm((f) => f ? { ...f, approver: v } : f)}
+                        className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.approver === v ? (v ? "bg-[#8dc63f] text-white border-[#8dc63f]" : "bg-gray-400 text-white border-gray-400") : "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                        {v ? "승인 가능" : "불가"}
                       </button>
                     ))}
                   </div>
