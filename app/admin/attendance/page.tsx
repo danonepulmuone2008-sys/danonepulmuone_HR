@@ -203,6 +203,14 @@ export default function AdminAttendancePage() {
   const [granting, setGranting] = useState(false);
   const [deletingGrantId, setDeletingGrantId] = useState<string | null>(null);
 
+  // 일괄 지급 상태
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkYear, setBulkYear] = useState(CURRENT_YEAR);
+  const [bulkHours, setBulkHours] = useState("");
+  const [bulkNote, setBulkNote] = useState("");
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkGranting, setBulkGranting] = useState(false);
+
   // 근무 기록 수정 상태
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [editUserName, setEditUserName] = useState("");
@@ -334,6 +342,30 @@ export default function AdminAttendancePage() {
       if (res.ok) await fetchGrants(grantTarget.id, grantYear);
     } finally {
       setDeletingGrantId(null);
+    }
+  }
+
+  async function handleBulkGrant() {
+    if (!bulkHours || Number(bulkHours) <= 0 || bulkSelected.size === 0) return;
+    setBulkGranting(true);
+    try {
+      const token = user?.token;
+      if (!token) return;
+      await Promise.all(
+        Array.from(bulkSelected).map((userId) =>
+          fetch("/api/admin/vacation-grants", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ userId, year: bulkYear, hours: Number(bulkHours), note: bulkNote || null }),
+          })
+        )
+      );
+      setBulkOpen(false);
+      setBulkHours("");
+      setBulkNote("");
+      setBulkSelected(new Set());
+    } finally {
+      setBulkGranting(false);
     }
   }
 
@@ -1156,6 +1188,13 @@ export default function AdminAttendancePage() {
       ) : activeTab === "vacation" ? (
         /* 휴가 관리 탭 */
         <div className="flex flex-col gap-3 px-4 pt-3">
+          <button
+            onClick={() => { setBulkOpen(true); setBulkYear(CURRENT_YEAR); setBulkHours(""); setBulkNote(""); setBulkSelected(new Set(vacUsers.map(u => u.id))); }}
+            className="w-full h-11 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-1.5"
+            style={{ backgroundColor: "#8dc63f" }}
+          >
+            일괄 지급
+          </button>
           {vacUsersLoading ? (
             <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
               <p className="text-sm text-gray-400">불러오는 중...</p>
@@ -1190,6 +1229,94 @@ export default function AdminAttendancePage() {
           )}
         </div>
       ) : null}
+
+      {/* 일괄 지급 바텀시트 */}
+      {bulkOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 pb-8" onClick={() => setBulkOpen(false)}>
+          <div className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10 flex flex-col" style={{ maxHeight: "85vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">휴가 일괄 지급</h3>
+                <p className="text-xs text-gray-400 mt-0.5">선택한 직원에게 동일 시간을 지급합니다</p>
+              </div>
+              <button onClick={() => setBulkOpen(false)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 pt-4 pb-2">
+              {/* 연도 선택 */}
+              <div className="flex items-center justify-between mb-4">
+                <button onClick={() => setBulkYear(y => y - 1)} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-lg">‹</button>
+                <span className="text-sm font-semibold text-gray-800">{bulkYear}년</span>
+                <button onClick={() => setBulkYear(y => y + 1)} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-lg">›</button>
+              </div>
+              {/* 시간 + 메모 입력 */}
+              <div className="flex gap-2 mb-4">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={bulkHours}
+                    onChange={(e) => { if (!/^\d*\.?\d*$/.test(e.target.value)) return; setBulkHours(e.target.value); }}
+                    placeholder="시간 입력"
+                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-green-400 bg-gray-50"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={bulkNote}
+                  onChange={(e) => setBulkNote(e.target.value)}
+                  placeholder="메모 (선택)"
+                  className="flex-[2] h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-green-400 bg-gray-50"
+                />
+              </div>
+              {/* 직원 선택 */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-500">직원 선택</span>
+                <button
+                  onClick={() => {
+                    if (bulkSelected.size === vacUsers.length) setBulkSelected(new Set());
+                    else setBulkSelected(new Set(vacUsers.map(u => u.id)));
+                  }}
+                  className="text-xs text-green-600 font-medium"
+                >
+                  {bulkSelected.size === vacUsers.length ? "전체 해제" : "전체 선택"}
+                </button>
+              </div>
+              <div className="flex flex-col gap-2 mb-4">
+                {vacUsers.map((u, i) => {
+                  const checked = bulkSelected.has(u.id);
+                  return (
+                    <button
+                      key={u.id}
+                      onClick={() => setBulkSelected(prev => {
+                        const next = new Set(prev);
+                        checked ? next.delete(u.id) : next.add(u.id);
+                        return next;
+                      })}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left ${checked ? "border-green-400 bg-green-50" : "border-gray-200 bg-gray-50"}`}
+                    >
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${checked ? "border-green-500 bg-green-500" : "border-gray-300"}`}>
+                        {checked && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(u.id) ?? i) }}>
+                        {u.name.slice(0, 1)}
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900">{u.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={handleBulkGrant}
+                disabled={bulkGranting || !bulkHours || Number(bulkHours) <= 0 || bulkSelected.size === 0}
+                className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+                style={{ backgroundColor: "#8dc63f" }}
+              >
+                {bulkGranting ? "지급 중..." : `${bulkSelected.size}명에게 지급`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 휴가 지급 바텀시트 */}
       {grantTarget && (
