@@ -232,6 +232,7 @@ export default function AdminAttendancePage() {
 
   const scheduleInterns = realInterns;
   const colorMap = buildColorMap(scheduleInterns);
+  const canApprove = user?.role === "super_admin" || user?.approver === true;
 
   useEffect(() => {
     fetch(`/api/admin/schedules?month=${calMonthStr}`)
@@ -1163,7 +1164,7 @@ export default function AdminAttendancePage() {
                   </div>
                 </div>
 
-                {!showHistory && (
+                {!showHistory && (req.type === "attendance_edit" || canApprove) && (
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleApproval(req, "rejected")}

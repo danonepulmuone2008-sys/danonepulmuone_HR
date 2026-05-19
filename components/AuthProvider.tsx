@@ -13,6 +13,8 @@ export type AuthUser = {
   phone: string;
   email: string;
   token: string;
+  role: string;
+  approver: boolean;
 };
 
 type AuthContextType = {
@@ -98,7 +100,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
       const { data: profile } = await supabase
         .from("users")
-        .select("name, department, role, position, phone")
+        .select("name, department, role, position, phone, approver")
         .eq("id", verifiedUser.id)
         .maybeSingle();
 
@@ -113,6 +115,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         phone: profile?.phone ?? meta.phone ?? "",
         email: verifiedUser.email ?? "",
         token: nextSession.access_token,
+        role: profile?.role ?? "",
+        approver: profile?.approver ?? false,
       });
 
       setReady(true);

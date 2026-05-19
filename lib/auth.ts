@@ -136,7 +136,7 @@ export async function requireAdmin(req: Request): Promise<AuthResult> {
 
   if (!auth.ok) return auth
 
-  if (auth.profile.role !== "admin") {
+  if (auth.profile.role !== "admin" && auth.profile.role !== "super_admin") {
     return {
       ok: false,
       response: NextResponse.json(
