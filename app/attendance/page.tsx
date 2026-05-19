@@ -12,7 +12,7 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string };
 type RequestItem = { id: string; type: "vacation" | "business_trip"; label: string; date: string; status: string };
-type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string };
+type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string };
 
@@ -82,6 +82,8 @@ export default function AttendancePage() {
   const [flexMap, setFlexMap] = useState<Record<number, FlexEntry[]>>({});
   const [teamMap, setTeamMap] = useState<Record<number, TeamCalEntry[]>>({});
   const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [confirmDeleteReq, setConfirmDeleteReq] = useState<RequestItem | null>(null);
+  const [deletingReqId, setDeletingReqId] = useState<string | null>(null);
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
   const [vacRemaining, setVacRemaining] = useState<number | null>(null);
@@ -114,7 +116,7 @@ export default function AttendancePage() {
       return fmt(d);
     });
 
-    const [attendanceRows, { data: trips }] = await Promise.all([
+    const [attendanceRows, { data: trips }, { data: vacHours }] = await Promise.all([
       Promise.all(weekDates.map(date =>
         supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).eq("date", date).maybeSingle().then(r => r.data)
       )),
@@ -122,6 +124,11 @@ export default function AttendancePage() {
         .select("start_date, end_date, start_time, end_time")
         .eq("user_id", uid).eq("status", "approved")
         .lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
+      supabase.from("vacation_requests")
+        .select("start_date, hours")
+        .eq("user_id", uid).eq("status", "approved")
+        .not("hours", "is", null)
+        .gte("start_date", fmt(monday)).lte("start_date", fmt(friday)),
     ]);
 
     const fmtTime = (ts: string) => {
@@ -152,7 +159,10 @@ export default function AttendancePage() {
         hours += (eh * 60 + em - sh * 60 - sm) / 60;
         if (!clockIn) { clockIn = startStr; clockOut = endStr; }
       }
-      return { day, hours, clockIn, clockOut };
+      const vac = (vacHours ?? []).find(v => v.start_date === date);
+      const hasVacation = !!(vac?.hours);
+      if (vac?.hours) hours += vac.hours;
+      return { day, hours: Math.round(hours * 10) / 10, clockIn, clockOut, hasVacation };
     });
     setWeekDays(days);
   }, []);
@@ -285,6 +295,18 @@ export default function AttendancePage() {
     setFlexInput({ startTime: "", endTime: "" });
   };
 
+  const handleDeleteReq = async (req: RequestItem) => {
+    setDeletingReqId(req.id);
+    try {
+      const table = req.type === "vacation" ? "vacation_requests" : "business_trip_requests";
+      await supabase.from(table).delete().eq("id", req.id);
+      setRequests(prev => prev.filter(r => r.id !== req.id));
+      if (userId) await fetchMonthData(userId);
+    } finally {
+      setDeletingReqId(null);
+    }
+  };
+
   const handleFlexDelete = async (id: string) => {
     await supabase.from("flex_schedules").delete().eq("id", id);
     if (userId) await fetchMonthData(userId);
@@ -326,10 +348,12 @@ export default function AttendancePage() {
                 <span className="text-xs text-gray-500 font-medium h-4 flex items-center">{d.hours > 0 ? fmtHM(d.hours) : ""}</span>
                 <div className="relative w-full h-16 bg-gray-100 rounded-lg flex items-end">
                   <div className={`w-full rounded-lg transition-all duration-500 ${d.hours > 0 ? "bg-blue-500" : ""}`} style={{ height: d.hours > 0 ? `${(d.hours / MAX_DAY_HOURS) * 100}%` : "0%" }} />
-                  {d.clockIn && d.clockOut && (
+                  {d.hours > 0 && (
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                       <span className="bg-gray-900/80 text-white text-xs px-2 py-1 rounded-lg whitespace-nowrap">
-                        {d.clockIn!.replace(":", "시")}분~{d.clockOut!.replace(":", "시")}분
+                        {d.clockIn && d.clockOut && !d.hasVacation
+                          ? `${d.clockIn.replace(":", "시")}분~${d.clockOut.replace(":", "시")}분`
+                          : fmtHM(d.hours)}
                       </span>
                     </div>
                   )}
@@ -476,16 +500,27 @@ export default function AttendancePage() {
               <p className="text-sm text-gray-400 text-center py-3">신청 내역이 없습니다</p>
             ) : requests.map(req => (
               <div key={req.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${req.type === "vacation" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.type === "vacation" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
                     {req.type === "vacation" ? "휴가" : "출장"}
                   </span>
-                  <span className="text-sm text-gray-700">{req.label}</span>
-                  <span className="text-xs text-gray-400">{req.date.slice(5)}</span>
+                  <span className="text-sm text-gray-700 truncate">{req.label}</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">{req.date.slice(5)}</span>
                 </div>
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${req.status === "승인완료" ? "bg-green-50 text-green-600" : req.status === "반려" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
-                  {req.status}
-                </span>
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${req.status === "승인완료" ? "bg-green-50 text-green-600" : req.status === "반려" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
+                    {req.status}
+                  </span>
+                  {req.status === "승인대기" && (
+                    <button
+                      onClick={() => setConfirmDeleteReq(req)}
+                      disabled={deletingReqId === req.id}
+                      className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40"
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -627,6 +662,28 @@ export default function AttendancePage() {
           </div>
         );
       })()}
+
+      {confirmDeleteReq && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setConfirmDeleteReq(null)}>
+          <div className="bg-white rounded-t-3xl w-full max-w-[390px] px-5 pt-6 pb-8" onClick={e => e.stopPropagation()}>
+            <p className="text-base font-bold text-gray-900 mb-1">신청 삭제</p>
+            <p className="text-sm text-gray-500 mb-6">삭제 후 복구할 수 없습니다. 삭제하시겠습니까?</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDeleteReq(null)} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium">취소</button>
+              <button
+                onClick={async () => {
+                  const req = confirmDeleteReq;
+                  setConfirmDeleteReq(null);
+                  await handleDeleteReq(req);
+                }}
+                className="flex-1 h-11 rounded-xl bg-red-400 text-sm text-white font-semibold"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

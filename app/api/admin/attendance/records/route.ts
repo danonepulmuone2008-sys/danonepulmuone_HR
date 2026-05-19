@@ -59,7 +59,7 @@ export async function GET(req: Request) {
     if (attError) throw new Error(attError.message)
 
     // 해당 주 승인된 휴가 및 출장 조회
-    const [{ data: vacationRows }, { data: tripRows }] = await Promise.all([
+    const [{ data: vacationRows }, { data: tripRows }, { data: vacHourRows }] = await Promise.all([
       supabaseAdmin
         .from("vacation_requests")
         .select("user_id, start_date, end_date")
@@ -74,6 +74,14 @@ export async function GET(req: Request) {
         .eq("status", "approved")
         .lte("start_date", friday)
         .gte("end_date", monday),
+      supabaseAdmin
+        .from("vacation_requests")
+        .select("user_id, start_date, hours")
+        .in("user_id", userIds)
+        .eq("status", "approved")
+        .not("hours", "is", null)
+        .gte("start_date", monday)
+        .lte("start_date", friday),
     ])
 
     // 휴가/출장 맵: user_id__date → "vacation" | "business_trip"
@@ -114,12 +122,22 @@ export async function GET(req: Request) {
         lunchBreak: row.lunch_break ?? undefined,
       }
     }
-    // 출장 시간을 attendance 시간에 합산 (사용자 화면과 동일한 방식)
+    // 출장 시간을 attendance 시간에 합산
     for (const [key, tripH] of Object.entries(tripHoursMap)) {
       if (recMap[key]) {
         recMap[key] = { ...recMap[key], hours: Math.round(((recMap[key].hours ?? 0) + tripH) * 10) / 10 }
       } else {
         recMap[key] = { hours: tripH, checkedIn: false }
+      }
+    }
+    // 시간 휴가를 attendance 시간에 합산
+    for (const v of vacHourRows ?? []) {
+      const key = `${v.user_id}__${v.start_date}`
+      const h = v.hours as number
+      if (recMap[key]) {
+        recMap[key] = { ...recMap[key], hours: Math.round(((recMap[key].hours ?? 0) + h) * 10) / 10 }
+      } else {
+        recMap[key] = { hours: h, checkedIn: false }
       }
     }
 

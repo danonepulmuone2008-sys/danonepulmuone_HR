@@ -98,6 +98,8 @@ export default function VacationPage() {
         reason: form.reason || null,
         attachment_url: attachmentUrl,
         hours: isHourly ? calcHours() : null,
+        start_time: isHourly && form.startTime !== "" ? Number(form.startTime) : null,
+        end_time: isHourly && form.endTime !== "" ? Number(form.endTime) : null,
       });
 
       if (error) {
