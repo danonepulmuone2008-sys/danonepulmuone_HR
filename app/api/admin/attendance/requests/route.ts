@@ -39,7 +39,7 @@ export async function GET(req: Request) {
         .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("attendance_edit_requests")
-        .select("id, user_id, date, direction, requested_time, reason, requested_at, status")
+        .select("id, user_id, date, direction, requested_time, reason, requested_at, status, lunch_break")
         .in("status", statusFilter)
         .order("requested_at", { ascending: false }),
     ])
@@ -56,15 +56,18 @@ export async function GET(req: Request) {
     const uniqueIds = [...new Set(allUserIds)]
 
     let nameMap: Record<string, string> = {}
+    let activeUserIds = new Set<string>()
     if (uniqueIds.length > 0) {
       const { data: users } = await supabaseAdmin
         .from("users")
         .select("id, name")
         .in("id", uniqueIds)
+        .eq("is_active", true)
       nameMap = Object.fromEntries((users ?? []).map((u) => [u.id, u.name]))
+      activeUserIds = new Set((users ?? []).map((u) => u.id))
     }
 
-    const trips = (tripRes.data ?? []).map((r) => ({
+    const trips = (tripRes.data ?? []).filter((r) => activeUserIds.has(r.user_id)).map((r) => ({
       id: r.id,
       type: "business_trip" as const,
       status: r.status as string,
@@ -79,7 +82,7 @@ export async function GET(req: Request) {
       requested_at: r.created_at,
     }))
 
-    const vacs = (vacRes.data ?? []).map((r) => ({
+    const vacs = (vacRes.data ?? []).filter((r) => activeUserIds.has(r.user_id)).map((r) => ({
       id: r.id,
       type: "vacation" as const,
       status: r.status as string,
@@ -93,7 +96,7 @@ export async function GET(req: Request) {
       requested_at: r.created_at,
     }))
 
-    const edits = (editRes.data ?? []).map((r) => ({
+    const edits = (editRes.data ?? []).filter((r) => activeUserIds.has(r.user_id)).map((r) => ({
       id: r.id,
       type: "attendance_edit" as const,
       status: r.status as string,
@@ -103,6 +106,7 @@ export async function GET(req: Request) {
       direction: r.direction as "in" | "out",
       requested_time: r.requested_time,
       reason: r.reason,
+      lunch_break: r.lunch_break as boolean | null,
       requested_at: r.requested_at,
     }))
 
@@ -114,5 +118,34 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error("[admin attendance requests]", err)
     return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+
+    const userId = decodeJwtSub(token)
+    if (!userId) return NextResponse.json({ error: "JWT 디코딩 실패" }, { status: 401 })
+
+    const { type, id } = await req.json()
+    if (!type || !id) return NextResponse.json({ error: "올바른 값을 입력해주세요" }, { status: 400 })
+
+    const tableMap: Record<string, string> = {
+      business_trip: "business_trip_requests",
+      vacation: "vacation_requests",
+      attendance_edit: "attendance_edit_requests",
+    }
+    const table = tableMap[type]
+    if (!table) return NextResponse.json({ error: "올바른 타입이 아닙니다" }, { status: 400 })
+
+    const { error } = await supabaseAdmin.from(table).delete().eq("id", id)
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error("[admin attendance requests DELETE]", err)
+    return NextResponse.json({ error: "삭제에 실패했습니다" }, { status: 500 })
   }
 }

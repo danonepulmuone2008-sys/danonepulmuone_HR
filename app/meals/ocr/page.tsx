@@ -48,7 +48,7 @@ export default function OcrPage() {
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   useEffect(() => {
-    supabase.from("users").select("id, name, department").then(({ data }) => {
+    supabase.from("users").select("id, name, department").eq("role", "employee").eq("is_active", true).then(({ data }) => {
       if (data) setTeamMembers(data)
     })
   }, [])
@@ -193,6 +193,12 @@ export default function OcrPage() {
 
   const getAssigneeName = (id: string): string =>
     teamMembers.find((m) => m.id === id)?.name ?? ""
+
+  const formatAssignees = (ids: string[]) => {
+    if (ids.length === 0) return "담당자 선택"
+    if (ids.length === 1) return getAssigneeName(ids[0])
+    return `${getAssigneeName(ids[0])} 외 ${ids.length - 1}명`
+  }
 
   const canSubmitOcr =
     mode === "ocr" && status === "done" && result &&
@@ -411,10 +417,9 @@ export default function OcrPage() {
                       }`}
                     >
                       <span className="truncate text-xs">
-                        {n === 0 ? "담당자 선택" : item.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                        {formatAssignees(item.assigneeIds)}
                       </span>
                       <span className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                        <span className="text-xs">{n}명</span>
                         <ChevronDown size={13} />
                       </span>
                     </button>
@@ -426,7 +431,7 @@ export default function OcrPage() {
             <div className={`rounded-2xl px-4 py-3 flex items-center gap-2 text-sm ${result.isLunchTime ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-600"}`}>
               <span>{result.isLunchTime ? "🕐" : "⚠️"}</span>
               <div>
-                <p className="font-medium">{result.isLunchTime ? "점심 시간 검증 통과" : "점심 시간 외 결제"}</p>
+                <p className="font-medium">{result.isLunchTime ? "시간 내 결제" : "시간 외 결제"}</p>
                 <p className="text-xs mt-0.5 opacity-70">
                   {result.isLunchTime ? "11:30~14:00 사이에 결제됨" : "점심 시간(11:30~14:00) 외에 결제됨"}
                 </p>
@@ -516,10 +521,9 @@ export default function OcrPage() {
                         }`}
                       >
                         <span className="truncate">
-                          {n === 0 ? "담당자 선택" : it.assigneeIds.map((id) => getAssigneeName(id)).join(", ")}
+                          {formatAssignees(it.assigneeIds)}
                         </span>
                         <span className="flex items-center gap-1 flex-shrink-0 ml-1">
-                          {n > 0 && <span>{n}명</span>}
                           <ChevronDown size={12} />
                         </span>
                       </button>

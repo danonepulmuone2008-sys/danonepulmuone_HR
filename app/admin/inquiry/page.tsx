@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import AdminBottomNav from "@/components/AdminBottomNav";
 import { supabase } from "@/lib/supabase";
-
-const INTERN_HEX = ["#00CCFF", "#7C3AED", "#FFD400", "#EC4899", "#DC2626"];
+import { getInternColor, buildColorMap } from "@/lib/internColors";
 
 type InquiryStatus = { id: string; isNew: boolean; isProcessed: boolean };
 
@@ -25,6 +24,15 @@ export default function AdminInquiryPage() {
   const [statuses, setStatuses] = useState<InquiryStatus[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"미처리" | "처리완료">("미처리");
+  const [allUsers, setAllUsers] = useState<{ id: string }[]>([]);
+  const [toast, setToast] = useState("");
+
+  useEffect(() => {
+    fetch("/api/admin/interns")
+      .then((r) => r.json())
+      .then((json) => { if (json.interns) setAllUsers(json.interns); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetchInquiries = async () => {
@@ -64,10 +72,8 @@ export default function AdminInquiryPage() {
     fetchInquiries();
   }, []);
 
-  const internColor = (internId: string) => {
-    const hash = internId.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    return INTERN_HEX[hash % INTERN_HEX.length];
-  };
+  const colorMap = buildColorMap(allUsers);
+  const internColor = (internId: string) => getInternColor(colorMap.get(internId) ?? 0);
 
   const inquiries = inquiryItems.map((q) => {
     const s = statuses.find((s) => s.id === q.id) ?? { isNew: true, isProcessed: false };
@@ -83,6 +89,8 @@ export default function AdminInquiryPage() {
   const processInquiry = async (id: string) => {
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false, isProcessed: true } : s));
     setSelectedId(null);
+    setToast("처리 완료되었습니다.");
+    setTimeout(() => setToast(""), 2500);
     window.dispatchEvent(new CustomEvent("inquiryProcessed"));
     await supabase.from("inquiries").update({ is_processed: true, is_read: true }).eq("id", id);
   };
@@ -173,14 +181,15 @@ export default function AdminInquiryPage() {
       {/* 문의 상세 바텀시트 */}
       {selectedId !== null && selected && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-12"
           onClick={() => setSelectedId(null)}
         >
           <div
-            className="bg-white rounded-t-2xl w-full max-w-[390px] pb-24"
+            className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col"
+            style={{ maxHeight: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-gray-100 gap-3">
+            <div className="flex items-start justify-between px-5 pt-5 pb-3 border-b border-gray-100 gap-3 flex-shrink-0">
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-bold text-gray-900">{selected.subject}</h3>
                 <div className="flex items-center gap-1.5 mt-1">
@@ -197,11 +206,11 @@ export default function AdminInquiryPage() {
                 className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl flex-shrink-0"
               >×</button>
             </div>
-            <div className="px-5 pt-5 pb-4">
+            <div className="px-5 pt-5 pb-4 overflow-y-auto flex-1">
               <p className="text-sm text-gray-700 leading-relaxed">{selected.content}</p>
             </div>
             {!selected.isProcessed && (
-              <div className="px-5 pb-2">
+              <div className="px-5 pb-6 flex-shrink-0">
                 <button
                   onClick={() => processInquiry(selected.id)}
                   className="w-full py-3.5 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
@@ -215,6 +224,15 @@ export default function AdminInquiryPage() {
       )}
 
       <AdminBottomNav />
+
+      {toast && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className="flex items-center gap-2 bg-white text-gray-800 text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-100">
+            <span className="text-green-500 text-base">✓</span>
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

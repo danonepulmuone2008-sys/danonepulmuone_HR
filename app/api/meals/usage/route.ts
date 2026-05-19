@@ -40,7 +40,14 @@ export async function GET(req: Request) {
     if (error) throw new Error(error.message)
 
     const used = (data ?? []).reduce((sum, r) => sum + (r.price ?? 0), 0)
-    const totalLimit = getMealLimit(year, month)
+
+    const targetMonth = `${year}-${String(month).padStart(2, "0")}-01`
+    const { data: limitRow } = await supabaseAdmin
+      .from("monthly_meal_limits")
+      .select("monthly_meal_limit")
+      .eq("target_month", targetMonth)
+      .maybeSingle()
+    const totalLimit = limitRow?.monthly_meal_limit ?? getMealLimit(year, month)
 
     return NextResponse.json({ used, totalLimit })
   } catch (err) {

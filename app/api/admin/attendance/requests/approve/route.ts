@@ -47,7 +47,7 @@ export async function PATCH(req: Request) {
     } else if (type === "attendance_edit") {
       const { data: editReq, error: fetchError } = await supabaseAdmin
         .from("attendance_edit_requests")
-        .select("user_id, date, direction, requested_time")
+        .select("user_id, date, direction, requested_time, lunch_break")
         .eq("id", id)
         .single()
       if (fetchError) throw new Error(fetchError.message)
@@ -59,12 +59,15 @@ export async function PATCH(req: Request) {
       if (updateError) throw new Error(updateError.message)
 
       if (action === "approved") {
-        // KST 시간으로 timestamp 구성 (UTC+9)
         const newTimestamp = `${editReq.date}T${editReq.requested_time}:00+09:00`
         const column = editReq.direction === "in" ? "clock_in" : "clock_out"
+        const updateData: Record<string, unknown> = { [column]: newTimestamp }
+        if (editReq.direction === "out" && editReq.lunch_break !== null) {
+          updateData.lunch_break = editReq.lunch_break
+        }
         await supabaseAdmin
           .from("attendance_records")
-          .update({ [column]: newTimestamp })
+          .update(updateData)
           .eq("user_id", editReq.user_id)
           .eq("date", editReq.date)
       }

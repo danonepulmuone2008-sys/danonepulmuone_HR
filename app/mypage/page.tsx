@@ -234,7 +234,7 @@ const AlarmModal = ({
 
 /* ───────────────────── 메인 ───────────────────── */
 export default function MyPage() {
-  const { user: authUser } = useAuth();
+  const { user: authUser, refreshUser } = useAuth();
 
   /* 프로필 */
   const [showEdit, setShowEdit] = useState(false);
@@ -245,13 +245,13 @@ export default function MyPage() {
 
   useEffect(() => {
     if (!authUser) return;
-    supabase.from("users").select("name, department, position, phone").eq("id", authUser.id).single().then(({ data }) => {
+    supabase.from("users").select("name, department, position, phone, email").eq("id", authUser.id).single().then(({ data }) => {
       const profile = {
         name: data?.name ?? authUser.name,
         department: data?.department ?? authUser.department,
         position: data?.position || "인턴",
         phone: data?.phone ?? authUser.phone,
-        email: authUser.email,
+        email: data?.email ?? authUser.email,
       };
       setForm(profile);
       setSaved(profile);
@@ -262,23 +262,14 @@ export default function MyPage() {
   const [showLogout, setShowLogout] = useState(false);
 
   /* 회원 탈퇴 */
-  const WITHDRAW_REASONS = [
-    "인턴 기간이 종료되어서",
-    "서비스 이용이 불편해서",
-    "개인정보 보호를 위해",
-    "더 이상 이용하지 않아서",
-    "기타",
-  ];
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [withdrawStep, setWithdrawStep] = useState(1);
-  const [withdrawReason, setWithdrawReason] = useState("");
   const [withdrawAgree, setWithdrawAgree] = useState(false);
   const [withdrawPw, setWithdrawPw] = useState("");
 
   const closeWithdraw = () => {
     setShowWithdraw(false);
     setWithdrawStep(1);
-    setWithdrawReason("");
     setWithdrawAgree(false);
     setWithdrawPw("");
   };
@@ -293,8 +284,6 @@ export default function MyPage() {
     if (authUser) {
       await supabase.from("inquiries").insert({ user_id: authUser.id, subject: inquiry.subject, content: inquiry.content });
     }
-    const mailto = `mailto:${ADMIN_EMAIL}?subject=${encodeURIComponent(`[인턴 문의] ${inquiry.subject}`)}&body=${encodeURIComponent(`보내는 사람: ${saved.name} (${saved.department} · ${saved.position})\n\n${inquiry.content}`)}`;
-    window.location.href = mailto;
     setInquirySent(true);
   };
 
@@ -416,7 +405,7 @@ export default function MyPage() {
       )}
 
       {/* 헤더 */}
-      <header className="flex-shrink-0 px-5 pt-10 pb-4 bg-blue-600">
+      <header className="flex-shrink-0 px-5 pt-8 pb-3 bg-blue-600">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-xl font-bold shadow" style={{ color: BRAND_BLUE }}>
             {saved.name[0]}
@@ -516,10 +505,11 @@ export default function MyPage() {
               <button
                 onClick={async () => {
                   if (!authUser) return;
-                  await supabase.from("users").update({ name: form.name, department: form.department, position: form.position, phone: form.phone }).eq("id", authUser.id);
+                  await supabase.from("users").update({ name: form.name, department: form.department, position: form.position, phone: form.phone, email: form.email }).eq("id", authUser.id);
                   setSaved({ ...form });
                   setShowEdit(false);
                   showToast("프로필이 수정되었습니다.");
+                  await refreshUser();
                 }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: BRAND_BLUE }}
@@ -548,7 +538,7 @@ export default function MyPage() {
               <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">새 비밀번호 조건</p>
                 {[
-                  { label: "9자 이상",   met: pw.next.length >= 9 },
+                  { label: "6자 이상",   met: pw.next.length >= 6 },
                   { label: "영문자 포함", met: /[a-zA-Z]/.test(pw.next) },
                   { label: "숫자 포함",  met: /[0-9]/.test(pw.next) },
                 ].map(({ label, met }) => (
@@ -589,7 +579,7 @@ export default function MyPage() {
                   setShowPwChange(false);
                 }}
                 disabled={
-                  !pw.current || pw.next.length < 9 ||
+                  !pw.current || pw.next.length < 6 ||
                   !/[a-zA-Z]/.test(pw.next) || !/[0-9]/.test(pw.next) ||
                   pw.next !== pw.confirm
                 }
@@ -652,9 +642,6 @@ export default function MyPage() {
               <div className="flex flex-col items-center py-10 px-5 gap-3">
                 <span className="text-4xl">✅</span>
                 <p className="text-base font-bold text-gray-800">문의가 전송되었습니다</p>
-                <p className="text-xs text-gray-400 text-center">
-                  관리자가 확인 후 등록된 이메일로<br />답변 드릴 예정입니다.
-                </p>
                 <button
                   onClick={closeInquiry}
                   className="mt-4 w-full py-3 rounded-xl text-white font-semibold text-sm"
@@ -722,10 +709,10 @@ export default function MyPage() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-                  {withdrawStep} / 3
+                  {withdrawStep} / 2
                 </span>
                 <p className="text-base font-bold text-gray-800">
-                  {withdrawStep === 1 ? "탈퇴 안내" : withdrawStep === 2 ? "탈퇴 사유" : "최종 확인"}
+                  {withdrawStep === 1 ? "탈퇴 안내" : "최종 확인"}
                 </p>
               </div>
               <button onClick={closeWithdraw} className="text-gray-400 text-xl leading-none">✕</button>
@@ -740,7 +727,7 @@ export default function MyPage() {
                     <span className="text-lg mt-0.5">🔒</span>
                     <p className="text-xs text-orange-500 font-medium leading-relaxed">
                       탈퇴 시 계정이 <span className="font-bold">즉시 비활성화</span>되어 로그인이 불가능해집니다.<br />
-                      단, 데이터는 <span className="font-bold">1년간 보관</span>되며 관리자를 통해 복구 요청이 가능합니다.
+                      단, 데이터는 <span className="font-bold">3년간 보관</span>되며 관리자를 통해 복구 요청이 가능합니다.
                     </p>
                   </div>
                   {/* 비활성화 항목 */}
@@ -755,7 +742,7 @@ export default function MyPage() {
                   </div>
                   {/* 보관 항목 */}
                   <div className="flex flex-col gap-1.5">
-                    <p className="text-xs font-semibold text-gray-500">1년간 보관 후 완전 삭제 (복구 가능)</p>
+                    <p className="text-xs font-semibold text-gray-500">3년간 보관 후 완전 삭제 (복구 가능)</p>
                     {["프로필 및 계정 정보", "근태 기록 전체", "식대 사용 내역"].map((item) => (
                       <div key={item} className="flex items-center gap-2">
                         <span className="text-xs" style={{ color: BRAND_GREEN }}>●</span>
@@ -781,47 +768,8 @@ export default function MyPage() {
               </>
             )}
 
-            {/* ── STEP 2: 탈퇴 사유 ── */}
+            {/* ── STEP 2: 최종 확인 ── */}
             {withdrawStep === 2 && (
-              <>
-                <div className="px-5 py-4 flex flex-col gap-2">
-                  <p className="text-xs text-gray-400 mb-1">탈퇴 사유를 선택해주세요 (선택)</p>
-                  {WITHDRAW_REASONS.map((reason) => (
-                    <button
-                      key={reason}
-                      onClick={() => setWithdrawReason(reason)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors text-left"
-                      style={{
-                        borderColor: withdrawReason === reason ? "#EF4444" : "#E5E7EB",
-                        background: withdrawReason === reason ? "#FEF2F2" : "#fff",
-                      }}
-                    >
-                      <span className="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
-                        style={{ borderColor: withdrawReason === reason ? "#EF4444" : "#D1D5DB" }}>
-                        {withdrawReason === reason && (
-                          <span className="w-2 h-2 rounded-full" style={{ background: "#EF4444" }} />
-                        )}
-                      </span>
-                      <span className="text-sm text-gray-700">{reason}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="px-5 pb-8 flex gap-3">
-                  <button onClick={() => setWithdrawStep(1)}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold border border-gray-200 text-gray-500">
-                    이전
-                  </button>
-                  <button onClick={() => setWithdrawStep(3)}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
-                    style={{ background: "#EF4444" }}>
-                    다음
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ── STEP 3: 최종 확인 ── */}
-            {withdrawStep === 3 && (
               <>
                 <div className="px-5 py-4 flex flex-col gap-4">
                   <div>
@@ -843,7 +791,7 @@ export default function MyPage() {
                       {withdrawAgree && <span className="text-white text-xs font-bold">✓</span>}
                     </span>
                     <span className="text-xs text-gray-500 leading-relaxed">
-                      탈퇴 시 계정이 비활성화되며, 데이터는 1년간 보관 후 완전 삭제됨을 확인했습니다.
+                      탈퇴 시 계정이 비활성화되며, 데이터는 3년간 보관 후 완전 삭제됨을 확인했습니다.
                     </span>
                   </button>
                 </div>

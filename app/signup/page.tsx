@@ -1,8 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { supabase } from "@/lib/supabase";
+
+function formatPhoneDisplay(digits: string): string {
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -18,6 +23,10 @@ export default function SignupPage() {
   const [securityAnswer, setSecurityAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const isComposing = useRef(false);
 
   const SECURITY_QUESTIONS = [
     "기억에 남는 추억의 장소는?",
@@ -38,50 +47,40 @@ export default function SignupPage() {
     e.preventDefault();
     setErrorMsg("");
 
+    if (!email || !name || !phone || !department || !position || !password || !passwordConfirm || !securityQuestion || !securityAnswer) {
+      setErrorMsg("모든 항목을 입력해야 회원가입이 가능합니다");
+      return;
+    }
     if (password !== passwordConfirm) {
       setErrorMsg("비밀번호가 일치하지 않습니다");
       return;
     }
-    if (password.length < 6) {
-      setErrorMsg("비밀번호는 6자 이상이어야 합니다");
+    if (password.length < 6 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setErrorMsg("비밀번호 조건에 부합하지 않습니다");
       return;
     }
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { name, phone, department, position, securityQuestion, securityAnswer } },
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name, phone, department, position, securityQuestion, securityAnswer }),
       });
+      const json = await res.json();
 
-      if (error) {
-        if (error.message.includes("already registered")) {
+      if (!res.ok) {
+        const msg = json?.error ?? "";
+        if (msg.includes("already registered") || msg.includes("already been registered")) {
           setErrorMsg("이미 가입된 이메일입니다");
-        } else if (error.message.includes("Password")) {
+        } else if (msg.includes("Password")) {
           setErrorMsg("비밀번호 형식이 올바르지 않습니다");
-        } else if (error.message.includes("email")) {
+        } else if (msg.includes("email")) {
           setErrorMsg("이메일 형식이 올바르지 않습니다");
         } else {
-          setErrorMsg(error.message);
+          setErrorMsg(msg || "가입 중 오류가 발생했습니다");
         }
         return;
-      }
-
-      if (data.user) {
-        const { error: userError } = await supabase.from("users").insert({
-          id: data.user.id,
-          email,
-          name,
-          phone,
-          department,
-          position,
-        });
-
-        if (userError) {
-          setErrorMsg("사용자 정보 저장 중 오류가 발생했습니다: " + userError.message);
-          return;
-        }
       }
 
       router.push("/login");
@@ -118,26 +117,73 @@ export default function SignupPage() {
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/[^\x00-\x7F]/.test(val)) {
+                setEmailError("이메일은 영문, 숫자, 특수기호만 입력 가능합니다");
+              } else {
+                setEmailError("");
+              }
+              setEmail(val.replace(/[^\x00-\x7F]/g, ""));
+            }}
             placeholder="이메일을 입력하세요"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {emailError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{emailError}</p>
+          )}
           <input
             type="text"
             required
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onCompositionStart={() => { isComposing.current = true; }}
+            onCompositionEnd={(e) => {
+              isComposing.current = false;
+              const val = e.currentTarget.value;
+              if (/[^가-힣a-zA-Z]/.test(val)) {
+                setNameError("한글, 영문만 입력 가능합니다");
+                setName(val.replace(/[^가-힣a-zA-Z]/g, ""));
+              } else {
+                setNameError("");
+                setName(val);
+              }
+            }}
+            onChange={(e) => {
+              if (isComposing.current) { setName(e.target.value); return; }
+              const val = e.target.value;
+              if (/[^가-힣a-zA-Z]/.test(val)) {
+                setNameError("한글, 영문만 입력 가능합니다");
+                setName(val.replace(/[^가-힣a-zA-Z]/g, ""));
+              } else {
+                setNameError("");
+                setName(val);
+              }
+            }}
             placeholder="이름"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {nameError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{nameError}</p>
+          )}
           <input
             type="tel"
             required
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="전화번호"
+            value={formatPhoneDisplay(phone)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (/[^\d\-]/.test(raw)) {
+                setPhoneError("숫자만 입력 가능합니다");
+              } else {
+                setPhoneError("");
+              }
+              setPhone(raw.replace(/\D/g, "").slice(0, 11));
+            }}
+            placeholder="010-0000-0000"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {phoneError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{phoneError}</p>
+          )}
           <input
             type="text"
             required
@@ -157,12 +203,24 @@ export default function SignupPage() {
           <input
             type="password"
             required
-            minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호 (6자 이상)"
+            placeholder="비밀번호"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {password.length > 0 && (
+            <div className="bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
+              {[
+                { label: "6자 이상", met: password.length >= 6 },
+                { label: "영문자 포함", met: /[a-zA-Z]/.test(password) },
+                { label: "숫자 포함", met: /[0-9]/.test(password) },
+              ].map(({ label, met }) => (
+                <p key={label} className="text-xs flex items-center gap-1.5" style={{ color: met ? "#62a83a" : "#9CA3AF" }}>
+                  <span>{met ? "✓" : "○"}</span>{label}
+                </p>
+              ))}
+            </div>
+          )}
           <input
             type="password"
             required
@@ -171,6 +229,11 @@ export default function SignupPage() {
             placeholder="비밀번호 확인"
             className="w-full h-12 px-4 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-[#8dc63f] transition-colors"
           />
+          {passwordConfirm.length > 0 && (
+            password === passwordConfirm
+              ? <p className="text-xs text-green-600 px-1">비밀번호가 일치합니다</p>
+              : <p className="text-xs text-red-500 px-1">비밀번호가 일치하지 않습니다</p>
+          )}
           <select
             required
             value={securityQuestion}

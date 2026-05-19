@@ -18,11 +18,13 @@ export type AuthUser = {
 type AuthContextType = {
   session: Session | null;
   user: AuthUser | null;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
+  refreshUser: async () => {},
 });
 
 export function useAuth() {
@@ -39,6 +41,24 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(isPublic);
+
+  async function refreshUser() {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (!currentSession) return;
+    const { data: profile } = await supabase
+      .from("users")
+      .select("name, department, role, position, phone")
+      .eq("id", currentSession.user.id)
+      .maybeSingle();
+    if (!profile) return;
+    setUser((prev) => prev ? {
+      ...prev,
+      name: profile.name ?? prev.name,
+      department: profile.department ?? prev.department,
+      position: profile.position ?? prev.position,
+      phone: profile.phone ?? prev.phone,
+    } : prev);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -144,7 +164,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   if (!ready) return null;
 
   return (
-    <AuthContext.Provider value={{ session, user }}>
+    <AuthContext.Provider value={{ session, user, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

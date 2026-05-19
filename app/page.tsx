@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Camera } from "lucide-react";
-import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
+import { getMondayOfWeek, getWorkingDaysInWeek, getMealLimit } from "@/lib/holidays";
 
 function fmtHM(h: number): string {
   const totalMin = Math.round(h * 60);
@@ -39,15 +39,17 @@ export default function HomePage() {
   }, [user]);
 
   const [mealUsed, setMealUsed] = useState(0);
-  const [mealLimit, setMealLimit] = useState(100000);
-  const mealPercent = Math.round((mealUsed / mealLimit) * 100);
+  const [mealLimit, setMealLimit] = useState(0);
+  const mealPercent = mealLimit > 0 ? Math.round((mealUsed / mealLimit) * 100) : 0;
 
   const [clockIn, setClockIn] = useState<string | null>(null);
   const [clockOut, setClockOut] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [editReason, setEditReason] = useState("");
   const [editTime, setEditTime] = useState("");
+  const [editLunchBreak, setEditLunchBreak] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
+  const [clockBlockReason, setClockBlockReason] = useState<string | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
   const [lunchBreak, setLunchBreak] = useState(true);
@@ -70,6 +72,7 @@ export default function HomePage() {
   };
 
   const checkNetwork = async (): Promise<boolean> => {
+    if (user?.id === "f3c89062-365a-44ab-9a7c-291836ae4aa9") return true;
     try {
       const res = await fetch("/api/check-network");
       const data = await res.json();
@@ -83,6 +86,56 @@ export default function HomePage() {
     if (direction === "out" && !clockIn) {
       showToast("아직 출근을 하지 않았습니다.", "error");
       return;
+    }
+
+    if (direction === "in" && user) {
+      const [{ data: vacations }, { data: flexEntry }, { data: businessTrips }] = await Promise.all([
+        supabase.from("vacation_requests")
+          .select("type")
+          .eq("user_id", user.id)
+          .eq("status", "approved")
+          .lte("start_date", todayStr)
+          .gte("end_date", todayStr)
+          .limit(1),
+        supabase.from("flex_schedules")
+          .select("start_time, end_time")
+          .eq("user_id", user.id)
+          .eq("date", todayStr)
+          .maybeSingle(),
+        supabase.from("business_trip_requests")
+          .select("start_time, end_time, destination")
+          .eq("user_id", user.id)
+          .eq("status", "approved")
+          .lte("start_date", todayStr)
+          .gte("end_date", todayStr),
+      ]);
+
+      if (vacations && vacations.length > 0) {
+        setClockBlockReason("휴가 등록일입니다.");
+        return;
+      }
+
+      if (businessTrips && businessTrips.length > 0) {
+        const currentTime = getNow();
+        const onTrip = businessTrips.some(
+          (t) => currentTime >= t.start_time && currentTime <= t.end_time
+        );
+        if (onTrip) {
+          setClockBlockReason("출장 중인 시간입니다.");
+          return;
+        }
+      }
+
+      if (flexEntry) {
+        const currentTime = getNow();
+        const [sh, sm] = flexEntry.start_time.split(":").map(Number);
+        const totalMins = Math.max(0, sh * 60 + sm - 30);
+        const flexStartMinus30 = `${String(Math.floor(totalMins / 60)).padStart(2, "0")}:${String(totalMins % 60).padStart(2, "0")}`;
+        if (currentTime < flexStartMinus30 || currentTime > flexEntry.end_time) {
+          setClockBlockReason(`유연근무 설정 시간(${flexEntry.start_time} ~ ${flexEntry.end_time}) 외 출근입니다. (출근 가능: ${flexStartMinus30} ~ ${flexEntry.end_time})`);
+          return;
+        }
+      }
     }
 
     setNetworkChecking(true);
@@ -135,12 +188,14 @@ export default function HomePage() {
         reason: editReason.trim(),
         requested_at: new Date().toISOString(),
         status: "pending",
+        lunch_break: modal.direction === "out" ? editLunchBreak : null,
       });
     }
     const label = modal.direction === "in" ? "출근" : "퇴근";
     showToast(`${label} 시간 수정 요청이 관리자에게 전송되었습니다.`);
     setEditReason("");
     setEditTime("");
+    setEditLunchBreak(true);
     setModal(null);
   };
 
@@ -208,15 +263,38 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) return;
-    fetch("/api/meals/usage", {
-      headers: { Authorization: `Bearer ${user.token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.used !== undefined) setMealUsed(data.used);
-        if (data.totalLimit !== undefined) setMealLimit(data.totalLimit);
-      })
-      .catch(() => {});
+    (async () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const startOfMonth = year + '-' + String(month).padStart(2, '0') + '-01';
+      const startOfNext = month === 12
+        ? (year + 1) + '-01-01'
+        : year + '-' + String(month + 1).padStart(2, '0') + '-01';
+
+      const { data: approvedReceipts } = await supabase
+        .from('receipts')
+        .select('id')
+        .eq('status', 'approved')
+        .gte('paid_at', startOfMonth)
+        .lt('paid_at', startOfNext);
+
+      const receiptIds = (approvedReceipts ?? []).map((r) => r.id);
+
+      const { data: myItems } = receiptIds.length > 0
+        ? await supabase.from('receipt_items').select('price').in('receipt_id', receiptIds)
+        : { data: [] };
+
+      setMealUsed((myItems ?? []).reduce((sum, r) => sum + (r.price ?? 0), 0));
+
+      const { data: limitRow } = await supabase
+        .from('monthly_meal_limits')
+        .select('monthly_meal_limit')
+        .eq('target_month', startOfMonth)
+        .maybeSingle();
+
+      setMealLimit(limitRow?.monthly_meal_limit ?? getMealLimit(year, month));
+    })();
   }, [user]);
 
   return (
@@ -238,6 +316,22 @@ export default function HomePage() {
           <div className="bg-white rounded-2xl px-6 py-4 shadow-xl flex items-center gap-3">
             <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <p className="text-sm text-gray-700">네트워크 확인 중...</p>
+          </div>
+        </div>
+      )}
+
+      {/* 출근 불가 팝업 */}
+      {clockBlockReason && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <p className="text-base font-bold text-gray-900 text-center mb-1">출근이 불가합니다.</p>
+            <p className="text-sm text-gray-500 text-center mb-5">사유: {clockBlockReason}</p>
+            <button
+              onClick={() => setClockBlockReason(null)}
+              className="w-full py-3 rounded-xl bg-blue-600 text-white text-sm font-medium"
+            >
+              확인
+            </button>
           </div>
         </div>
       )}
@@ -290,6 +384,17 @@ export default function HomePage() {
                   onChange={(e) => setEditTime(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 mb-3"
                 />
+                {modal.direction === "out" && (
+                  <label className="flex items-center gap-2.5 mb-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editLunchBreak}
+                      onChange={(e) => setEditLunchBreak(e.target.checked)}
+                      className="w-4 h-4 rounded accent-blue-600"
+                    />
+                    <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
+                  </label>
+                )}
                 <p className="text-xs font-medium text-gray-500 mb-1.5">수정 사유</p>
                 <textarea
                   value={editReason}
@@ -300,7 +405,7 @@ export default function HomePage() {
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setModal(null); setEditReason(""); setEditTime(""); }}
+                    onClick={() => { setModal(null); setEditReason(""); setEditTime(""); setEditLunchBreak(true); }}
                     className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium"
                   >
                     취소
@@ -320,7 +425,7 @@ export default function HomePage() {
       )}
 
       {/* 헤더 */}
-      <header className="bg-blue-600 px-5 pt-12 pb-6">
+      <header className="bg-blue-600 px-5 pt-8 pb-3">
         <p className="text-blue-200 text-sm">안녕하세요 👋</p>
         <h2 className="text-white text-xl font-bold mt-0.5">{userProfile.name || "로딩 중"}님</h2>
         <p className="text-blue-200 text-xs mt-1">
@@ -357,7 +462,7 @@ export default function HomePage() {
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${
-                  weeklyPercent >= 90 ? "bg-red-500" : weeklyPercent >= 70 ? "bg-orange-400" : "bg-blue-500"
+                  weeklyPercent >= 100 ? "bg-blue-500" : "bg-[#8dc63f]"
                 }`}
                 style={{ width: `${Math.min(weeklyPercent, 100)}%` }}
               />

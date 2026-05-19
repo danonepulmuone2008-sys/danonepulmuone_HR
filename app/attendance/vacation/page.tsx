@@ -4,17 +4,27 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const VACATION_TYPES = ["연차", "반차(오전)", "반차(오후)", "병가", "경조사", "면접"];
+const VACATION_TYPES = ["연차", "반차(오전)", "반차(오후)", "병가", "경조사", "면접", "시간 휴가"];
 
 export default function VacationPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ startDate: "", endDate: "", type: "연차", reason: "" });
+  const [form, setForm] = useState({ startDate: "", endDate: "", type: "연차", reason: "", startTime: "", endTime: "" });
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const update = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
+  const isHourly = form.type === "시간 휴가";
+
+  const calcHours = (): number | null => {
+    if (!form.startTime || !form.endTime) return null;
+    const sh = Number(form.startTime);
+    const eh = Number(form.endTime);
+    const diff = eh - sh;
+    return diff > 0 ? diff : null;
+  };
+
+  const update = (key: string, value: string | number) => setForm(prev => ({ ...prev, [key]: value }));
 
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError });
@@ -39,22 +49,31 @@ export default function VacationPage() {
   };
 
   const handleSubmit = async () => {
-    if (!form.startDate || !form.endDate) {
-      showToast("시작일과 종료일을 입력해주세요.", true);
+    if (!form.startDate) {
+      showToast("시작일을 입력해주세요.", true);
       return;
     }
-    if (form.startDate > form.endDate) {
+    if (!isHourly && !form.endDate) {
+      showToast("종료일을 입력해주세요.", true);
+      return;
+    }
+    if (!isHourly && form.startDate > form.endDate) {
       showToast("종료일이 시작일보다 빠를 수 없습니다.", true);
+      return;
+    }
+    if (isHourly && (!form.startTime || !form.endTime)) {
+      showToast("시작 시간과 종료 시간을 입력해주세요.", true);
+      return;
+    }
+    if (isHourly && calcHours() === null) {
+      showToast("종료 시간이 시작 시간보다 늦어야 합니다.", true);
       return;
     }
 
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        showToast("로그인이 필요합니다.", true);
-        return;
-      }
+      if (!session) { showToast("로그인이 필요합니다.", true); return; }
 
       let attachmentUrl: string | null = null;
       if (files.length > 0) {
@@ -65,10 +84,7 @@ export default function VacationPage() {
           method: "POST",
           body: uploadForm,
         });
-        if (!uploadRes.ok) {
-          showToast("파일 업로드 중 오류가 발생했습니다.", true);
-          return;
-        }
+        if (!uploadRes.ok) { showToast("파일 업로드 중 오류가 발생했습니다.", true); return; }
         const { url } = await uploadRes.json();
         attachmentUrl = url;
       }
@@ -77,9 +93,10 @@ export default function VacationPage() {
         user_id: session.user.id,
         type: form.type,
         start_date: form.startDate,
-        end_date: form.endDate,
+        end_date: isHourly ? form.startDate : form.endDate,
         reason: form.reason || null,
         attachment_url: attachmentUrl,
+        hours: isHourly ? calcHours() : null,
       });
 
       if (error) {
@@ -114,7 +131,9 @@ export default function VacationPage() {
                   onClick={() => update("type", type)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
                     form.type === type
-                      ? "bg-blue-600 text-white border-blue-600"
+                      ? type === "시간 휴가"
+                        ? "bg-green-500 text-white border-green-500"
+                        : "bg-blue-600 text-white border-blue-600"
                       : "bg-gray-50 text-gray-600 border-gray-200"
                   }`}
                 >
@@ -123,8 +142,51 @@ export default function VacationPage() {
               ))}
             </div>
           </div>
+
+          {isHourly && (() => {
+            const computed = calcHours();
+            const invalid = !!form.startTime && !!form.endTime && computed === null;
+            return (
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">휴가 시간</label>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="text-[11px] text-gray-400 mb-1 block">시작</label>
+                    <select
+                      value={form.startTime}
+                      onChange={e => update("startTime", e.target.value)}
+                      className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-green-500 bg-gray-50"
+                    >
+                      <option value="">시 선택</option>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={String(i)}>{i}시</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[11px] text-gray-400 mb-1 block">종료</label>
+                    <select
+                      value={form.endTime}
+                      onChange={e => update("endTime", e.target.value)}
+                      className={`w-full h-11 px-4 rounded-xl border text-sm outline-none bg-gray-50 ${invalid ? "border-red-400" : "border-gray-200 focus:border-green-500"}`}
+                    >
+                      <option value="">시 선택</option>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={String(i)}>{i}시</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {invalid && <p className="text-xs text-red-500 mt-1.5">종료 시간이 시작 시간보다 늦어야 합니다.</p>}
+                {computed !== null && (
+                  <p className="text-xs text-green-600 font-medium mt-1.5">{computed}시간 휴가</p>
+                )}
+              </div>
+            );
+          })()}
+
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">시작일</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">{isHourly ? "날짜" : "시작일"}</label>
             <input
               type="date"
               value={form.startDate}
@@ -132,15 +194,20 @@ export default function VacationPage() {
               className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
             />
           </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
-            <input
-              type="date"
-              value={form.endDate}
-              onChange={e => update("endDate", e.target.value)}
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-            />
-          </div>
+
+          {!isHourly && (
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
+              <input
+                type="date"
+                value={form.endDate}
+                min={form.startDate || undefined}
+                onChange={e => update("endDate", e.target.value)}
+                className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">사유</label>
             <textarea
@@ -183,7 +250,7 @@ export default function VacationPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={loading}
+          disabled={loading || (isHourly && !!form.startTime && !!form.endTime && calcHours() === null)}
           className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm disabled:opacity-60 flex items-center justify-center"
         >
           {loading ? (

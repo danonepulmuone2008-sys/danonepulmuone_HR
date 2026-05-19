@@ -10,22 +10,32 @@ export async function GET(req: Request) {
     const startDate = `${month}-01`;
     const nextMonth = mon === 12 ? `${year + 1}-01-01` : `${year}-${String(mon + 1).padStart(2, "0")}-01`;
 
+    const { data: activeUsers } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .neq("role", "admin")
+      .eq("is_active", true);
+    const activeIds = (activeUsers ?? []).map((u) => u.id);
+
     const [flexResult, vacResult, tripResult] = await Promise.all([
       supabaseAdmin
         .from("flex_schedules")
         .select("user_id, user_name, date, start_time, end_time")
+        .in("user_id", activeIds)
         .gte("date", startDate)
         .lt("date", nextMonth)
         .order("date"),
       supabaseAdmin
         .from("vacation_requests")
         .select("user_id, type, start_date, end_date")
+        .in("user_id", activeIds)
         .eq("status", "approved")
         .gte("end_date", startDate)
         .lt("start_date", nextMonth),
       supabaseAdmin
         .from("business_trip_requests")
         .select("user_id, destination, start_date, end_date")
+        .in("user_id", activeIds)
         .eq("status", "approved")
         .gte("end_date", startDate)
         .lt("start_date", nextMonth),
