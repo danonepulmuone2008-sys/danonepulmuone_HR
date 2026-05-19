@@ -62,6 +62,14 @@ type Grant = {
   created_at: string;
 };
 
+type VacUsage = {
+  id: string;
+  type: string;
+  start_date: string;
+  end_date: string;
+  hours: number | null;
+};
+
 type RecordsUser = { id: string; name: string }
 type RecordsData = {
   users: RecordsUser[]
@@ -198,6 +206,8 @@ export default function AdminAttendancePage() {
   const [grants, setGrants] = useState<Grant[]>([]);
   const [grantTotal, setGrantTotal] = useState(0);
   const [grantLoading, setGrantLoading] = useState(false);
+  const [usageList, setUsageList] = useState<VacUsage[]>([]);
+  const [usedTotal, setUsedTotal] = useState(0);
   const [newHours, setNewHours] = useState("");
   const [newNote, setNewNote] = useState("");
   const [granting, setGranting] = useState(false);
@@ -295,6 +305,8 @@ export default function AdminAttendancePage() {
       const json = await res.json();
       setGrants(json.grants ?? []);
       setGrantTotal(json.totalHours ?? 0);
+      setUsageList(json.usageList ?? []);
+      setUsedTotal(json.usedHours ?? 0);
     } finally {
       setGrantLoading(false);
     }
@@ -1338,10 +1350,22 @@ export default function AdminAttendancePage() {
                 <button onClick={() => { const y = grantYear + 1; setGrantYear(y); fetchGrants(grantTarget.id, y); }}
                   className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-lg">›</button>
               </div>
-              {/* 총 지급 요약 */}
-              <div className="bg-green-50 rounded-xl px-4 py-3 flex items-center justify-between mb-4">
-                <span className="text-xs text-green-700 font-medium">총 지급 시간</span>
-                <span className="text-base font-bold text-green-700">{grantTotal}시간</span>
+              {/* 요약 */}
+              <div className="bg-green-50 rounded-xl px-4 py-3 mb-4 flex items-center justify-between gap-2">
+                <div className="flex flex-col items-center flex-1">
+                  <span className="text-[10px] text-green-600 font-medium mb-0.5">총 지급</span>
+                  <span className="text-sm font-bold text-green-700">{grantTotal}h</span>
+                </div>
+                <div className="w-px h-8 bg-green-200" />
+                <div className="flex flex-col items-center flex-1">
+                  <span className="text-[10px] text-orange-500 font-medium mb-0.5">사용</span>
+                  <span className="text-sm font-bold text-orange-500">{usedTotal}h</span>
+                </div>
+                <div className="w-px h-8 bg-green-200" />
+                <div className="flex flex-col items-center flex-1">
+                  <span className="text-[10px] text-blue-500 font-medium mb-0.5">잔여</span>
+                  <span className="text-sm font-bold text-blue-600">{Math.max(0, grantTotal - usedTotal)}h</span>
+                </div>
               </div>
               {/* 새 지급 폼 */}
               <div className="flex flex-col gap-2 mb-4">
@@ -1375,14 +1399,14 @@ export default function AdminAttendancePage() {
                 </button>
               </div>
               {/* 지급 이력 */}
-              <div>
+              <div className="mb-4">
                 <label className="text-xs font-medium text-gray-500 mb-2 block">지급 이력</label>
                 {grantLoading ? (
                   <div className="flex flex-col gap-2">
                     {[1, 2].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
                   </div>
                 ) : grants.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">지급 내역이 없습니다</p>
+                  <p className="text-sm text-gray-400 text-center py-3">지급 내역이 없습니다</p>
                 ) : (
                   <div className="flex flex-col gap-2">
                     {grants.map((g) => {
@@ -1391,7 +1415,7 @@ export default function AdminAttendancePage() {
                       return (
                         <div key={g.id} className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl">
                           <div>
-                            <p className="text-sm font-semibold text-gray-800">{g.hours}시간</p>
+                            <p className="text-sm font-semibold text-gray-800">+{g.hours}시간</p>
                             <p className="text-xs text-gray-400 mt-0.5">{dateStr}{g.note ? ` · ${g.note}` : ""}</p>
                           </div>
                           <button
@@ -1401,6 +1425,35 @@ export default function AdminAttendancePage() {
                           >
                             {deletingGrantId === g.id ? "..." : "삭제"}
                           </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 사용 내역 */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-2 block">사용 내역</label>
+                {grantLoading ? (
+                  <div className="flex flex-col gap-2">
+                    {[1, 2].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
+                  </div>
+                ) : usageList.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-3">사용 내역이 없습니다</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {usageList.map((v) => {
+                      const dateStr = v.start_date === v.end_date ? v.start_date : `${v.start_date} ~ ${v.end_date}`;
+                      return (
+                        <div key={v.id} className="flex items-center justify-between px-4 py-3 bg-orange-50 rounded-xl">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">{v.type}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>
+                          </div>
+                          {v.hours != null && (
+                            <span className="text-sm font-bold text-orange-500">-{v.hours}h</span>
+                          )}
                         </div>
                       );
                     })}

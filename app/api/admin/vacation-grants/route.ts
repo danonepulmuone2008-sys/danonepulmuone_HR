@@ -21,8 +21,18 @@ export async function GET(req: Request) {
 
     if (error) throw error
 
+    const { data: usageData } = await supabaseAdmin
+      .from("vacation_requests")
+      .select("id, type, start_date, end_date, hours, status")
+      .eq("user_id", userId)
+      .eq("status", "approved")
+      .gte("start_date", `${year}-01-01`)
+      .lte("start_date", `${year}-12-31`)
+      .order("start_date", { ascending: false })
+
     const totalHours = (data ?? []).reduce((sum, g) => sum + (g.hours ?? 0), 0)
-    return NextResponse.json({ grants: data ?? [], totalHours })
+    const usedHours = (usageData ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0)
+    return NextResponse.json({ grants: data ?? [], totalHours, usageList: usageData ?? [], usedHours })
   } catch (err) {
     console.error("[admin/vacation-grants GET]", err)
     return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
