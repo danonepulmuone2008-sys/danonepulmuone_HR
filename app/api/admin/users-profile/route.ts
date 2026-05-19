@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     const { data, error } = await supabaseAdmin
       .from("users")
       .select("id, name, email, phone, department, position, role, is_active, created_at")
-      .neq("role", "admin")
+      .eq("role", "employee")
       .order("is_active", { ascending: false })
       .order("name", { ascending: true });
 
