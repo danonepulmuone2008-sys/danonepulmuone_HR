@@ -84,6 +84,7 @@ export default function AttendancePage() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
+  const [vacGrantTotal, setVacGrantTotal] = useState<number | null>(null);
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
@@ -247,6 +248,18 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (!userId) return;
+    supabase
+      .from("vacation_grants")
+      .select("hours")
+      .eq("user_id", userId)
+      .eq("year", currentYear)
+      .then(({ data }) => {
+        setVacGrantTotal((data ?? []).reduce((sum, g) => sum + (g.hours ?? 0), 0));
+      });
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
     fetchMonthData(userId);
   }, [userId, fetchMonthData]);
 
@@ -325,6 +338,17 @@ export default function AttendancePage() {
             ))}
           </div>
         </div>
+
+        {/* 휴가 잔여 시간 카드 */}
+        {vacGrantTotal !== null && (
+          <div className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+              <span className="text-sm font-medium text-gray-700">{currentYear}년 지급 휴가</span>
+            </div>
+            <span className="text-base font-bold text-green-600">{vacGrantTotal}시간</span>
+          </div>
+        )}
 
         {/* 캘린더 카드 */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 overflow-visible">
