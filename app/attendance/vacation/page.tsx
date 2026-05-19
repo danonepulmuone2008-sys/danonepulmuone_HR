@@ -8,7 +8,7 @@ const VACATION_TYPES = ["연차", "반차(오전)", "반차(오후)", "병가", 
 
 export default function VacationPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ startDate: "", endDate: "", type: "연차", reason: "", startTime: "", endTime: "" });
+  const [form, setForm] = useState({ startDate: "", endDate: "", type: "연차", reason: "", startTime: "", endTime: "", lunchBreak: false });
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
@@ -20,11 +20,12 @@ export default function VacationPage() {
     if (!form.startTime || !form.endTime) return null;
     const sh = Number(form.startTime);
     const eh = Number(form.endTime);
-    const diff = eh - sh;
+    let diff = eh - sh;
+    if (form.lunchBreak) diff = Math.max(0, diff - 1);
     return diff > 0 ? diff : null;
   };
 
-  const update = (key: string, value: string | number) => setForm(prev => ({ ...prev, [key]: value }));
+  const update = (key: string, value: string | number | boolean) => setForm(prev => ({ ...prev, [key]: value }));
 
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError });
@@ -178,8 +179,17 @@ export default function VacationPage() {
                   </div>
                 </div>
                 {invalid && <p className="text-xs text-red-500 mt-1.5">종료 시간이 시작 시간보다 늦어야 합니다.</p>}
+                <label className="flex items-center gap-2.5 mt-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.lunchBreak}
+                    onChange={e => update("lunchBreak", e.target.checked)}
+                    className="w-5 h-5 rounded accent-[#8dc63f]"
+                  />
+                  <span className="text-sm text-gray-700">점심 시간 포함 (-1시간)</span>
+                </label>
                 {computed !== null && (
-                  <p className="text-xs text-green-600 font-medium mt-1.5">{computed}시간 휴가</p>
+                  <p className="text-xs text-green-600 font-medium mt-2">{computed}시간 휴가</p>
                 )}
               </div>
             );
