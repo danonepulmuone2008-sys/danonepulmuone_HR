@@ -1183,7 +1183,7 @@ export default function AdminAttendancePage() {
                     </button>
                   </div>
                 )}
-                {showHistory && (
+                {showHistory && req.type === "attendance_edit" && (
                   <div className="flex justify-end">
                     <button
                       onClick={() => setConfirmDelete(req)}
