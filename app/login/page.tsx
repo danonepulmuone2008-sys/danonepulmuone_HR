@@ -37,11 +37,11 @@ export default function LoginPage() {
       if (error) {
         setLoginError("이메일 또는 비밀번호가 틀렸습니다");
       } else {
-        const { data: userData } = await supabase.from("users").select("is_active").eq("id", data.user.id).single();
+        const { data: userData } = await supabase.from("users").select("is_active, role").eq("id", data.user.id).single();
         if (userData?.is_active === false) {
           await supabase.auth.signOut();
           setLoginError("탈퇴한 계정입니다. 로그인이 불가합니다.");
-        } else if (data.user?.email === "danone.hradmin@pulmuone.com") {
+        } else if (userData?.role === "admin" || userData?.role === "super_admin") {
           router.push("/admin");
         } else {
           router.push("/");
