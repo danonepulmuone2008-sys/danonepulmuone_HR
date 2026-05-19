@@ -36,6 +36,8 @@ export default function AdminHomePage() {
   const [users, setUsers] = useState<User[]>([]);
   const [todayStatusMap, setTodayStatusMap] = useState<Record<string, "출근" | "퇴근">>({});
   const [showLogout, setShowLogout] = useState(false);
+
+  // 정보 수정
   const [editTarget, setEditTarget] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -147,7 +149,7 @@ export default function AdminHomePage() {
                     <p className="text-xs text-gray-400 mt-0.5">{user.department}{user.position ? ` · ${user.position}` : ""}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {!inactive && (
                     <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
                       status === "출근" ? "bg-orange-100 text-orange-500"
@@ -208,7 +210,6 @@ export default function AdminHomePage() {
               </div>
               <button onClick={() => { setEditTarget(null); setEditForm(null); }} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600">×</button>
             </div>
-
             <div className="overflow-y-auto flex-1 px-5 pt-4 pb-2">
               <div className="flex flex-col gap-3">
                 {([
@@ -228,43 +229,31 @@ export default function AdminHomePage() {
                     />
                   </div>
                 ))}
-
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1.5 block">권한</label>
                   <div className="flex gap-2">
                     {["employee", "admin"].map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => setEditForm((f) => f ? { ...f, role: r } : f)}
-                        className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.role === r ? "bg-blue-500 text-white border-blue-500" : "bg-gray-50 text-gray-600 border-gray-200"}`}
-                      >
+                      <button key={r} onClick={() => setEditForm((f) => f ? { ...f, role: r } : f)}
+                        className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.role === r ? "bg-blue-500 text-white border-blue-500" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
                         {r === "employee" ? "직원" : "관리자"}
                       </button>
                     ))}
                   </div>
                 </div>
-
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1.5 block">재직 상태</label>
                   <div className="flex gap-2">
                     {([true, false] as const).map((v) => (
-                      <button
-                        key={String(v)}
-                        onClick={() => setEditForm((f) => f ? { ...f, is_active: v } : f)}
-                        className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.is_active === v ? (v ? "bg-green-500 text-white border-green-500" : "bg-gray-400 text-white border-gray-400") : "bg-gray-50 text-gray-600 border-gray-200"}`}
-                      >
+                      <button key={String(v)} onClick={() => setEditForm((f) => f ? { ...f, is_active: v } : f)}
+                        className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.is_active === v ? (v ? "bg-green-500 text-white border-green-500" : "bg-gray-400 text-white border-gray-400") : "bg-gray-50 text-gray-600 border-gray-200"}`}>
                         {v ? "활성" : "비활성"}
                       </button>
                     ))}
                   </div>
                 </div>
-
-                <button
-                  onClick={saveEdit}
-                  disabled={saving}
+                <button onClick={saveEdit} disabled={saving}
                   className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-40 mt-1"
-                  style={{ backgroundColor: "#8dc63f" }}
-                >
+                  style={{ backgroundColor: "#8dc63f" }}>
                   {saving ? "저장 중..." : "저장"}
                 </button>
               </div>

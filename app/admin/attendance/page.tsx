@@ -6,7 +6,6 @@ import AdminBottomNav from "@/components/AdminBottomNav";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors"
-import { supabase } from "@/lib/supabase";
 
 function toTimestamptz(date: string, time: string): string {
   return `${date}T${time}:00+09:00`
@@ -54,6 +53,13 @@ type RealIntern = {
   name: string;
   email: string;
   phone: string;
+};
+
+type Grant = {
+  id: string;
+  hours: number;
+  note: string | null;
+  created_at: string;
 };
 
 type RecordsUser = { id: string; name: string }
@@ -139,8 +145,8 @@ export default function AdminAttendancePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const initialTab = (searchParams.get("tab") as "schedule" | "records" | "approval") ?? "schedule";
-  const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval">(initialTab);
+  const initialTab = (searchParams.get("tab") as "schedule" | "records" | "approval" | "vacation") ?? "schedule";
+  const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval" | "vacation">(initialTab);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
 
@@ -179,9 +185,23 @@ export default function AdminAttendancePage() {
   const [approvalPage, setApprovalPage] = useState(1);
   const [confirmChange, setConfirmChange] = useState<{ req: ApprovalRequest; targetAction: "approved" | "rejected" } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ApprovalRequest | null>(null);
+  const [deleteToast, setDeleteToast] = useState(false);
   const APPROVAL_PAGE_SIZE = 5;
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
+
+  // 휴가 관리 탭 상태
+  const [vacUsers, setVacUsers] = useState<RecordsUser[]>([]);
+  const [vacUsersLoading, setVacUsersLoading] = useState(false);
+  const [grantTarget, setGrantTarget] = useState<RecordsUser | null>(null);
+  const [grantYear, setGrantYear] = useState(CURRENT_YEAR);
+  const [grants, setGrants] = useState<Grant[]>([]);
+  const [grantTotal, setGrantTotal] = useState(0);
+  const [grantLoading, setGrantLoading] = useState(false);
+  const [newHours, setNewHours] = useState("");
+  const [newNote, setNewNote] = useState("");
+  const [granting, setGranting] = useState(false);
+  const [deletingGrantId, setDeletingGrantId] = useState<string | null>(null);
 
   // 근무 기록 수정 상태
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -229,10 +249,93 @@ export default function AdminAttendancePage() {
   }, [activeTab, weekOffset]);
 
   useEffect(() => {
+    if (activeTab !== "vacation") return;
+    if (vacUsers.length > 0) return;
+    fetchVacUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab !== "approval") return;
     fetchRequests(showHistory);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, showHistory]);
+
+  async function fetchVacUsers() {
+    setVacUsersLoading(true);
+    try {
+      const token = user?.token;
+      if (!token) return;
+      const res = await fetch("/api/admin/users-profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      setVacUsers((json.interns ?? []).filter((u: { id: string; name: string; is_active: boolean }) => u.is_active).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
+    } finally {
+      setVacUsersLoading(false);
+    }
+  }
+
+  async function fetchGrants(userId: string, year: number) {
+    setGrantLoading(true);
+    try {
+      const token = user?.token;
+      if (!token) return;
+      const res = await fetch(`/api/admin/vacation-grants?userId=${userId}&year=${year}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      setGrants(json.grants ?? []);
+      setGrantTotal(json.totalHours ?? 0);
+    } finally {
+      setGrantLoading(false);
+    }
+  }
+
+  async function openGrant(u: RecordsUser) {
+    setGrantTarget(u);
+    setGrantYear(CURRENT_YEAR);
+    setNewHours("");
+    setNewNote("");
+    await fetchGrants(u.id, CURRENT_YEAR);
+  }
+
+  async function handleGrant() {
+    if (!grantTarget || !newHours || Number(newHours) <= 0) return;
+    setGranting(true);
+    try {
+      const token = user?.token;
+      if (!token) return;
+      const res = await fetch("/api/admin/vacation-grants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId: grantTarget.id, year: grantYear, hours: Number(newHours), note: newNote }),
+      });
+      if (res.ok) {
+        setNewHours("");
+        setNewNote("");
+        await fetchGrants(grantTarget.id, grantYear);
+      }
+    } finally {
+      setGranting(false);
+    }
+  }
+
+  async function handleDeleteGrant(id: string) {
+    if (!grantTarget) return;
+    setDeletingGrantId(id);
+    try {
+      const token = user?.token;
+      if (!token) return;
+      const res = await fetch(`/api/admin/vacation-grants?id=${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) await fetchGrants(grantTarget.id, grantYear);
+    } finally {
+      setDeletingGrantId(null);
+    }
+  }
 
   async function fetchRecords() {
     setRecordsLoading(true);
@@ -284,7 +387,11 @@ export default function AdminAttendancePage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ type: req.type, id: req.id }),
       });
-      if (res.ok) setRequests((prev) => prev.filter((r) => r.id !== req.id));
+      if (res.ok) {
+        setRequests((prev) => prev.filter((r) => r.id !== req.id));
+        setDeleteToast(true);
+        setTimeout(() => setDeleteToast(false), 2000);
+      }
     } finally {
       setProcessingId(null);
     }
@@ -413,6 +520,12 @@ export default function AdminAttendancePage() {
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
+      {deleteToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none">
+          삭제 되었습니다
+        </div>
+      )}
+
       {viewAttachmentUrl && (
         <div
           className="fixed inset-0 z-[100] flex items-end justify-center"
@@ -539,16 +652,16 @@ export default function AdminAttendancePage() {
 
       {/* 탭 */}
       <div className="bg-white border-b border-gray-100 flex">
-        {(["schedule", "records", "approval"] as const).map((tab) => (
+        {(["schedule", "records", "approval", "vacation"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors relative ${
+            className={`flex-1 py-3 text-[11px] font-medium border-b-2 transition-colors relative ${
               activeTab === tab ? "border-[#8dc63f] text-[#8dc63f]" : "border-transparent text-gray-400"
             }`}
           >
             <span className="inline-flex items-center gap-1">
-              {tab === "schedule" ? "근무 일정" : tab === "records" ? "근무 기록" : "요청 승인"}
+              {tab === "schedule" ? "근무 일정" : tab === "records" ? "근무 기록" : tab === "approval" ? "요청 승인" : "휴가 관리"}
               {tab === "approval" && pendingCount > 0 && (
                 <span className="bg-red-500 text-white text-[9px] font-bold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-0.5 leading-none">
                   {pendingCount}
@@ -1040,7 +1153,137 @@ export default function AdminAttendancePage() {
             );
           })}
         </div>
+      ) : activeTab === "vacation" ? (
+        /* 휴가 관리 탭 */
+        <div className="flex flex-col gap-3 px-4 pt-3">
+          {vacUsersLoading ? (
+            <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
+              <p className="text-sm text-gray-400">불러오는 중...</p>
+            </div>
+          ) : vacUsers.length === 0 ? (
+            <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
+              <p className="text-sm text-gray-400">직원이 없습니다</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {vacUsers.map((u, i) => (
+                <div key={u.id} className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                      style={{ backgroundColor: getInternColor(colorMap.get(u.id) ?? i) }}
+                    >
+                      {u.name.slice(0, 1)}
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900">{u.name}</span>
+                  </div>
+                  <button
+                    onClick={() => openGrant(u)}
+                    className="text-xs text-white font-semibold px-3 py-1.5 rounded-lg"
+                    style={{ backgroundColor: "#8dc63f" }}
+                  >
+                    휴가 관리
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ) : null}
+
+      {/* 휴가 지급 바텀시트 */}
+      {grantTarget && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 pb-8" onClick={() => setGrantTarget(null)}>
+          <div className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10 flex flex-col" style={{ maxHeight: "80vh" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">{grantTarget.name} 휴가 지급</h3>
+                <p className="text-xs text-gray-400 mt-0.5">연도별 휴가 시간을 관리하세요</p>
+              </div>
+              <button onClick={() => setGrantTarget(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 pt-4 pb-2">
+              {/* 연도 선택 */}
+              <div className="flex items-center justify-between mb-4">
+                <button onClick={() => { const y = grantYear - 1; setGrantYear(y); fetchGrants(grantTarget.id, y); }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-lg">‹</button>
+                <span className="text-sm font-semibold text-gray-800">{grantYear}년</span>
+                <button onClick={() => { const y = grantYear + 1; setGrantYear(y); fetchGrants(grantTarget.id, y); }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 text-lg">›</button>
+              </div>
+              {/* 총 지급 요약 */}
+              <div className="bg-green-50 rounded-xl px-4 py-3 flex items-center justify-between mb-4">
+                <span className="text-xs text-green-700 font-medium">총 지급 시간</span>
+                <span className="text-base font-bold text-green-700">{grantTotal}시간</span>
+              </div>
+              {/* 새 지급 폼 */}
+              <div className="flex flex-col gap-2 mb-4">
+                <label className="text-xs font-medium text-gray-500">새 지급</label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={newHours}
+                      onChange={(e) => { if (!/^\d*\.?\d*$/.test(e.target.value)) return; setNewHours(e.target.value); }}
+                      placeholder="시간 입력"
+                      className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-green-400 bg-gray-50"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    placeholder="메모 (선택)"
+                    className="flex-[2] h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-green-400 bg-gray-50"
+                  />
+                </div>
+                <button
+                  onClick={handleGrant}
+                  disabled={granting || !newHours || Number(newHours) <= 0}
+                  className="w-full h-11 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+                  style={{ backgroundColor: "#8dc63f" }}
+                >
+                  {granting ? "지급 중..." : "지급"}
+                </button>
+              </div>
+              {/* 지급 이력 */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-2 block">지급 이력</label>
+                {grantLoading ? (
+                  <div className="flex flex-col gap-2">
+                    {[1, 2].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
+                  </div>
+                ) : grants.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">지급 내역이 없습니다</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {grants.map((g) => {
+                      const d = new Date(g.created_at);
+                      const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+                      return (
+                        <div key={g.id} className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">{g.hours}시간</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{dateStr}{g.note ? ` · ${g.note}` : ""}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteGrant(g.id)}
+                            disabled={deletingGrantId === g.id}
+                            className="text-xs text-red-400 border border-red-200 rounded-lg px-2.5 py-1 hover:bg-red-50 transition-colors disabled:opacity-40"
+                          >
+                            {deletingGrantId === g.id ? "..." : "삭제"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 날짜 상세 바텀시트 (근무 일정 탭) */}
       {selectedDay !== null && activeTab === "schedule" && (
