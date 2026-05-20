@@ -9,7 +9,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
       .from("users")
-      .select("id, name, email, phone, department, position, role, is_active, created_at")
+      .select("id, name, email, phone, department, position, role, is_active, created_at, is_remote, use_session_tracking")
       .eq("role", "employee")
       .order("is_active", { ascending: false })
       .order("name", { ascending: true });
@@ -33,12 +33,12 @@ export async function PATCH(req: Request) {
     const auth = await requireAdmin(req);
     if (!auth.ok) return auth.response;
 
-    const { id, name, department, position, phone, email, role, is_active } = await req.json();
+    const { id, name, department, position, phone, email, role, is_active, is_remote, use_session_tracking } = await req.json();
     if (!id) return NextResponse.json({ error: "id가 필요합니다" }, { status: 400 });
 
     const { error } = await supabaseAdmin
       .from("users")
-      .update({ name, department, position, phone, email, role, is_active, updated_at: new Date().toISOString() })
+      .update({ name, department, position, phone, email, role, is_active, is_remote, use_session_tracking, updated_at: new Date().toISOString() })
       .eq("id", id);
 
     if (error) throw error;

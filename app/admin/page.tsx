@@ -15,6 +15,8 @@ type User = {
   role: string;
   is_active: boolean;
   approver: boolean;
+  is_remote: boolean;
+  use_session_tracking: boolean;
 };
 
 type EditForm = {
@@ -26,6 +28,8 @@ type EditForm = {
   role: string;
   is_active: boolean;
   approver: boolean;
+  is_remote: boolean;
+  use_session_tracking: boolean;
 };
 
 async function getToken(): Promise<string> {
@@ -84,6 +88,8 @@ export default function AdminHomePage() {
       role: user.role ?? "employee",
       is_active: user.is_active,
       approver: user.approver ?? false,
+      is_remote: user.is_remote ?? false,
+      use_session_tracking: user.use_session_tracking ?? false,
     });
   }
 
@@ -261,6 +267,28 @@ export default function AdminHomePage() {
                       <button key={String(v)} onClick={() => setEditForm((f) => f ? { ...f, is_active: v } : f)}
                         className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.is_active === v ? (v ? "bg-green-500 text-white border-green-500" : "bg-gray-400 text-white border-gray-400") : "bg-gray-50 text-gray-600 border-gray-200"}`}>
                         {v ? "활성" : "비활성"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">재택근무</label>
+                  <div className="flex gap-2">
+                    {([true, false] as const).map((v) => (
+                      <button key={String(v)} onClick={() => setEditForm((f) => f ? { ...f, is_remote: v } : f)}
+                        className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.is_remote === v ? (v ? "bg-blue-500 text-white border-blue-500" : "bg-gray-400 text-white border-gray-400") : "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                        {v ? "재택" : "출근"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">세션 근무 추적</label>
+                  <div className="flex gap-2">
+                    {([true, false] as const).map((v) => (
+                      <button key={String(v)} onClick={() => setEditForm((f) => f ? { ...f, use_session_tracking: v } : f)}
+                        className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.use_session_tracking === v ? (v ? "bg-blue-500 text-white border-blue-500" : "bg-gray-400 text-white border-gray-400") : "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                        {v ? "사용" : "미사용"}
                       </button>
                     ))}
                   </div>

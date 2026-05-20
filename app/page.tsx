@@ -25,15 +25,17 @@ type ToastType = "success" | "error";
 
 export default function HomePage() {
   const { user } = useAuth();
-  const [userProfile, setUserProfile] = useState({ name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "" });
+  const [userProfile, setUserProfile] = useState({ name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "", is_remote: false, use_session_tracking: false });
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("users").select("name, department, position").eq("id", user.id).single().then(({ data }) => {
+    supabase.from("users").select("name, department, position, is_remote, use_session_tracking").eq("id", user.id).single().then(({ data }) => {
       setUserProfile({
         name: data?.name ?? user.name,
         department: data?.department ?? user.department,
         position: data?.position ?? user.position,
+        is_remote: data?.is_remote ?? false,
+        use_session_tracking: data?.use_session_tracking ?? false,
       });
     });
   }, [user]);
@@ -53,6 +55,7 @@ export default function HomePage() {
   const [networkChecking, setNetworkChecking] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState(0);
   const [lunchBreak, setLunchBreak] = useState(true);
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
 
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
@@ -72,7 +75,7 @@ export default function HomePage() {
   };
 
   const checkNetwork = async (): Promise<boolean> => {
-    if (user?.id === "f3c89062-365a-44ab-9a7c-291836ae4aa9") return true;
+    if (userProfile.is_remote) return true;
     try {
       const res = await fetch("/api/check-network");
       const data = await res.json();
@@ -154,24 +157,44 @@ export default function HomePage() {
     if (!modal || modal.type !== "confirm") return;
     if (user) {
       const now = new Date().toISOString();
-      if (modal.direction === "in") {
-        await supabase.from("attendance_records").upsert(
-          { user_id: user.id, date: todayStr, clock_in: now, updated_at: now },
-          { onConflict: "user_id,date" }
-        );
+      if (userProfile.use_session_tracking) {
+        if (modal.direction === "in") {
+          const { data } = await supabase.from("work_sessions")
+            .insert({ user_id: user.id, date: todayStr, start_time: now })
+            .select("id")
+            .single();
+          setOpenSessionId(data?.id ?? null);
+        } else {
+          await supabase.from("work_sessions")
+            .update({ end_time: now })
+            .eq("id", openSessionId);
+          setOpenSessionId(null);
+        }
       } else {
-        await supabase.from("attendance_records")
-          .update({ clock_out: now, lunch_break: lunchBreak, updated_at: now })
-          .eq("user_id", user.id)
-          .eq("date", todayStr);
+        if (modal.direction === "in") {
+          await supabase.from("attendance_records").upsert(
+            { user_id: user.id, date: todayStr, clock_in: now, updated_at: now },
+            { onConflict: "user_id,date" }
+          );
+        } else {
+          await supabase.from("attendance_records")
+            .update({ clock_out: now, lunch_break: lunchBreak, updated_at: now })
+            .eq("user_id", user.id)
+            .eq("date", todayStr);
+        }
       }
     }
     if (modal.direction === "in") {
       setClockIn(modal.time);
-      showToast(`출근시간이 ${modal.time}로 기록되었습니다.`);
+      showToast(`근무 시작이 ${modal.time}로 기록되었습니다.`);
     } else {
-      setClockOut(modal.time);
-      showToast(`퇴근시간이 ${modal.time}로 기록되었습니다.${lunchBreak ? " (점심 1시간 차감)" : ""}`);
+      if (userProfile.use_session_tracking) {
+        setClockIn(null);
+        showToast(`근무 종료가 ${modal.time}로 기록되었습니다.`);
+      } else {
+        setClockOut(modal.time);
+        showToast(`퇴근시간이 ${modal.time}로 기록되었습니다.${lunchBreak ? " (점심 1시간 차감)" : ""}`);
+      }
       setLunchBreak(true);
     }
     setModal(null);
@@ -200,24 +223,46 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    if (!user || !userProfile.use_session_tracking) return;
+    supabase.from("work_sessions")
+      .select("id, start_time")
+      .eq("user_id", user.id)
+      .eq("date", todayStr)
+      .is("end_time", null)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setOpenSessionId(data.id);
+          const t = new Date(data.start_time);
+          setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+        }
+      });
+  }, [user, userProfile.use_session_tracking, todayStr]);
+
+  useEffect(() => {
     if (!user) return;
     (async () => {
       const uid = user.id;
 
-      const { data: today } = await supabase
-        .from("attendance_records")
-        .select("clock_in, clock_out")
-        .eq("user_id", uid)
-        .eq("date", todayStr)
-        .maybeSingle();
+      if (userProfile.use_session_tracking) {
+        setClockIn(null);
+        setClockOut(null);
+      } else {
+        const { data: today } = await supabase
+          .from("attendance_records")
+          .select("clock_in, clock_out")
+          .eq("user_id", uid)
+          .eq("date", todayStr)
+          .maybeSingle();
 
-      if (today?.clock_in) {
-        const t = new Date(today.clock_in);
-        setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
-      }
-      if (today?.clock_out) {
-        const t = new Date(today.clock_out);
-        setClockOut(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+        if (today?.clock_in) {
+          const t = new Date(today.clock_in);
+          setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+        }
+        if (today?.clock_out) {
+          const t = new Date(today.clock_out);
+          setClockOut(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+        }
       }
 
       const monday = new Date();
@@ -228,9 +273,10 @@ export default function HomePage() {
       const fmt = (d: Date) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-      const [{ data: weekRecords }, { data: weekTrips }] = await Promise.all([
+      const [{ data: weekRecords }, { data: weekTrips }, { data: weekVacations }] = await Promise.all([
         supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)),
         supabase.from("business_trip_requests").select("start_date, end_date, start_time, end_time").eq("user_id", uid).eq("status", "approved").lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
+        supabase.from("vacation_requests").select("start_date, hours").eq("user_id", uid).eq("status", "approved").not("hours", "is", null).gte("start_date", fmt(monday)).lte("start_date", fmt(friday)),
       ]);
 
       const attendanceTotal = (weekRecords ?? []).reduce((sum, r) => {
@@ -257,9 +303,11 @@ export default function HomePage() {
         return sum + dayHours;
       }, 0);
 
-      setWeeklyHours(Math.round((attendanceTotal + tripTotal) * 10) / 10);
+      const vacTotal = (weekVacations ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0);
+
+      setWeeklyHours(Math.round((attendanceTotal + tripTotal + vacTotal) * 10) / 10);
     })();
-  }, [user, todayStr]);
+  }, [user, todayStr, userProfile.use_session_tracking]);
 
   useEffect(() => {
     if (!user) return;
@@ -462,7 +510,7 @@ export default function HomePage() {
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${
-                  weeklyPercent >= 100 ? "bg-blue-500" : "bg-[#8dc63f]"
+                  weeklyPercent >= 100 ? "bg-green-500" : "bg-blue-600"
                 }`}
                 style={{ width: `${Math.min(weeklyPercent, 100)}%` }}
               />
