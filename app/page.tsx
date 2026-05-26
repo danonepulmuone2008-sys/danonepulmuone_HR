@@ -284,7 +284,7 @@ export default function HomePage() {
       const fmt = (d: Date) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-      const attendancePromise = userProfile.use_session_tracking
+      const attendancePromise: Promise<{ data: any[] | null; error: unknown }> = userProfile.use_session_tracking
         ? supabase.from("work_sessions").select("start_time, end_time").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null)
         : supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday));
 
