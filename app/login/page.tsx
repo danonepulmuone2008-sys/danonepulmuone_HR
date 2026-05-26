@@ -41,7 +41,7 @@ export default function LoginPage() {
         if (userData?.is_active === false) {
           await supabase.auth.signOut();
           setLoginError("탈퇴한 계정입니다. 로그인이 불가합니다.");
-        } else if (userData?.role === "admin" || userData?.role === "super_admin") {
+        } else if (userData?.role === "manager" || userData?.role === "admin") {
           router.push("/admin");
         } else {
           router.push("/");

@@ -241,10 +241,10 @@ export default function AdminHomePage() {
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1.5 block">권한</label>
                   <div className="flex gap-2">
-                    {["employee", "admin"].map((r) => (
+                    {["employee", "manager", "admin"].map((r) => (
                       <button key={r} onClick={() => setEditForm((f) => f ? { ...f, role: r } : f)}
                         className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.role === r ? "bg-blue-500 text-white border-blue-500" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
-                        {r === "employee" ? "직원" : "관리자"}
+                        {r === "employee" ? "직원" : r === "manager" ? "관리자" : "앱 관리자"}
                       </button>
                     ))}
                   </div>
