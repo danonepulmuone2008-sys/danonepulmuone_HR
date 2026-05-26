@@ -285,12 +285,15 @@ export default function HomePage() {
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const attendancePromise = (userProfile.use_session_tracking
-        ? supabase.from("work_sessions").select("start_time, end_time").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null)
-        : supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday))) as any;
-
-      const [{ data: weekData }, { data: weekTrips }, { data: weekVacations }] = await Promise.all([
-        attendancePromise,
+      let weekData: any[] | null = null;
+      if (userProfile.use_session_tracking) {
+        const { data } = await supabase.from("work_sessions").select("start_time, end_time").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null);
+        weekData = data;
+      } else {
+        const { data } = await supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday));
+        weekData = data;
+      }
+      const [{ data: weekTrips }, { data: weekVacations }] = await Promise.all([
         supabase.from("business_trip_requests").select("start_date, end_date, start_time, end_time").eq("user_id", uid).eq("status", "approved").lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
         supabase.from("vacation_requests").select("start_date, hours").eq("user_id", uid).eq("status", "approved").not("hours", "is", null).gte("start_date", fmt(monday)).lte("start_date", fmt(friday)),
       ]);
