@@ -9,6 +9,8 @@ export default function ResetPasswordPage() {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [toast, setToast] = useState("");
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
@@ -27,8 +29,8 @@ export default function ResetPasswordPage() {
       const data = await res.json();
       if (!res.ok) { setErrorMsg(data.error || "비밀번호 변경에 실패했습니다"); return; }
 
-      alert("비밀번호가 변경되었습니다.");
-      router.push("/login");
+      showToast("비밀번호가 변경되었습니다.");
+      setTimeout(() => router.push("/login"), 1800);
     } catch {
       setErrorMsg("서버 오류가 발생했습니다");
     } finally {
@@ -38,6 +40,14 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-6">
+      {toast && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+          <div className="flex items-center gap-2 bg-white text-gray-800 text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-100">
+            <span className="text-green-500 text-base">✓</span>
+            {toast}
+          </div>
+        </div>
+      )}
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center mx-auto mb-4">

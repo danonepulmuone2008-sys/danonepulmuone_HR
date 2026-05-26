@@ -573,10 +573,10 @@ export default function MyPage() {
               <button
                 onClick={async () => {
                   const { error } = await supabase.auth.updateUser({ password: pw.next });
-                  if (error) { alert("비밀번호 변경에 실패했습니다."); return; }
-                  alert("비밀번호가 변경되었습니다.");
+                  if (error) { showToast("비밀번호 변경에 실패했습니다."); return; }
                   setPw({ current: "", next: "", confirm: "" });
                   setShowPwChange(false);
+                  showToast("비밀번호가 변경되었습니다.");
                 }}
                 disabled={
                   !pw.current || pw.next.length < 6 ||
