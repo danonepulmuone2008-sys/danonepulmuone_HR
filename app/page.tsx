@@ -26,6 +26,7 @@ type ToastType = "success" | "error";
 export default function HomePage() {
   const { user } = useAuth();
   const [userProfile, setUserProfile] = useState({ name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "", is_remote: false, use_session_tracking: false });
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -37,6 +38,7 @@ export default function HomePage() {
         is_remote: data?.is_remote ?? false,
         use_session_tracking: data?.use_session_tracking ?? false,
       });
+      setProfileLoaded(true);
     });
   }, [user]);
 
@@ -56,6 +58,7 @@ export default function HomePage() {
   const [weeklyHours, setWeeklyHours] = useState(0);
   const [lunchBreak, setLunchBreak] = useState(true);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
+  const [todaySessions, setTodaySessions] = useState<{ start: string; end: string | null }[]>([]);
 
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
@@ -164,11 +167,13 @@ export default function HomePage() {
             .select("id")
             .single();
           setOpenSessionId(data?.id ?? null);
+          setTodaySessions(prev => [...prev, { start: modal.time, end: null }]);
         } else {
           await supabase.from("work_sessions")
             .update({ end_time: now })
             .eq("id", openSessionId);
           setOpenSessionId(null);
+          setTodaySessions(prev => prev.map(s => s.end === null ? { ...s, end: modal.time } : s));
         }
       } else {
         if (modal.direction === "in") {
@@ -223,24 +228,30 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    if (!user || !userProfile.use_session_tracking) return;
+    if (!user || !profileLoaded || !userProfile.use_session_tracking) return;
+    const fmtTime = (iso: string) => {
+      const t = new Date(iso);
+      return `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+    };
     supabase.from("work_sessions")
-      .select("id, start_time")
+      .select("id, start_time, end_time")
       .eq("user_id", user.id)
       .eq("date", todayStr)
-      .is("end_time", null)
-      .maybeSingle()
+      .order("start_time", { ascending: true })
       .then(({ data }) => {
         if (data) {
-          setOpenSessionId(data.id);
-          const t = new Date(data.start_time);
-          setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
+          setTodaySessions(data.map(s => ({ start: fmtTime(s.start_time), end: s.end_time ? fmtTime(s.end_time) : null })));
+          const open = data.find(s => !s.end_time);
+          if (open) {
+            setOpenSessionId(open.id);
+            setClockIn(fmtTime(open.start_time));
+          }
         }
       });
   }, [user, userProfile.use_session_tracking, todayStr]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !profileLoaded) return;
     (async () => {
       const uid = user.id;
 
@@ -273,17 +284,26 @@ export default function HomePage() {
       const fmt = (d: Date) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-      const [{ data: weekRecords }, { data: weekTrips }, { data: weekVacations }] = await Promise.all([
-        supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)),
+      const attendancePromise = userProfile.use_session_tracking
+        ? supabase.from("work_sessions").select("start_time, end_time").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null)
+        : supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday));
+
+      const [{ data: weekData }, { data: weekTrips }, { data: weekVacations }] = await Promise.all([
+        attendancePromise,
         supabase.from("business_trip_requests").select("start_date, end_date, start_time, end_time").eq("user_id", uid).eq("status", "approved").lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
         supabase.from("vacation_requests").select("start_date, hours").eq("user_id", uid).eq("status", "approved").not("hours", "is", null).gte("start_date", fmt(monday)).lte("start_date", fmt(friday)),
       ]);
 
-      const attendanceTotal = (weekRecords ?? []).reduce((sum, r) => {
-        if (!r.clock_in || !r.clock_out) return sum;
-        const h = (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
-        return sum + h - (r.lunch_break ? 1 : 0);
-      }, 0);
+      const attendanceTotal = userProfile.use_session_tracking
+        ? (weekData ?? []).reduce((sum: number, s: any) => {
+            if (!s.end_time) return sum;
+            return sum + (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000;
+          }, 0)
+        : (weekData ?? []).reduce((sum: number, r: any) => {
+            if (!r.clock_in || !r.clock_out) return sum;
+            const h = (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
+            return sum + h - (r.lunch_break ? 1 : 0);
+          }, 0);
 
       const tripTotal = (weekTrips ?? []).reduce((sum, t) => {
         if (!t.start_time || !t.end_time) return sum;
@@ -307,7 +327,7 @@ export default function HomePage() {
 
       setWeeklyHours(Math.round((attendanceTotal + tripTotal + vacTotal) * 10) / 10);
     })();
-  }, [user, todayStr, userProfile.use_session_tracking]);
+  }, [user, todayStr, profileLoaded, userProfile.use_session_tracking]);
 
   useEffect(() => {
     if (!user) return;
@@ -485,16 +505,35 @@ export default function HomePage() {
         {/* 오늘의 근태 */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
           <p className="text-xs text-gray-400 font-medium mb-3">오늘의 근태</p>
-          <div className="flex justify-around">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">{clockIn ?? "--:--"}</p>
-              <p className="text-xs text-gray-400 mt-0.5">출근 시각</p>
+          {userProfile.use_session_tracking ? (
+            todaySessions.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-1">오늘 근무 기록이 없습니다</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {todaySessions.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50">
+                    <span className="text-xs text-gray-400">세션 {i + 1}</span>
+                    <span className="text-sm font-semibold text-gray-700">
+                      {s.start}
+                      <span className="text-gray-400 font-normal mx-1.5">→</span>
+                      {s.end ? <span className="text-gray-700">{s.end}</span> : <span className="text-blue-500">진행 중</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            <div className="flex justify-around">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-blue-600">{clockIn ?? "--:--"}</p>
+                <p className="text-xs text-gray-400 mt-0.5">출근 시각</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-700">{clockOut ?? "--:--"}</p>
+                <p className="text-xs text-gray-400 mt-0.5">퇴근 시각</p>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-700">{clockOut ?? "--:--"}</p>
-              <p className="text-xs text-gray-400 mt-0.5">퇴근 시각</p>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* 근태 관리 카드 */}

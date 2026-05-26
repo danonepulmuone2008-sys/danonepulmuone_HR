@@ -87,6 +87,7 @@ export default function AttendancePage() {
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
   const [vacRemaining, setVacRemaining] = useState<number | null>(null);
+  const [useSessionTracking, setUseSessionTracking] = useState(false);
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
@@ -103,7 +104,7 @@ export default function AttendancePage() {
     else setCalMonth(m => m + 1);
   };
 
-  const fetchWeekData = useCallback(async (uid: string, offset: number) => {
+  const fetchWeekData = useCallback(async (uid: string, offset: number, sessionTracking: boolean) => {
     const monday = getMondayOfWeek(new Date());
     monday.setDate(monday.getDate() + offset * 7);
     const friday = new Date(monday);
@@ -116,10 +117,17 @@ export default function AttendancePage() {
       return fmt(d);
     });
 
-    const [attendanceRows, { data: trips }, { data: vacHours }] = await Promise.all([
-      Promise.all(weekDates.map(date =>
-        supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).eq("date", date).maybeSingle().then(r => r.data)
-      )),
+    const fmtTime = (ts: string) => {
+      const d = new Date(ts);
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    };
+
+    const [attendanceData, { data: trips }, { data: vacHours }] = await Promise.all([
+      sessionTracking
+        ? supabase.from("work_sessions").select("date, start_time, end_time").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null).then(r => r.data ?? [])
+        : Promise.all(weekDates.map(date =>
+            supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).eq("date", date).maybeSingle().then(r => r.data)
+          )),
       supabase.from("business_trip_requests")
         .select("start_date, end_date, start_time, end_time")
         .eq("user_id", uid).eq("status", "approved")
@@ -131,24 +139,31 @@ export default function AttendancePage() {
         .gte("start_date", fmt(monday)).lte("start_date", fmt(friday)),
     ]);
 
-    const fmtTime = (ts: string) => {
-      const d = new Date(ts);
-      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    };
-
     const days = DAY_LABELS.map((day, i) => {
-      const data = attendanceRows[i];
       const date = weekDates[i];
       let hours = 0;
       let clockIn: string | undefined;
       let clockOut: string | undefined;
-      if (data?.clock_in && data?.clock_out) {
-        const diff = new Date(data.clock_out).getTime() - new Date(data.clock_in).getTime();
-        hours = Math.round(diff / 36000) / 100;
-        if (data.lunch_break) hours = Math.max(0, hours - 1);
-        clockIn = fmtTime(data.clock_in);
-        clockOut = fmtTime(data.clock_out);
+
+      if (sessionTracking) {
+        const sessions = (attendanceData as any[]).filter((s: any) => s.date === date);
+        hours = sessions.reduce((sum: number, s: any) =>
+          sum + (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000, 0);
+        if (sessions.length > 0) {
+          clockIn = fmtTime(sessions[0].start_time);
+          clockOut = fmtTime(sessions[sessions.length - 1].end_time);
+        }
+      } else {
+        const data = (attendanceData as any[])[i];
+        if (data?.clock_in && data?.clock_out) {
+          const diff = new Date(data.clock_out).getTime() - new Date(data.clock_in).getTime();
+          hours = Math.round(diff / 36000) / 100;
+          if (data.lunch_break) hours = Math.max(0, hours - 1);
+          clockIn = fmtTime(data.clock_in);
+          clockOut = fmtTime(data.clock_out);
+        }
       }
+
       const trip = (trips ?? []).find(t => t.start_date <= date && t.end_date >= date && t.start_time && t.end_time);
       if (trip) {
         const isSingleDay = trip.start_date === trip.end_date;
@@ -253,8 +268,14 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (!userId) return;
-    fetchWeekData(userId, weekOffset);
-  }, [userId, weekOffset, fetchWeekData]);
+    supabase.from("users").select("use_session_tracking").eq("id", userId).single()
+      .then(({ data }) => setUseSessionTracking(data?.use_session_tracking ?? false));
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchWeekData(userId, weekOffset, useSessionTracking);
+  }, [userId, weekOffset, fetchWeekData, useSessionTracking]);
 
   useEffect(() => {
     if (!userId) return;
