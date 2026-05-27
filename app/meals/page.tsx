@@ -29,6 +29,32 @@ type PendingItem = {
   uploader_name: string;
 };
 
+type ReceiptDetail = {
+  id: string;
+  store_name: string | null;
+  paid_at: string;
+  total_amount: number;
+  is_lunch_time: boolean;
+  status: string;
+  source: string;
+  image_url: string | null;
+  uploader_name: string;
+  items: {
+    id: string;
+    item_name: string;
+    price: number;
+    status: string;
+    responded_at: string | null;
+    assignee_name: string;
+  }[];
+};
+
+const STATUS_LABEL: Record<string, { label: string; className: string }> = {
+  approved: { label: "승인완료", className: "bg-green-50 text-green-600" },
+  pending:  { label: "승인대기", className: "bg-yellow-50 text-yellow-600" },
+  rejected: { label: "반려",     className: "bg-red-50 text-red-500" },
+};
+
 export default function MealsPage() {
   const { user } = useAuth();
   const now = new Date();
@@ -40,6 +66,8 @@ export default function MealsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [approvingItem, setApprovingItem] = useState<PendingItem | null>(null);
+  const [receiptDetail, setReceiptDetail] = useState<ReceiptDetail | null>(null);
+  const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
   const [actioning, setActioning] = useState(false);
 
   const mealPercent = totalLimit > 0 ? Math.round((mealUsed / totalLimit) * 100) : 0;
@@ -140,8 +168,20 @@ export default function MealsPage() {
     fetchPending();
   }, [user, fetchPending]);
 
-  const handleAction = async (action: "approved" | "rejected") => {
-    if (!approvingItem || !user) return;
+  useEffect(() => {
+    if (!approvingItem || !user) { setReceiptDetail(null); return; }
+    setReceiptDetailLoading(true);
+    fetch(`/api/meals/receipts/${approvingItem.receipt_id}`, {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => { if (!data.error) setReceiptDetail(data); })
+      .catch(() => {})
+      .finally(() => setReceiptDetailLoading(false));
+  }, [approvingItem, user]);
+
+  const handleAction = async (itemId: string, action: "approved" | "rejected") => {
+    if (!user) return;
     setActioning(true);
     try {
       const res = await fetch("/api/meals/receipts/approve", {
@@ -150,16 +190,24 @@ export default function MealsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${user.token}`,
         },
-        body: JSON.stringify({ itemId: approvingItem.id, action }),
+        body: JSON.stringify({ itemId, action }),
       });
       if (!res.ok) throw new Error();
-      setApprovingItem(null);
+      setReceiptDetail((prev) =>
+        prev ? { ...prev, items: prev.items.map((it) => it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it) } : null
+      );
       await fetchPending();
     } catch {
       alert("처리 중 오류가 발생했습니다.");
     } finally {
       setActioning(false);
     }
+  };
+
+  const fmtDateTime = (iso: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   };
 
   const formatDate = (iso: string) => {
@@ -262,65 +310,110 @@ export default function MealsPage() {
       {/* 승인 모달 */}
       {approvingItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => !actioning && setApprovingItem(null)}
-          />
-          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full">
-            <div className="flex justify-center pt-3 pb-1">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !actioning && setApprovingItem(null)} />
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full flex flex-col" style={{ maxHeight: "80vh" }}>
+            <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
-            <div className="px-5 pt-3 pb-6">
-              <p className="text-base font-bold text-gray-900 mb-1">{approvingItem.store_name}</p>
-              <p className="text-xs text-gray-400 mb-5">
-                {approvingItem.uploader_name}님이 식대 승인을 요청했습니다
-              </p>
+            <div className="flex items-center justify-between px-5 pb-3 flex-shrink-0">
+              <p className="text-base font-bold text-gray-900">영수증 상세</p>
+              <button onClick={() => !actioning && setApprovingItem(null)} className="text-gray-400 text-xl leading-none">×</button>
+            </div>
 
-              <div className="bg-gray-50 rounded-xl p-4 flex flex-col gap-2 mb-6">
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-400">날짜</span>
-                  <span className="text-xs font-medium text-gray-700">{formatDate(approvingItem.paid_at)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs text-gray-400">항목</span>
-                  <span className="text-xs font-medium text-gray-700">{approvingItem.item_name}</span>
-                </div>
-                <div className="flex justify-between border-t border-gray-200 pt-2 mt-1">
-                  <span className="text-sm font-semibold text-gray-700">금액</span>
-                  <span className="text-sm font-bold text-gray-900">
-                    {approvingItem.price.toLocaleString()}원
+            {receiptDetailLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : receiptDetail ? (
+              <div className="overflow-y-auto flex-1 pb-8">
+                {/* 영수증 이미지 */}
+                {receiptDetail.image_url && (
+                  <div className="mb-4 overflow-hidden">
+                    <img src={receiptDetail.image_url} alt="영수증" className="w-full object-contain max-h-56" />
+                  </div>
+                )}
+                <div className="px-5">
+                {/* 기본 정보 */}
+                <div className="flex items-start justify-between mb-0.5">
+                  <p className="text-base font-bold text-gray-900">{receiptDetail.store_name ?? "가맹점 미인식"}</p>
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ml-2 flex-shrink-0 ${STATUS_LABEL[receiptDetail.status]?.className ?? "bg-gray-100 text-gray-500"}`}>
+                    {STATUS_LABEL[receiptDetail.status]?.label ?? receiptDetail.status}
                   </span>
                 </div>
-              </div>
+                <p className="text-xs text-gray-400 mb-4">{fmtDateTime(receiptDetail.paid_at)}</p>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleAction("rejected")}
-                  disabled={actioning}
-                  className="flex-1 py-3.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  <X size={15} />
-                  반려
-                </button>
-                <button
-                  onClick={() => handleAction("approved")}
-                  disabled={actioning}
-                  className="flex-[2] py-3.5 rounded-xl bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {actioning ? (
-                    <span
-                      className="w-4 h-4 border-2 rounded-full animate-spin"
-                      style={{ borderColor: "white", borderTopColor: "transparent" }}
-                    />
-                  ) : (
-                    <>
-                      <Check size={15} />
-                      승인
-                    </>
-                  )}
-                </button>
+                <div className="bg-gray-50 rounded-xl p-4 flex flex-col gap-2 mb-4">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">등록자</span>
+                    <span className="font-medium text-gray-700">{receiptDetail.uploader_name}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">입력 방식</span>
+                    <span className={`font-medium ${receiptDetail.source === "ocr" ? "text-green-600" : "text-gray-700"}`}>
+                      {receiptDetail.source === "ocr" ? "OCR 인식" : "수기 입력"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">점심 시간</span>
+                    <span className={`font-medium ${receiptDetail.is_lunch_time ? "text-green-600" : "text-orange-500"}`}>
+                      {receiptDetail.is_lunch_time ? "시간 내 결제" : "시간 외 결제"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs border-t border-gray-200 pt-2 mt-1">
+                    <span className="font-semibold text-gray-700">합계</span>
+                    <span className="font-bold text-gray-900">{receiptDetail.total_amount.toLocaleString()}원</span>
+                  </div>
+                </div>
+
+                {/* 항목 내역 */}
+                <p className="text-sm font-semibold text-gray-800 mb-2">항목 내역 ({receiptDetail.items.length}건)</p>
+                <div className="flex flex-col gap-2">
+                  {receiptDetail.items.map((item) => {
+                    const st = STATUS_LABEL[item.status] ?? { label: item.status, className: "bg-gray-100 text-gray-500" };
+                    const isPending = item.status === "pending";
+                    return (
+                      <div key={item.id} className={`rounded-xl p-3.5 border ${isPending ? "border-orange-100 bg-orange-50/40" : "border-gray-100 bg-white"}`}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-sm font-medium text-gray-800">{item.item_name}</p>
+                          <p className="text-sm font-bold text-gray-900">{item.price.toLocaleString()}원</p>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-gray-400">담당자: {item.assignee_name}</p>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.className}`}>{st.label}</span>
+                        </div>
+                        {item.responded_at && (
+                          <p className="text-xs text-gray-300 mt-1">{fmtDateTime(item.responded_at)} 응답</p>
+                        )}
+                        {isPending && (
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={() => handleAction(item.id, "rejected")}
+                              disabled={actioning}
+                              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                              <X size={13} />
+                              반려
+                            </button>
+                            <button
+                              onClick={() => handleAction(item.id, "approved")}
+                              disabled={actioning}
+                              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                              {actioning ? (
+                                <span className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{ borderColor: "white", borderTopColor: "transparent" }} />
+                              ) : (
+                                <><Check size={13} />승인</>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
       )}
