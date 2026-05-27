@@ -35,6 +35,8 @@ export default function AdminReceiptsArchivePage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 5
 
   const fetchReceipts = useCallback(async () => {
     if (!authUser?.token) return
@@ -53,13 +55,18 @@ export default function AdminReceiptsArchivePage() {
   useEffect(() => { fetchReceipts() }, [fetchReceipts])
 
   function prevMonth() {
+    setPage(0)
     if (month === 1) { setYear((y) => y - 1); setMonth(12) }
     else setMonth((m) => m - 1)
   }
   function nextMonth() {
+    setPage(0)
     if (month === 12) { setYear((y) => y + 1); setMonth(1) }
     else setMonth((m) => m + 1)
   }
+
+  const totalPages = Math.ceil(receipts.length / PAGE_SIZE)
+  const pagedReceipts = receipts.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
@@ -87,7 +94,7 @@ export default function AdminReceiptsArchivePage() {
         ) : receipts.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-12">영수증이 없습니다</p>
         ) : (
-          receipts.map((r) => {
+          pagedReceipts.map((r) => {
             const d = new Date(r.paid_at)
             const dateStr = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
             return (
@@ -114,6 +121,36 @@ export default function AdminReceiptsArchivePage() {
           })
         )}
       </div>
+
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 py-4">
+          <button
+            onClick={() => setPage((p) => p - 1)}
+            disabled={page === 0}
+            className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 text-gray-500 disabled:opacity-30 text-lg leading-none"
+          >
+            ‹
+          </button>
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setPage(i)}
+              className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${
+                i === page ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"
+              }`}
+            >
+              {i + 1}
+            </button>
+          ))}
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page === totalPages - 1}
+            className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 text-gray-500 disabled:opacity-30 text-lg leading-none"
+          >
+            ›
+          </button>
+        </div>
+      )}
 
       <AdminBottomNav />
     </div>
