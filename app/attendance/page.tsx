@@ -441,11 +441,9 @@ export default function AttendancePage() {
                   const flexEntries = day ? (flexMap[day] ?? []) : [];
                   const teamEntries = day ? (teamMap[day] ?? []) : [];
                   const isToday = calYear === currentYear && calMonth === currentMonth && day === todayDate;
-                  const hasTooltip = events.length > 0 || (showFlex && flexEntries.length > 0) || (showTeam && teamEntries.length > 0);
-                  const tooltipAlign = di <= 1 ? "left-0" : di >= 5 ? "right-0" : "left-1/2 -translate-x-1/2";
                   const dayColor = isToday ? "" : (holiday || isSunday) ? "text-red-500" : isSaturday ? "text-blue-400" : "text-gray-700";
                   return (
-                    <div key={di} className="relative flex flex-col items-center py-0.5 group" onClick={() => { if (day) { setSelectedDay(day); setModalMode("detail"); } }}>
+                    <div key={di} className="relative flex flex-col items-center py-0.5" onClick={() => { if (day) { setSelectedDay(day); setModalMode("detail"); } }}>
                       <div className={`text-sm rounded-full w-7 h-7 flex items-center justify-center ${isToday ? "bg-blue-600 text-white font-bold" : day ? `${dayColor} hover:bg-gray-100 cursor-pointer` : ""}`}>
                         {day ?? ""}
                       </div>
@@ -466,46 +464,6 @@ export default function AttendancePage() {
                               <span className="block text-[9px] text-gray-400">{flexEntries[0].endTime}</span>
                             </div>
                           ) : <span className="text-[11px] font-bold text-purple-500">+{flexEntries.length}</span>}
-                        </div>
-                      )}
-                      {hasTooltip && (
-                        <div className={`absolute bottom-full ${tooltipAlign} mb-2 z-50 hidden group-hover:block bg-gray-900 text-white rounded-xl shadow-xl w-52 p-3 pointer-events-none`}>
-                          <p className="text-[10px] text-gray-400 font-medium mb-2">{calMonth + 1}월 {day}일</p>
-                          {showFlex && flexEntries.length > 0 && (
-                            <div className={events.length > 0 || (showTeam && teamEntries.length > 0) ? "mb-2 pb-2 border-b border-gray-700" : ""}>
-                              <p className="text-[9px] text-purple-400 font-semibold uppercase tracking-wide mb-1.5">유연근무</p>
-                              {flexEntries.map((fe, fi) => (
-                                <div key={fi} className="flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-                                  <span className="text-xs font-semibold">{fe.userId === userId ? "나" : fe.userName}</span>
-                                  <span className="text-xs text-gray-300">{fe.startTime}~{fe.endTime}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {showTeam && teamEntries.length > 0 && (
-                            <div className={events.length > 0 ? "mb-2 pb-2 border-b border-gray-700" : ""}>
-                              <p className="text-[9px] text-orange-400 font-semibold uppercase tracking-wide mb-1.5">출장/휴가</p>
-                              {teamEntries.map((te, ti) => (
-                                <div key={ti} className="flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />
-                                  <span className="text-xs font-semibold">{te.userName}</span>
-                                  <span className="text-xs text-gray-300 truncate">{te.label}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {events.length > 0 && (
-                            <div className="flex flex-col gap-1.5">
-                              {events.map((ev, ei) => (
-                                <div key={ei} className="flex items-center gap-1.5">
-                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${ev.type === "vacation" ? "bg-green-400" : "bg-blue-400"}`} />
-                                  <span className="text-xs font-semibold">나</span>
-                                  <span className="text-xs text-gray-300">{ev.label}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
