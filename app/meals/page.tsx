@@ -8,7 +8,6 @@ import WeeklyReceiptList from "@/components/WeeklyReceiptList";
 import { useAuth } from "@/components/AuthProvider";
 import { Check, X } from "lucide-react";
 
-const BRAND = "#72BF44";
 
 type Receipt = {
   id: string;
@@ -246,8 +245,7 @@ export default function MealsPage() {
         {/* OCR 등록 버튼 */}
         <Link href="/meals/ocr">
           <button
-            className="w-full py-3 text-white rounded-2xl text-base font-semibold flex items-center justify-center active:scale-95 transition-all shadow-sm"
-            style={{ background: BRAND }}
+            className="w-full py-3 bg-blue-600 text-white rounded-2xl text-base font-semibold flex items-center justify-center active:scale-95 transition-all shadow-sm"
           >
             영수증 등록
           </button>
@@ -307,8 +305,7 @@ export default function MealsPage() {
                 <button
                   onClick={() => handleAction("approved")}
                   disabled={actioning}
-                  className="flex-[2] py-3.5 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
-                  style={{ background: BRAND }}
+                  className="flex-[2] py-3.5 rounded-xl bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-50"
                 >
                   {actioning ? (
                     <span
