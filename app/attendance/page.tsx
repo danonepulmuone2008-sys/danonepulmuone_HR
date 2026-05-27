@@ -12,7 +12,7 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string };
 type RequestItem = { id: string; type: "vacation" | "business_trip"; label: string; date: string; status: string };
-type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean };
+type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string };
 
@@ -146,6 +146,7 @@ export default function AttendancePage() {
       let clockOut: string | undefined;
 
       const toMin = (ts: string) => Math.floor(new Date(ts).getTime() / 60000);
+      let daySessions: { start: string; end: string }[] | undefined;
       if (sessionTracking) {
         const sessions = (attendanceData as any[]).filter((s: any) => s.date === date);
         hours = sessions.reduce((sum: number, s: any) => {
@@ -155,6 +156,7 @@ export default function AttendancePage() {
         if (sessions.length > 0) {
           clockIn = fmtTime(sessions[0].start_time);
           clockOut = fmtTime(sessions[sessions.length - 1].end_time);
+          daySessions = sessions.map((s: any) => ({ start: fmtTime(s.start_time), end: fmtTime(s.end_time) }));
         }
       } else {
         const data = (attendanceData as any[])[i];
@@ -179,7 +181,7 @@ export default function AttendancePage() {
       const vac = (vacHours ?? []).find(v => v.start_date === date);
       const hasVacation = !!(vac?.hours);
       if (vac?.hours) hours += vac.hours;
-      return { day, hours, clockIn, clockOut, hasVacation };
+      return { day, hours, clockIn, clockOut, hasVacation, sessions: daySessions };
     });
     setWeekDays(days);
   }, []);
@@ -373,11 +375,16 @@ export default function AttendancePage() {
                   <div className={`w-full rounded-lg transition-all duration-500 ${d.hours > 0 ? "bg-blue-500" : ""}`} style={{ height: d.hours > 0 ? `${(d.hours / MAX_DAY_HOURS) * 100}%` : "0%" }} />
                   {d.hours > 0 && (
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                      <span className="bg-gray-900/80 text-white text-xs px-2 py-1 rounded-lg whitespace-nowrap">
-                        {d.clockIn && d.clockOut && !d.hasVacation
-                          ? `${d.clockIn.replace(":", "시")}분~${d.clockOut.replace(":", "시")}분`
-                          : fmtHM(d.hours)}
-                      </span>
+                      <div className="bg-gray-900/80 text-white text-xs px-2 py-1 rounded-lg whitespace-nowrap flex flex-col items-center gap-0.5">
+                        {d.sessions && d.sessions.length > 0
+                          ? d.sessions.map((s, i) => (
+                              <span key={i}>{s.start.replace(":", "시")}분~{s.end.replace(":", "시")}분</span>
+                            ))
+                          : d.clockIn && d.clockOut && !d.hasVacation
+                            ? <span>{d.clockIn.replace(":", "시")}분~{d.clockOut.replace(":", "시")}분</span>
+                            : <span>{fmtHM(d.hours)}</span>
+                        }
+                      </div>
                     </div>
                   )}
                 </div>
