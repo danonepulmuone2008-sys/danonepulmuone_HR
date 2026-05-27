@@ -185,8 +185,11 @@ export default function HomePage() {
             { onConflict: "user_id,date" }
           );
         } else {
+          const diffMin = clockIn
+            ? (new Date(now).getHours() * 60 + new Date(now).getMinutes()) - (parseInt(clockIn.split(":")[0]) * 60 + parseInt(clockIn.split(":")[1]))
+            : 0;
           await supabase.from("attendance_records")
-            .update({ clock_out: now, lunch_break: lunchBreak, updated_at: now })
+            .update({ clock_out: now, lunch_break: diffMin >= 60 ? lunchBreak : false, updated_at: now })
             .eq("user_id", user.id)
             .eq("date", todayStr);
         }
@@ -426,12 +429,18 @@ export default function HomePage() {
                 <p className="text-sm text-gray-500 text-center mb-4">
                   {modal.direction === "in" ? "출근" : "퇴근"}하시겠습니까?
                 </p>
-                {modal.direction === "out" && (
-                  <label className="flex items-center justify-center gap-2 mb-5 cursor-pointer select-none">
-                    <input type="checkbox" checked={lunchBreak} onChange={e => setLunchBreak(e.target.checked)} className="w-4 h-4 accent-blue-600" />
-                    <span className="text-sm text-gray-600">점심식사 (근무시간 1시간 차감)</span>
-                  </label>
-                )}
+                {modal.direction === "out" && (() => {
+                  if (!clockIn) return null;
+                  const [ih, im] = clockIn.split(":").map(Number);
+                  const [oh, om] = modal.time.split(":").map(Number);
+                  if ((oh * 60 + om) - (ih * 60 + im) < 60) return null;
+                  return (
+                    <label className="flex items-center justify-center gap-2 mb-5 cursor-pointer select-none">
+                      <input type="checkbox" checked={lunchBreak} onChange={e => setLunchBreak(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                      <span className="text-sm text-gray-600">점심식사 (근무시간 1시간 차감)</span>
+                    </label>
+                  );
+                })()}
                 <div className="flex gap-2">
                   <button
                     onClick={() => setModal(null)}
