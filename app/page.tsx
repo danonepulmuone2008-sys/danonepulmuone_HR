@@ -169,8 +169,11 @@ export default function HomePage() {
           setOpenSessionId(data?.id ?? null);
           setTodaySessions(prev => [...prev, { start: modal.time, end: null }]);
         } else {
+          const diffMin = clockIn
+            ? (new Date(now).getHours() * 60 + new Date(now).getMinutes()) - (parseInt(clockIn.split(":")[0]) * 60 + parseInt(clockIn.split(":")[1]))
+            : 0;
           await supabase.from("work_sessions")
-            .update({ end_time: now })
+            .update({ end_time: now, lunch_break: diffMin >= 60 ? lunchBreak : false })
             .eq("id", openSessionId);
           setOpenSessionId(null);
           setTodaySessions(prev => prev.map(s => s.end === null ? { ...s, end: modal.time } : s));
@@ -287,7 +290,7 @@ export default function HomePage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let weekData: any[] | null = null;
       if (userProfile.use_session_tracking) {
-        const { data } = await supabase.from("work_sessions").select("start_time, end_time").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null);
+        const { data } = await supabase.from("work_sessions").select("start_time, end_time, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null);
         weekData = data;
       } else {
         const { data } = await supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday));
@@ -298,15 +301,17 @@ export default function HomePage() {
         supabase.from("vacation_requests").select("start_date, hours").eq("user_id", uid).eq("status", "approved").not("hours", "is", null).gte("start_date", fmt(monday)).lte("start_date", fmt(friday)),
       ]);
 
+      const toMin = (ts: string) => Math.floor(new Date(ts).getTime() / 60000);
       const attendanceTotal = userProfile.use_session_tracking
         ? (weekData ?? []).reduce((sum: number, s: any) => {
             if (!s.end_time) return sum;
-            return sum + (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 3600000;
+            const h = (toMin(s.end_time) - toMin(s.start_time)) / 60;
+            return sum + (s.lunch_break && h >= 1 ? h - 1 : h);
           }, 0)
         : (weekData ?? []).reduce((sum: number, r: any) => {
             if (!r.clock_in || !r.clock_out) return sum;
-            const h = (new Date(r.clock_out).getTime() - new Date(r.clock_in).getTime()) / 3600000;
-            return sum + h - (r.lunch_break ? 1 : 0);
+            const h = (toMin(r.clock_out) - toMin(r.clock_in)) / 60;
+            return sum + (r.lunch_break && h >= 1 ? h - 1 : h);
           }, 0);
 
       const tripTotal = (weekTrips ?? []).reduce((sum, t) => {
@@ -329,7 +334,7 @@ export default function HomePage() {
 
       const vacTotal = (weekVacations ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0);
 
-      setWeeklyHours(Math.round((attendanceTotal + tripTotal + vacTotal) * 10) / 10);
+      setWeeklyHours(attendanceTotal + tripTotal + vacTotal);
     })();
   }, [user, todayStr, profileLoaded, userProfile.use_session_tracking]);
 
