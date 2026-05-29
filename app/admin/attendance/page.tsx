@@ -70,7 +70,8 @@ type VacUsage = {
   hours: number | null;
 };
 
-type RecordsUser = { id: string; name: string }
+type RecordsUser = { id: string; name: string; use_session_tracking?: boolean }
+type EditSession = { id?: string; start: string; end: string; lunch_break: boolean }
 type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
@@ -229,6 +230,8 @@ export default function AdminAttendancePage() {
   const [editCheckOut, setEditCheckOut] = useState("");
   const [editLunchBreak, setEditLunchBreak] = useState(true);
   const [editSaving, setEditSaving] = useState(false);
+  const [editIsSession, setEditIsSession] = useState(false);
+  const [editSessions, setEditSessions] = useState<EditSession[]>([]);
 
   const scheduleInterns = realInterns;
   const colorMap = buildColorMap(scheduleInterns);
@@ -465,34 +468,90 @@ export default function AdminAttendancePage() {
     }
   }
 
+  async function loadEditRecord(userId: string, date: string) {
+    const token = user?.token;
+    if (!token) return;
+    const res = await fetch(`/api/admin/attendance/record?userId=${userId}&date=${date}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { setEditCheckIn(""); setEditCheckOut(""); setEditLunchBreak(true); setEditSessions([]); return; }
+    const data = await res.json();
+    if (data.use_session_tracking) {
+      setEditIsSession(true);
+      setEditSessions((data.sessions ?? []).map((s: { id: string; start_time: string; end_time: string; lunch_break: boolean }) => ({
+        id: s.id,
+        start: toTimeStr(s.start_time),
+        end: toTimeStr(s.end_time),
+        lunch_break: s.lunch_break ?? false,
+      })));
+    } else {
+      setEditIsSession(false);
+      setEditCheckIn(data.clock_in ? toTimeStr(data.clock_in) : "");
+      setEditCheckOut(data.clock_out ? toTimeStr(data.clock_out) : "");
+      setEditLunchBreak(data.lunch_break ?? true);
+    }
+  }
+
   async function openEditForRecord(userId: string, userName: string, date: string) {
     setEditUserName(userName);
     setEditUserId(userId);
     setEditDate(date);
+    setEditIsSession(false);
+    setEditSessions([]);
+    const user_ = recordsData?.users.find(u => u.id === userId);
+    if (user_?.use_session_tracking) {
+      setEditIsSession(true);
+    }
     const rec = recordsData?.records[`${userId}__${date}`];
     setEditCheckIn(rec?.clockIn ? toTimeStr(rec.clockIn) : "");
     setEditCheckOut(rec?.clockOut ? toTimeStr(rec.clockOut) : "");
     setEditLunchBreak(rec?.lunchBreak ?? true);
+    await loadEditRecord(userId, date);
   }
 
   async function handleEditDateChange(date: string) {
     setEditDate(date);
     if (!editUserId) return;
+    await loadEditRecord(editUserId, date);
+  }
+
+  async function saveSessionRecord() {
+    if (!editUserId) return;
+    setEditSaving(true);
+    const token = user?.token;
+    if (!token) { setEditSaving(false); return; }
+    try {
+      for (const s of editSessions) {
+        if (s.id) {
+          await fetch("/api/admin/work-sessions", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ id: s.id, date: editDate, startTime: s.start, endTime: s.end, lunchBreak: s.lunch_break }),
+          });
+        } else {
+          await fetch("/api/admin/work-sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ userId: editUserId, date: editDate, startTime: s.start, endTime: s.end, lunchBreak: s.lunch_break }),
+          });
+        }
+      }
+      setEditUserId(null);
+      await fetchRecords();
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function deleteSession(id: string) {
     const token = user?.token;
     if (!token) return;
-    const res = await fetch(`/api/admin/attendance/record?userId=${editUserId}&date=${date}`, {
+    await fetch(`/api/admin/work-sessions?id=${id}`, {
+      method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (res.ok) {
-      const data = await res.json();
-      setEditCheckIn(data.clock_in ? toTimeStr(data.clock_in) : "");
-      setEditCheckOut(data.clock_out ? toTimeStr(data.clock_out) : "");
-      setEditLunchBreak(data.lunch_break ?? true);
-    } else {
-      setEditCheckIn("");
-      setEditCheckOut("");
-      setEditLunchBreak(true);
-    }
+    setEditSessions(prev => prev.filter(s => s.id !== id));
+    await fetchRecords();
   }
 
   async function saveAttendanceRecord() {
@@ -1574,43 +1633,100 @@ export default function AdminAttendancePage() {
                   className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
                 />
               </div>
-              <div className="flex gap-3 mb-5">
-                <div className="flex-1">
-                  <label className="text-xs text-gray-500 mb-1.5 block">출근 시간</label>
-                  <input
-                    type="time"
-                    value={editCheckIn}
-                    onChange={(e) => setEditCheckIn(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs text-gray-500 mb-1.5 block">퇴근 시간</label>
-                  <input
-                    type="time"
-                    value={editCheckOut}
-                    onChange={(e) => setEditCheckOut(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                  />
-                </div>
-              </div>
-              <label className="flex items-center gap-3 mb-5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editLunchBreak}
-                  onChange={(e) => setEditLunchBreak(e.target.checked)}
-                  className="w-5 h-5 rounded accent-[#8dc63f]"
-                />
-                <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
-              </label>
-              <button
-                onClick={saveAttendanceRecord}
-                disabled={editSaving}
-                className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-                style={{ backgroundColor: "#8dc63f" }}
-              >
-                {editSaving ? "저장 중..." : "저장"}
-              </button>
+
+              {editIsSession ? (
+                <>
+                  <div className="flex flex-col gap-3 mb-4">
+                    {editSessions.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-3">등록된 세션이 없습니다</p>
+                    )}
+                    {editSessions.map((s, i) => (
+                      <div key={s.id ?? i} className="border border-gray-200 rounded-xl p-3 flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-500">세션 {i + 1}</span>
+                          <button
+                            onClick={() => s.id ? deleteSession(s.id) : setEditSessions(prev => prev.filter((_, idx) => idx !== i))}
+                            className="text-xs text-red-400 hover:text-red-600"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-400 mb-1 block">시작</label>
+                            <input type="time" value={s.start} onChange={(e) => setEditSessions(prev => prev.map((x, idx) => idx === i ? { ...x, start: e.target.value } : x))}
+                              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50" />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-400 mb-1 block">종료</label>
+                            <input type="time" value={s.end} onChange={(e) => setEditSessions(prev => prev.map((x, idx) => idx === i ? { ...x, end: e.target.value } : x))}
+                              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50" />
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={s.lunch_break} onChange={(e) => setEditSessions(prev => prev.map((x, idx) => idx === i ? { ...x, lunch_break: e.target.checked } : x))}
+                            className="w-4 h-4 rounded accent-[#8dc63f]" />
+                          <span className="text-xs text-gray-600">점심 식사 (-1시간)</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setEditSessions(prev => [...prev, { start: "09:00", end: "18:00", lunch_break: false }])}
+                    className="w-full h-10 rounded-xl border border-dashed border-gray-300 text-sm text-gray-400 mb-4"
+                  >
+                    + 세션 추가
+                  </button>
+                  <button
+                    onClick={saveSessionRecord}
+                    disabled={editSaving}
+                    className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+                    style={{ backgroundColor: "#8dc63f" }}
+                  >
+                    {editSaving ? "저장 중..." : "저장"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex gap-3 mb-5">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 mb-1.5 block">출근 시간</label>
+                      <input
+                        type="time"
+                        value={editCheckIn}
+                        onChange={(e) => setEditCheckIn(e.target.value)}
+                        className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500 mb-1.5 block">퇴근 시간</label>
+                      <input
+                        type="time"
+                        value={editCheckOut}
+                        onChange={(e) => setEditCheckOut(e.target.value)}
+                        className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-3 mb-5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editLunchBreak}
+                      onChange={(e) => setEditLunchBreak(e.target.checked)}
+                      className="w-5 h-5 rounded accent-[#8dc63f]"
+                    />
+                    <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
+                  </label>
+                  <button
+                    onClick={saveAttendanceRecord}
+                    disabled={editSaving}
+                    className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+                    style={{ backgroundColor: "#8dc63f" }}
+                  >
+                    {editSaving ? "저장 중..." : "저장"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

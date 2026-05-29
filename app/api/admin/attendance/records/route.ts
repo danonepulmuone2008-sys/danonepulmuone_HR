@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     // 관리자 제외 전체 유저 조회
     const { data: users, error: usersError } = await supabaseAdmin
       .from("users")
-      .select("id, name")
+      .select("id, name, use_session_tracking")
       .eq("role", "employee")
       .eq("is_active", true)
       .order("name", { ascending: true })
@@ -47,16 +47,42 @@ export async function GET(req: Request) {
     if (!users || users.length === 0) return NextResponse.json({ users: [], records: [] })
 
     const userIds = users.map((u) => u.id)
+    const sessionUserIds = users.filter((u) => u.use_session_tracking).map((u) => u.id)
+    const normalUserIds  = users.filter((u) => !u.use_session_tracking).map((u) => u.id)
 
-    // 해당 주 출퇴근 기록 조회
-    const { data: attendanceRows, error: attError } = await supabaseAdmin
-      .from("attendance_records")
-      .select("user_id, date, clock_in, clock_out, lunch_break")
-      .in("user_id", userIds)
-      .gte("date", monday)
-      .lte("date", friday)
+    // 일반 출퇴근 기록 조회
+    const { data: attendanceRows, error: attError } = normalUserIds.length > 0
+      ? await supabaseAdmin
+          .from("attendance_records")
+          .select("user_id, date, clock_in, clock_out, lunch_break")
+          .in("user_id", normalUserIds)
+          .gte("date", monday)
+          .lte("date", friday)
+      : { data: [], error: null }
 
     if (attError) throw new Error(attError.message)
+
+    // 세션 트래킹 유저 work_sessions 조회
+    const { data: sessionRows } = sessionUserIds.length > 0
+      ? await supabaseAdmin
+          .from("work_sessions")
+          .select("user_id, date, start_time, end_time, lunch_break")
+          .in("user_id", sessionUserIds)
+          .gte("date", monday)
+          .lte("date", friday)
+          .not("end_time", "is", null)
+      : { data: [] }
+
+    // 세션 트래킹 유저 출근 중(open) 세션 조회
+    const { data: openSessionRows } = sessionUserIds.length > 0
+      ? await supabaseAdmin
+          .from("work_sessions")
+          .select("user_id, date")
+          .in("user_id", sessionUserIds)
+          .gte("date", monday)
+          .lte("date", friday)
+          .is("end_time", null)
+      : { data: [] }
 
     // 해당 주 승인된 휴가 및 출장 조회
     const [{ data: vacationRows }, { data: tripRows }, { data: vacHourRows }] = await Promise.all([
@@ -110,8 +136,12 @@ export async function GET(req: Request) {
       }
     }
 
+    const toMin = (ts: string) => Math.floor(new Date(ts).getTime() / 60000)
+
     // user_id + date 키로 맵 생성
     const recMap: Record<string, { hours: number | null; checkedIn: boolean; clockIn?: string; clockOut?: string; lunchBreak?: boolean }> = {}
+
+    // 일반 출퇴근 기록
     for (const row of attendanceRows ?? []) {
       const key = `${row.user_id}__${row.date}`
       recMap[key] = {
@@ -120,6 +150,29 @@ export async function GET(req: Request) {
         clockIn: row.clock_in ?? undefined,
         clockOut: row.clock_out ?? undefined,
         lunchBreak: row.lunch_break ?? undefined,
+      }
+    }
+
+    // 세션 트래킹 유저 work_sessions 합산
+    for (const s of sessionRows ?? []) {
+      const key = `${s.user_id}__${s.date}`
+      const h = (toMin(s.end_time) - toMin(s.start_time)) / 60
+      const adjusted = s.lunch_break && h >= 1 ? h - 1 : h
+      const rounded = Math.round(adjusted * 10) / 10
+      if (recMap[key]) {
+        recMap[key] = { ...recMap[key], hours: Math.round(((recMap[key].hours ?? 0) + rounded) * 10) / 10 }
+      } else {
+        recMap[key] = { hours: rounded, checkedIn: false }
+      }
+    }
+
+    // 세션 트래킹 유저 출근 중 표시
+    for (const s of openSessionRows ?? []) {
+      const key = `${s.user_id}__${s.date}`
+      if (recMap[key]) {
+        recMap[key] = { ...recMap[key], checkedIn: true }
+      } else {
+        recMap[key] = { hours: null, checkedIn: true }
       }
     }
     // 출장 시간을 attendance 시간에 합산
@@ -142,7 +195,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({
-      users: users.map((u) => ({ id: u.id, name: u.name })),
+      users: users.map((u) => ({ id: u.id, name: u.name, use_session_tracking: u.use_session_tracking ?? false })),
       weekDates,
       records: recMap,
       vacations: vacMap,

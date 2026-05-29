@@ -12,6 +12,22 @@ export async function GET(req: Request) {
     const date = url.searchParams.get("date")
     if (!userId || !date) return NextResponse.json({ error: "userId, date 필요" }, { status: 400 })
 
+    const { data: userRow } = await supabaseAdmin
+      .from("users")
+      .select("use_session_tracking")
+      .eq("id", userId)
+      .single()
+
+    if (userRow?.use_session_tracking) {
+      const { data: sessions } = await supabaseAdmin
+        .from("work_sessions")
+        .select("id, start_time, end_time, lunch_break")
+        .eq("user_id", userId)
+        .eq("date", date)
+        .order("start_time", { ascending: true })
+      return NextResponse.json({ use_session_tracking: true, sessions: sessions ?? [] })
+    }
+
     const { data } = await supabaseAdmin
       .from("attendance_records")
       .select("clock_in, clock_out, lunch_break")
