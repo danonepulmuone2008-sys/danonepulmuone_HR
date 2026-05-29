@@ -46,6 +46,7 @@ type ReceiptDetail = {
     status: string;
     responded_at: string | null;
     assignee_name: string;
+    assigned_user_id: string;
   }[];
 };
 
@@ -370,7 +371,7 @@ export default function MealsPage() {
                 <div className="flex flex-col gap-2">
                   {receiptDetail.items.map((item) => {
                     const st = STATUS_LABEL[item.status] ?? { label: item.status, className: "bg-gray-100 text-gray-500" };
-                    const isPending = item.status === "pending";
+                    const isPending = item.status === "pending" && item.assigned_user_id === user?.id;
                     return (
                       <div key={item.id} className={`rounded-xl p-3.5 border ${isPending ? "border-orange-100 bg-orange-50/40" : "border-gray-100 bg-white"}`}>
                         <div className="flex items-center justify-between mb-1.5">
@@ -387,14 +388,6 @@ export default function MealsPage() {
                         {isPending && (
                           <div className="flex gap-2 mt-3">
                             <button
-                              onClick={() => handleAction(item.id, "rejected")}
-                              disabled={actioning}
-                              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
-                            >
-                              <X size={13} />
-                              반려
-                            </button>
-                            <button
                               onClick={() => handleAction(item.id, "approved")}
                               disabled={actioning}
                               className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
@@ -404,6 +397,14 @@ export default function MealsPage() {
                               ) : (
                                 <><Check size={13} />승인</>
                               )}
+                            </button>
+                            <button
+                              onClick={() => handleAction(item.id, "rejected")}
+                              disabled={actioning}
+                              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
+                            >
+                              <X size={13} />
+                              반려
                             </button>
                           </div>
                         )}

@@ -36,7 +36,7 @@ export default function AdminReceiptsArchivePage() {
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
-  const PAGE_SIZE = 5
+  const PAGE_SIZE = 10
 
   const fetchReceipts = useCallback(async () => {
     if (!authUser?.token) return

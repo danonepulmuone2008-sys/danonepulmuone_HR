@@ -78,6 +78,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         status: item.status,
         responded_at: item.responded_at,
         assignee_name: userMap[item.assigned_user_id] ?? "알 수 없음",
+        assigned_user_id: item.assigned_user_id,
       })),
     })
   } catch (err) {
