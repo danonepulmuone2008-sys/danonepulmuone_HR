@@ -275,8 +275,7 @@ export default function MyPage() {
   };
 
   /* 관리자 문의 모달 */
-  const ADMIN_EMAIL = "admin@pulmuonedanone.com";
-  const [showInquiry, setShowInquiry] = useState(false);
+const [showInquiry, setShowInquiry] = useState(false);
   const [inquiry, setInquiry] = useState({ subject: "", content: "" });
   const [inquirySent, setInquirySent] = useState(false);
 
@@ -674,9 +673,6 @@ export default function MyPage() {
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 resize-none"
                     />
                   </div>
-                  <p className="text-xs text-gray-300">
-                    수신: {ADMIN_EMAIL}
-                  </p>
                 </div>
                 <div className="px-5 pb-8 pt-1">
                   <button
