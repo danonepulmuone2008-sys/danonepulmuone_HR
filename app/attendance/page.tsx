@@ -87,6 +87,9 @@ export default function AttendancePage() {
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
   const [vacRemaining, setVacRemaining] = useState<number | null>(null);
+  const [showVacDetail, setShowVacDetail] = useState(false);
+  const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage" }[]>([]);
+  const [vacHistoryLoading, setVacHistoryLoading] = useState(false);
   const [useSessionTracking, setUseSessionTracking] = useState(false);
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -294,6 +297,26 @@ export default function AttendancePage() {
     });
   }, [userId]);
 
+  const handleOpenVacDetail = async () => {
+    if (!userId) return;
+    setShowVacDetail(true);
+    setVacHistoryLoading(true);
+    try {
+      const [{ data: grants }, { data: usage }] = await Promise.all([
+        supabase.from("vacation_grants").select("hours, note, created_at").eq("user_id", userId).eq("year", currentYear),
+        supabase.from("vacation_requests").select("type, start_date, hours").eq("user_id", userId).eq("status", "approved")
+          .gte("start_date", `${currentYear}-01-01`).lte("start_date", `${currentYear}-12-31`),
+      ]);
+      const history = [
+        ...(grants ?? []).map(g => ({ date: g.created_at, label: g.note || "휴가 부여", hours: g.hours ?? 0, kind: "grant" as const })),
+        ...(usage ?? []).map(u => ({ date: u.start_date, label: u.type, hours: u.hours ?? 0, kind: "usage" as const })),
+      ].sort((a, b) => b.date.localeCompare(a.date));
+      setVacHistory(history);
+    } finally {
+      setVacHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!userId) return;
     fetchMonthData(userId);
@@ -396,13 +419,19 @@ export default function AttendancePage() {
 
         {/* 휴가 잔여 시간 카드 */}
         {vacRemaining !== null && (
-          <div className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-gray-100 flex items-center justify-between">
+          <button
+            onClick={handleOpenVacDetail}
+            className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-gray-100 flex items-center justify-between w-full active:scale-[0.98] transition-all text-left"
+          >
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
               <span className="text-sm font-medium text-gray-700">{currentYear}년 잔여 휴가</span>
             </div>
-            <span className="text-base font-bold text-green-600">{vacRemaining}시간</span>
-          </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold text-green-600">{vacRemaining}시간</span>
+              <span className="text-gray-300 text-lg leading-none">›</span>
+            </div>
+          </button>
         )}
 
         {/* 캘린더 카드 */}
@@ -650,6 +679,57 @@ export default function AttendancePage() {
           </div>
         );
       })()}
+
+      {/* 휴가 내역 모달 */}
+      {showVacDetail && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowVacDetail(false)}>
+          <div className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col" style={{ minHeight: "50vh", maxHeight: "75vh" }} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <p className="text-base font-bold text-gray-900">{currentYear}년 휴가 내역</p>
+                <p className="text-xs text-gray-400 mt-0.5">잔여 <span className="font-semibold text-green-600">{vacRemaining}시간</span></p>
+              </div>
+              <button onClick={() => setShowVacDetail(false)} className="text-gray-400 text-xl leading-none">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-3">
+              {vacHistoryLoading ? (
+                <div className="flex justify-center py-10">
+                  <div className="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : vacHistory.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">내역이 없습니다</p>
+              ) : (
+                <div className="flex flex-col divide-y divide-gray-50">
+                  {vacHistory.map((item, i) => {
+                    const d = new Date(item.date);
+                    const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+                    const isGrant = item.kind === "grant";
+                    return (
+                      <div key={i} className="flex items-center justify-between py-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${isGrant ? "bg-green-50 text-green-600" : "bg-red-50 text-red-400"}`}>
+                            {isGrant ? "+" : "-"}
+                          </span>
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{item.label}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>
+                          </div>
+                        </div>
+                        <span className={`text-sm font-bold ${isGrant ? "text-green-600" : "text-red-400"}`}>
+                          {isGrant ? "+" : "-"}{item.hours}시간
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmDeleteReq && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setConfirmDeleteReq(null)}>
