@@ -386,11 +386,12 @@ export default function MealsPage() {
                           <p className="text-xs text-gray-300 mt-1">{fmtDateTime(item.responded_at)} 응답</p>
                         )}
                         {isPending && (
-                          <div className="flex gap-2 mt-3">
+                          <div className="mt-3">
+                            <div className="flex gap-2">
                             <button
                               onClick={() => handleAction(item.id, "approved")}
-                              disabled={actioning}
-                              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-50"
+                              disabled={actioning || item.price > remaining}
+                              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none"
                             >
                               {actioning ? (
                                 <span className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{ borderColor: "white", borderTopColor: "transparent" }} />
@@ -406,6 +407,12 @@ export default function MealsPage() {
                               <X size={13} />
                               반려
                             </button>
+                            </div>
+                            {item.price > remaining && (
+                              <p className="text-xs text-red-400 mt-1.5">
+                                식대 금액이 잔여 한도({remaining.toLocaleString()}원)를 초과합니다
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
