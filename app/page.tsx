@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Camera } from "lucide-react";
-import { getMondayOfWeek, getWorkingDaysInWeek, getMealLimit } from "@/lib/holidays";
+import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
 
 function fmtHM(h: number): string {
   const totalMin = Math.round(h * 60);
@@ -44,7 +44,8 @@ export default function HomePage() {
 
   const [mealUsed, setMealUsed] = useState(0);
   const [mealLimit, setMealLimit] = useState(0);
-  const mealPercent = mealLimit > 0 ? Math.round((mealUsed / mealLimit) * 100) : 0;
+  const [mealRemaining, setMealRemaining] = useState(0);
+  const mealPercent = mealLimit > 0 ? Math.max(0, Math.round(((mealLimit - mealRemaining) / mealLimit) * 100)) : 0;
 
   const [clockIn, setClockIn] = useState<string | null>(null);
   const [clockOut, setClockOut] = useState<string | null>(null);
@@ -347,33 +348,18 @@ export default function HomePage() {
       const now = new Date();
       const year = now.getFullYear();
       const month = now.getMonth() + 1;
-      const startOfMonth = year + '-' + String(month).padStart(2, '0') + '-01';
-      const startOfNext = month === 12
-        ? (year + 1) + '-01-01'
-        : year + '-' + String(month + 1).padStart(2, '0') + '-01';
 
-      const { data: approvedReceipts } = await supabase
-        .from('receipts')
-        .select('id')
-        .eq('status', 'approved')
-        .gte('paid_at', startOfMonth)
-        .lt('paid_at', startOfNext);
-
-      const receiptIds = (approvedReceipts ?? []).map((r) => r.id);
-
-      const { data: myItems } = receiptIds.length > 0
-        ? await supabase.from('receipt_items').select('price').in('receipt_id', receiptIds)
-        : { data: [] };
-
-      setMealUsed((myItems ?? []).reduce((sum, r) => sum + (r.price ?? 0), 0));
-
-      const { data: limitRow } = await supabase
-        .from('monthly_meal_limits')
-        .select('monthly_meal_limit')
-        .eq('target_month', startOfMonth)
-        .maybeSingle();
-
-      setMealLimit(limitRow?.monthly_meal_limit ?? getMealLimit(year, month));
+      if (user.token) {
+        const res = await fetch(`/api/meals/history?year=${year}&month=${month}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setMealLimit(data.monthlyLimit ?? 0);
+          setMealUsed(data.totalUsed ?? 0);
+          setMealRemaining(data.remaining ?? 0);
+        }
+      }
     })();
   }, [user]);
 
@@ -628,7 +614,7 @@ export default function HomePage() {
           <div className="mb-3">
             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
               <span>이번 달 사용</span>
-              <span>{mealUsed.toLocaleString()}원 / {mealLimit.toLocaleString()}원</span>
+              <span>{mealUsed.toLocaleString()}원 / {(mealUsed + mealRemaining).toLocaleString()}원</span>
             </div>
             <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
               <div

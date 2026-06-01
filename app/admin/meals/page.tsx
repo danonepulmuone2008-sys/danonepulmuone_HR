@@ -28,6 +28,7 @@ interface User {
   id: string;
   name: string;
   used: number;
+  transferNet?: number;
 }
 
 interface Receipt {
@@ -361,7 +362,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
           ))
         ) : (
           users.map((user, i) => {
-            const remaining = totalLimit - user.used;
+            const remaining = totalLimit - user.used + (user.transferNet ?? 0);
             const pct = totalLimit > 0 ? Math.min(Math.round((user.used / totalLimit) * 100), 100) : 0;
             return (
               <div

@@ -13,8 +13,10 @@ export async function GET(req: Request) {
     const year = searchParams.get("year") ?? String(new Date().getFullYear())
     const month = searchParams.get("month") ?? String(new Date().getMonth() + 1)
 
-    const startDate = `${year}-${String(month).padStart(2, "0")}-01`
-    const endDate = new Date(Number(year), Number(month), 1).toISOString().slice(0, 10)
+    const KST = 9 * 60 * 60 * 1000
+    const y = Number(year), m = Number(month)
+    const startDate = new Date(Date.UTC(y, m - 1, 1) - KST).toISOString()
+    const endDate   = new Date(Date.UTC(y, m,     1) - KST).toISOString()
 
     const { data: users, error: usersError } = await supabaseAdmin
       .from("users")
@@ -52,7 +54,25 @@ export async function GET(req: Request) {
       }
     }
 
-    const result = (users ?? []).map((u) => ({ ...u, used: usageMap[u.id] ?? 0 }))
+    // 유저별 양도 net 계산
+    const [{ data: transfersOut }, { data: transfersIn }] = await Promise.all([
+      supabaseAdmin.from("meal_transfers").select("from_user_id, amount").eq("status", "approved").gte("responded_at", startDate).lt("responded_at", endDate),
+      supabaseAdmin.from("meal_transfers").select("to_user_id, amount").eq("status", "approved").gte("responded_at", startDate).lt("responded_at", endDate),
+    ])
+    const transferOutMap: Record<string, number> = {}
+    for (const t of transfersOut ?? []) {
+      transferOutMap[t.from_user_id] = (transferOutMap[t.from_user_id] ?? 0) + (t.amount ?? 0)
+    }
+    const transferInMap: Record<string, number> = {}
+    for (const t of transfersIn ?? []) {
+      transferInMap[t.to_user_id] = (transferInMap[t.to_user_id] ?? 0) + (t.amount ?? 0)
+    }
+
+    const result = (users ?? []).map((u) => ({
+      ...u,
+      used: usageMap[u.id] ?? 0,
+      transferNet: (transferInMap[u.id] ?? 0) - (transferOutMap[u.id] ?? 0),
+    }))
 
     return NextResponse.json(result)
   } catch (err) {

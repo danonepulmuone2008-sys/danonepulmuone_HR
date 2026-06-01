@@ -19,12 +19,15 @@ export default function BottomNav() {
   const [hasPendingMeals, setHasPendingMeals] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    supabase
-      .from("receipt_items")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending")
-      .then(({ count }) => setHasPendingMeals((count ?? 0) > 0));
+    if (!user?.token) return;
+    Promise.all([
+      supabase.from("receipt_items").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      fetch("/api/meals/transfers", { headers: { Authorization: `Bearer ${user.token}` } })
+        .then((r) => r.ok ? r.json() : [])
+        .then((data: unknown[]) => ({ count: Array.isArray(data) ? data.length : 0 })),
+    ]).then(([receipts, transfers]) => {
+      setHasPendingMeals(((receipts.count ?? 0) + transfers.count) > 0);
+    });
   }, [user]);
 
   return (

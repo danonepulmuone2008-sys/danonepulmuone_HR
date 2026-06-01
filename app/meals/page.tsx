@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { getMealLimit } from "@/lib/holidays";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import WeeklyReceiptList from "@/components/WeeklyReceiptList";
@@ -70,9 +69,36 @@ export default function MealsPage() {
   const [receiptDetail, setReceiptDetail] = useState<ReceiptDetail | null>(null);
   const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
   const [actioning, setActioning] = useState(false);
+  const [pendingTransfers, setPendingTransfers] = useState<{ id: string; from_name: string; amount: number; note: string | null; created_at: string }[]>([]);
+  const [transferActioning, setTransferActioning] = useState(false);
+  const [transferNet, setTransferNet] = useState(0);
 
   const mealPercent = totalLimit > 0 ? Math.round((mealUsed / totalLimit) * 100) : 0;
-  const remaining = totalLimit - mealUsed;
+  const remaining = totalLimit - mealUsed + transferNet;
+
+  const fetchPendingTransfers = useCallback(async () => {
+    if (!user?.token) return;
+    const res = await fetch("/api/meals/transfers", { headers: { Authorization: `Bearer ${user.token}` } });
+    if (res.ok) setPendingTransfers(await res.json());
+  }, [user]);
+
+  const handleTransferAction = async (id: string, action: "approved" | "rejected") => {
+    if (!user?.token) return;
+    setTransferActioning(true);
+    try {
+      const res = await fetch("/api/meals/transfers/respond", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ id, action }),
+      });
+      if (!res.ok) throw new Error();
+      await fetchPendingTransfers();
+    } catch {
+      alert("처리 중 오류가 발생했습니다.");
+    } finally {
+      setTransferActioning(false);
+    }
+  };
 
   const fetchPending = useCallback(async () => {
     if (!user) return;
@@ -110,33 +136,20 @@ export default function MealsPage() {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
-    const startOfMonth = year + '-' + String(month).padStart(2, '0') + '-01';
-    const startOfNext = month === 12
-      ? (year + 1) + '-01-01'
-      : year + '-' + String(month + 1).padStart(2, '0') + '-01';
-
-    // 한도 조회
-    supabase
-      .from("monthly_meal_limits")
-      .select("monthly_meal_limit")
-      .eq("target_month", startOfMonth)
-      .maybeSingle()
-      .then(({ data }) => setTotalLimit(data?.monthly_meal_limit ?? getMealLimit(year, month)));
-
-    // 사용금액 조회
-    (async () => {
-      const { data: approvedReceipts } = await supabase
-        .from("receipts")
-        .select("id")
-        .eq("status", "approved")
-        .gte("paid_at", startOfMonth)
-        .lt("paid_at", startOfNext);
-      const receiptIds = (approvedReceipts ?? []).map((r) => r.id);
-      const { data: myItems } = receiptIds.length > 0
-        ? await supabase.from("receipt_items").select("price").in("receipt_id", receiptIds)
-        : { data: [] };
-      setMealUsed((myItems ?? []).reduce((sum, r) => sum + (r.price ?? 0), 0));
-    })().catch(() => {});
+    // 한도·사용액·양도 net을 history API 한 번에 세팅 (플리커 방지)
+    if (user.token) {
+      fetch(`/api/meals/history?year=${year}&month=${month}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (!data) return;
+          setTotalLimit(data.monthlyLimit ?? 0);
+          setMealUsed(data.totalUsed ?? 0);
+          setTransferNet((data.remaining ?? 0) - ((data.monthlyLimit ?? 0) - (data.totalUsed ?? 0)));
+        })
+        .catch(() => {});
+    }
 
     // 영수증 목록 조회
     (async () => {
@@ -166,8 +179,24 @@ export default function MealsPage() {
       }));
     })().catch(() => {});
 
+    // 양도 net 계산 (history API 사용 — RLS 우회)
+    if (user.token) {
+      fetch(`/api/meals/history?year=${year}&month=${month}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (!data) return;
+          // remaining = limit - used - transferOut + transferIn
+          // → transferNet = remaining - (limit - used)
+          setTransferNet((data.remaining ?? 0) - ((data.monthlyLimit ?? 0) - (data.totalUsed ?? 0)));
+        })
+        .catch(() => {});
+    }
+
     fetchPending();
-  }, [user, fetchPending]);
+    fetchPendingTransfers();
+  }, [user, fetchPending, fetchPendingTransfers]);
 
   useEffect(() => {
     if (!approvingItem || !user) { setReceiptDetail(null); return; }
@@ -226,6 +255,41 @@ export default function MealsPage() {
       </header>
 
       <div className="flex flex-col gap-3 px-4 pt-3">
+        {/* 양도 수신 대기 섹션 */}
+        {pendingTransfers.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-blue-50 bg-blue-50">
+              <span className="w-2 h-2 rounded-full bg-blue-400" />
+              <p className="text-sm font-semibold text-blue-700">양도 요청 {pendingTransfers.length}건</p>
+            </div>
+            {pendingTransfers.map((t) => (
+              <div key={t.id} className="px-4 py-3.5 border-b border-gray-50 last:border-b-0">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-medium text-gray-800">{t.from_name}님이 양도 요청</p>
+                  <span className="text-sm font-bold text-blue-600">{t.amount.toLocaleString()}원</span>
+                </div>
+                {t.note && <p className="text-xs text-gray-400 mb-2">{t.note}</p>}
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => handleTransferAction(t.id, "approved")}
+                    disabled={transferActioning}
+                    className="flex-1 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold disabled:opacity-50 active:scale-95 transition-all"
+                  >
+                    수락
+                  </button>
+                  <button
+                    onClick={() => handleTransferAction(t.id, "rejected")}
+                    disabled={transferActioning}
+                    className="flex-1 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-50 active:scale-95 transition-all"
+                  >
+                    거절
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* 승인 대기 섹션 */}
         {pendingItems.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-orange-100 overflow-hidden">
@@ -263,7 +327,8 @@ export default function MealsPage() {
         )}
 
         {/* 한도 시각화 */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+        <Link href="/meals/history">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 active:scale-[0.98] transition-all cursor-pointer">
           <p className="text-xl font-extrabold text-blue-500 mb-0.5">
             {year}년 {month}월
           </p>
@@ -290,6 +355,7 @@ export default function MealsPage() {
             <p className="text-xs text-gray-400">{mealPercent}% 사용</p>
           </div>
         </div>
+        </Link>
 
         {/* OCR 등록 버튼 */}
         <Link href="/meals/ocr">

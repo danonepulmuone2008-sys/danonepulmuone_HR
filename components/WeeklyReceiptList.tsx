@@ -67,7 +67,7 @@ export default function WeeklyReceiptList({ receipts }: { receipts: Receipt[] })
   return (
     <>
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <p className="text-sm font-semibold text-gray-800">세부 내역</p>
+        <p className="text-sm font-semibold text-gray-800">영수증 세부 내역</p>
         <div className="flex items-center gap-1 text-xs text-gray-500">
           <button
             className="px-2 py-1 rounded active:bg-gray-100 transition-colors"

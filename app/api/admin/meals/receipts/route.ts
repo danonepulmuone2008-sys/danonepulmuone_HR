@@ -2,6 +2,16 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { requireAdmin } from "@/lib/auth"
 
+const KST = 9 * 60 * 60 * 1000
+
+function kstRange(year: string, month: string) {
+  const y = Number(year), m = Number(month)
+  return {
+    startDate: new Date(Date.UTC(y, m - 1, 1) - KST).toISOString(),
+    endDate:   new Date(Date.UTC(y, m,     1) - KST).toISOString(),
+  }
+}
+
 export async function GET(req: Request) {
   try {
     const auth = await requireAdmin(req)
@@ -13,8 +23,7 @@ export async function GET(req: Request) {
     const month  = searchParams.get("month") ?? String(new Date().getMonth() + 1)
 
     if (!userId) {
-      const startDate = `${year}-${String(month).padStart(2, "0")}-01`
-      const endDate   = new Date(Number(year), Number(month), 1).toISOString().slice(0, 10)
+      const { startDate, endDate } = kstRange(year, month)
 
       const { data: receipts, error: receiptsError } = await supabaseAdmin
         .from("receipts")
@@ -62,8 +71,7 @@ export async function GET(req: Request) {
       })))
     }
 
-    const startDate = `${year}-${String(month).padStart(2, "0")}-01`
-    const endDate   = new Date(Number(year), Number(month), 1).toISOString().slice(0, 10)
+    const { startDate, endDate } = kstRange(year, month)
 
     // 해당 월의 영수증 먼저 조회
     const { data: receipts, error: receiptsError } = await supabaseAdmin
