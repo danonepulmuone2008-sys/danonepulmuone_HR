@@ -7,8 +7,8 @@ const KST = 9 * 60 * 60 * 1000
 const toMin = (ts: string) => Math.floor(new Date(ts).getTime() / 60000)
 
 function fmtTime(ts: string) {
-  const d = new Date(ts)
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+  const kst = new Date(new Date(ts).getTime() + KST)
+  return `${String(kst.getUTCHours()).padStart(2, "0")}:${String(kst.getUTCMinutes()).padStart(2, "0")}`
 }
 
 function getKSTDateStr(offsetDays = 0) {
