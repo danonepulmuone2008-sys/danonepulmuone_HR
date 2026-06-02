@@ -10,6 +10,7 @@ export async function GET(req: Request) {
     .from("receipt_items")
     .select("id, item_name, price, receipt_id")
     .eq("status", "pending")
+    .eq("assigned_user_id", auth.user.id)
 
   if (!items?.length) return NextResponse.json([])
 
