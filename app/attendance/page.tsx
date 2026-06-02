@@ -5,6 +5,7 @@ import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
+import { useAttendanceStore } from "@/store/attendanceStore";
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const MAX_DAY_HOURS = 10;
@@ -90,8 +91,9 @@ export default function AttendancePage() {
   const [showVacDetail, setShowVacDetail] = useState(false);
   const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage" }[]>([]);
   const [vacHistoryLoading, setVacHistoryLoading] = useState(false);
-  const [useSessionTracking, setUseSessionTracking] = useState(false);
   const { user } = useAuth();
+  const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll } = useAttendanceStore();
+  const useSessionTracking = attProfile.use_session_tracking;
   const userId = user?.id ?? null;
 
   const calMm = String(calMonth + 1).padStart(2, "0");
@@ -273,11 +275,10 @@ export default function AttendancePage() {
     setRequests(reqList);
   }, [calYear, calMonth]);
 
+  // 스토어 미로드 시 fetch (홈에서 안 들어온 경우 대비)
   useEffect(() => {
-    if (!userId) return;
-    supabase.from("users").select("use_session_tracking").eq("id", userId).single()
-      .then(({ data }) => setUseSessionTracking(data?.use_session_tracking ?? false));
-  }, [userId]);
+    if (!attLoaded && user?.token) fetchAttAll(user.token);
+  }, [user]);
 
   useEffect(() => {
     if (!userId) return;

@@ -5,7 +5,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Camera } from "lucide-react";
-import { getMondayOfWeek, getWorkingDaysInWeek } from "@/lib/holidays";
+import { useMealStore } from "@/store/mealStore";
+import { useAttendanceStore } from "@/store/attendanceStore";
 
 function fmtHM(h: number): string {
   const totalMin = Math.round(h * 60);
@@ -25,30 +26,23 @@ type ToastType = "success" | "error";
 
 export default function HomePage() {
   const { user } = useAuth();
-  const [userProfile, setUserProfile] = useState({ name: user?.name ?? "", department: user?.department ?? "", position: user?.position ?? "", is_remote: false, use_session_tracking: false });
-  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("users").select("name, department, position, is_remote, use_session_tracking").eq("id", user.id).single().then(({ data }) => {
-      setUserProfile({
-        name: data?.name ?? user.name,
-        department: data?.department ?? user.department,
-        position: data?.position ?? user.position,
-        is_remote: data?.is_remote ?? false,
-        use_session_tracking: data?.use_session_tracking ?? false,
-      });
-      setProfileLoaded(true);
-    });
-  }, [user]);
+  // 근태 스토어
+  const {
+    profile: userProfile,
+    clockIn, clockOut,
+    openSessionId, todaySessions,
+    weeklyHours, weeklyGoal,
+    loaded: attendanceLoaded,
+    fetchAll: fetchAttendanceAll,
+    doClockIn, doClockOut, addSession, closeSession, addWeeklyHours,
+  } = useAttendanceStore();
+  const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
-  const [mealUsed, setMealUsed] = useState(0);
-  const [mealLimit, setMealLimit] = useState(0);
-  const [mealRemaining, setMealRemaining] = useState(0);
+  // 식대 스토어
+  const { monthlyLimit: mealLimit, totalUsed: mealUsed, remaining: mealRemaining, fetchAll: fetchMealAll } = useMealStore();
   const mealPercent = mealLimit > 0 ? Math.max(0, Math.round(((mealLimit - mealRemaining) / mealLimit) * 100)) : 0;
 
-  const [clockIn, setClockIn] = useState<string | null>(null);
-  const [clockOut, setClockOut] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [editReason, setEditReason] = useState("");
   const [editTime, setEditTime] = useState("");
@@ -56,15 +50,10 @@ export default function HomePage() {
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const [clockBlockReason, setClockBlockReason] = useState<string | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
-  const [weeklyHours, setWeeklyHours] = useState(0);
   const [lunchBreak, setLunchBreak] = useState(true);
-  const [openSessionId, setOpenSessionId] = useState<string | null>(null);
-  const [todaySessions, setTodaySessions] = useState<{ start: string; end: string | null }[]>([]);
 
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
-  const weeklyGoal = getWorkingDaysInWeek(getMondayOfWeek(_now)) * 5;
-  const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
   const getNow = () => {
     const now = new Date();
@@ -167,8 +156,7 @@ export default function HomePage() {
             .insert({ user_id: user.id, date: todayStr, start_time: now })
             .select("id")
             .single();
-          setOpenSessionId(data?.id ?? null);
-          setTodaySessions(prev => [...prev, { start: modal.time, end: null }]);
+          addSession(modal.time, data?.id ?? "");
         } else {
           const diffMin = clockIn
             ? (new Date(now).getHours() * 60 + new Date(now).getMinutes()) - (parseInt(clockIn.split(":")[0]) * 60 + parseInt(clockIn.split(":")[1]))
@@ -176,8 +164,12 @@ export default function HomePage() {
           await supabase.from("work_sessions")
             .update({ end_time: now, lunch_break: diffMin >= 60 ? lunchBreak : false })
             .eq("id", openSessionId);
-          setOpenSessionId(null);
-          setTodaySessions(prev => prev.map(s => s.end === null ? { ...s, end: modal.time } : s));
+          closeSession(modal.time);
+          // 주간 시간 업데이트
+          if (clockIn) {
+            const h = (parseInt(modal.time.split(":")[0]) * 60 + parseInt(modal.time.split(":")[1]) - parseInt(clockIn.split(":")[0]) * 60 - parseInt(clockIn.split(":")[1])) / 60;
+            addWeeklyHours(lunchBreak && h >= 1 ? h - 1 : h);
+          }
         }
       } else {
         if (modal.direction === "in") {
@@ -185,6 +177,7 @@ export default function HomePage() {
             { user_id: user.id, date: todayStr, clock_in: now, updated_at: now },
             { onConflict: "user_id,date" }
           );
+          doClockIn(modal.time);
         } else {
           const diffMin = clockIn
             ? (new Date(now).getHours() * 60 + new Date(now).getMinutes()) - (parseInt(clockIn.split(":")[0]) * 60 + parseInt(clockIn.split(":")[1]))
@@ -193,20 +186,21 @@ export default function HomePage() {
             .update({ clock_out: now, lunch_break: diffMin >= 60 ? lunchBreak : false, updated_at: now })
             .eq("user_id", user.id)
             .eq("date", todayStr);
+          doClockOut(modal.time);
+          // 주간 시간 업데이트
+          if (clockIn) {
+            const h = diffMin / 60;
+            addWeeklyHours((lunchBreak && diffMin >= 60) ? h - 1 : h);
+          }
         }
       }
     }
     if (modal.direction === "in") {
-      setClockIn(modal.time);
       showToast(`근무 시작이 ${modal.time}로 기록되었습니다.`);
     } else {
-      if (userProfile.use_session_tracking) {
-        setClockIn(null);
-        showToast(`근무 종료가 ${modal.time}로 기록되었습니다.`);
-      } else {
-        setClockOut(modal.time);
-        showToast(`퇴근시간이 ${modal.time}로 기록되었습니다.${lunchBreak ? " (점심 1시간 차감)" : ""}`);
-      }
+      showToast(userProfile.use_session_tracking
+        ? `근무 종료가 ${modal.time}로 기록되었습니다.`
+        : `퇴근시간이 ${modal.time}로 기록되었습니다.${lunchBreak ? " (점심 1시간 차감)" : ""}`);
       setLunchBreak(true);
     }
     setModal(null);
@@ -234,133 +228,11 @@ export default function HomePage() {
     setModal(null);
   };
 
+  // 홈 진입 시 근태 + 식대 1회 fetch
   useEffect(() => {
-    if (!user || !profileLoaded || !userProfile.use_session_tracking) return;
-    const fmtTime = (iso: string) => {
-      const t = new Date(iso);
-      return `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
-    };
-    supabase.from("work_sessions")
-      .select("id, start_time, end_time")
-      .eq("user_id", user.id)
-      .eq("date", todayStr)
-      .order("start_time", { ascending: true })
-      .then(({ data }) => {
-        if (data) {
-          setTodaySessions(data.map(s => ({ start: fmtTime(s.start_time), end: s.end_time ? fmtTime(s.end_time) : null })));
-          const open = data.find(s => !s.end_time);
-          if (open) {
-            setOpenSessionId(open.id);
-            setClockIn(fmtTime(open.start_time));
-          }
-        }
-      });
-  }, [user, userProfile.use_session_tracking, todayStr]);
-
-  useEffect(() => {
-    if (!user || !profileLoaded) return;
-    (async () => {
-      const uid = user.id;
-
-      if (userProfile.use_session_tracking) {
-        setClockIn(null);
-        setClockOut(null);
-      } else {
-        const { data: today } = await supabase
-          .from("attendance_records")
-          .select("clock_in, clock_out")
-          .eq("user_id", uid)
-          .eq("date", todayStr)
-          .maybeSingle();
-
-        if (today?.clock_in) {
-          const t = new Date(today.clock_in);
-          setClockIn(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
-        }
-        if (today?.clock_out) {
-          const t = new Date(today.clock_out);
-          setClockOut(`${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`);
-        }
-      }
-
-      const monday = new Date();
-      const day = monday.getDay();
-      monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
-      const friday = new Date(monday);
-      friday.setDate(friday.getDate() + 4);
-      const fmt = (d: Date) =>
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let weekData: any[] | null = null;
-      if (userProfile.use_session_tracking) {
-        const { data } = await supabase.from("work_sessions").select("start_time, end_time, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday)).not("end_time", "is", null);
-        weekData = data;
-      } else {
-        const { data } = await supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).gte("date", fmt(monday)).lte("date", fmt(friday));
-        weekData = data;
-      }
-      const [{ data: weekTrips }, { data: weekVacations }] = await Promise.all([
-        supabase.from("business_trip_requests").select("start_date, end_date, start_time, end_time").eq("user_id", uid).eq("status", "approved").lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
-        supabase.from("vacation_requests").select("start_date, hours").eq("user_id", uid).eq("status", "approved").not("hours", "is", null).gte("start_date", fmt(monday)).lte("start_date", fmt(friday)),
-      ]);
-
-      const toMin = (ts: string) => Math.floor(new Date(ts).getTime() / 60000);
-      const attendanceTotal = userProfile.use_session_tracking
-        ? (weekData ?? []).reduce((sum: number, s: any) => {
-            if (!s.end_time) return sum;
-            const h = (toMin(s.end_time) - toMin(s.start_time)) / 60;
-            return sum + (s.lunch_break && h >= 1 ? h - 1 : h);
-          }, 0)
-        : (weekData ?? []).reduce((sum: number, r: any) => {
-            if (!r.clock_in || !r.clock_out) return sum;
-            const h = (toMin(r.clock_out) - toMin(r.clock_in)) / 60;
-            return sum + (r.lunch_break && h >= 1 ? h - 1 : h);
-          }, 0);
-
-      const tripTotal = (weekTrips ?? []).reduce((sum, t) => {
-        if (!t.start_time || !t.end_time) return sum;
-        const isSingleDay = t.start_date === t.end_date;
-        const rangeStart = new Date(Math.max(new Date(t.start_date + "T00:00:00").getTime(), monday.getTime()));
-        const rangeEnd = new Date(Math.min(new Date(t.end_date + "T00:00:00").getTime(), friday.getTime()));
-        let dayHours = 0;
-        for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
-          if (d.getDay() === 0 || d.getDay() === 6) continue;
-          const dateStr = fmt(d);
-          const startStr = isSingleDay || dateStr === t.start_date ? t.start_time : "09:00";
-          const endStr = isSingleDay || dateStr === t.end_date ? t.end_time : "18:00";
-          const [sh, sm] = startStr.split(":").map(Number);
-          const [eh, em] = endStr.split(":").map(Number);
-          dayHours += (eh * 60 + em - sh * 60 - sm) / 60;
-        }
-        return sum + dayHours;
-      }, 0);
-
-      const vacTotal = (weekVacations ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0);
-
-      setWeeklyHours(attendanceTotal + tripTotal + vacTotal);
-    })();
-  }, [user, todayStr, profileLoaded, userProfile.use_session_tracking]);
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
-
-      if (user.token) {
-        const res = await fetch(`/api/meals/history?year=${year}&month=${month}`, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setMealLimit(data.monthlyLimit ?? 0);
-          setMealUsed(data.totalUsed ?? 0);
-          setMealRemaining(data.remaining ?? 0);
-        }
-      }
-    })();
+    if (!user?.token) return;
+    if (!attendanceLoaded) fetchAttendanceAll(user.token);
+    fetchMealAll(user.token);
   }, [user]);
 
   return (

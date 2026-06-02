@@ -33,6 +33,16 @@ export default function MealHistoryPage() {
   const [remaining, setRemaining]       = useState(0);
   const [loading, setLoading]           = useState(true);
 
+  const [sentPending, setSentPending] = useState<{ id: string; to_name: string; amount: number; note: string | null }[]>([]);
+
+  const fetchSentPending = async () => {
+    if (!user?.token) return;
+    fetch("/api/meals/transfers?direction=sent", { headers: { Authorization: `Bearer ${user.token}` } })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setSentPending(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  };
+
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferSent, setTransferSent] = useState(false);
   const [employees, setEmployees]       = useState<Employee[]>([]);
@@ -58,7 +68,7 @@ export default function MealHistoryPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { fetchHistory(); }, [user, year, month]);
+  useEffect(() => { fetchHistory(); fetchSentPending(); }, [user, year, month]);
 
   useEffect(() => {
     if (!showTransferModal || !user) return;
@@ -155,6 +165,28 @@ export default function MealHistoryPage() {
         >
           식대 양도하기
         </button>
+
+        {/* 양도 신청 대기 목록 */}
+        {sentPending.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-50 bg-gray-50">
+              <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" />
+              <p className="text-sm font-semibold text-gray-700">양도 신청 대기 {sentPending.length}건</p>
+            </div>
+            {sentPending.map((t) => (
+              <div key={t.id} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-50 last:border-b-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800">{t.to_name}에게 양도 요청</p>
+                  {t.note && <p className="text-xs text-gray-400 mt-0.5">{t.note}</p>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                  <span className="text-sm font-semibold text-orange-500">-{t.amount.toLocaleString()}원</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-500 font-medium">대기</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 내역 목록 */}
         {loading ? (

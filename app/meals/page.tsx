@@ -6,6 +6,7 @@ import BottomNav from "@/components/BottomNav";
 import WeeklyReceiptList from "@/components/WeeklyReceiptList";
 import { useAuth } from "@/components/AuthProvider";
 import { Check, X } from "lucide-react";
+import { useMealStore } from "@/store/mealStore";
 
 
 type Receipt = {
@@ -61,26 +62,26 @@ export default function MealsPage() {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
-  const [totalLimit, setTotalLimit] = useState(0);
-  const [mealUsed, setMealUsed] = useState(0);
+  const {
+    monthlyLimit: totalLimit,
+    totalUsed: mealUsed,
+    remaining,
+    pendingItems,
+    pendingTransfers,
+    fetchAll: fetchMealAll,
+    removePendingItem,
+    removePendingTransfer,
+    adjustRemaining,
+  } = useMealStore();
+
   const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   const [approvingItem, setApprovingItem] = useState<PendingItem | null>(null);
   const [receiptDetail, setReceiptDetail] = useState<ReceiptDetail | null>(null);
   const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
   const [actioning, setActioning] = useState(false);
-  const [pendingTransfers, setPendingTransfers] = useState<{ id: string; from_name: string; amount: number; note: string | null; created_at: string }[]>([]);
   const [transferActioning, setTransferActioning] = useState(false);
-  const [transferNet, setTransferNet] = useState(0);
 
-  const mealPercent = totalLimit > 0 ? Math.round((mealUsed / totalLimit) * 100) : 0;
-  const remaining = totalLimit - mealUsed + transferNet;
-
-  const fetchPendingTransfers = useCallback(async () => {
-    if (!user?.token) return;
-    const res = await fetch("/api/meals/transfers", { headers: { Authorization: `Bearer ${user.token}` } });
-    if (res.ok) setPendingTransfers(await res.json());
-  }, [user]);
+  const mealPercent = totalLimit > 0 ? Math.round(((totalLimit - remaining) / totalLimit) * 100) : 0;
 
   const handleTransferAction = async (id: string, action: "approved" | "rejected") => {
     if (!user?.token) return;
@@ -92,7 +93,12 @@ export default function MealsPage() {
         body: JSON.stringify({ id, action }),
       });
       if (!res.ok) throw new Error();
-      await fetchPendingTransfers();
+      removePendingTransfer(id);
+      // 수락 시 잔여 증가
+      if (action === "approved") {
+        const t = pendingTransfers.find((t) => t.id === id);
+        if (t) adjustRemaining(t.amount);
+      }
     } catch {
       alert("처리 중 오류가 발생했습니다.");
     } finally {
@@ -100,58 +106,13 @@ export default function MealsPage() {
     }
   };
 
-  const fetchPending = useCallback(async () => {
-    if (!user) return;
-    const { data: items } = await supabase
-      .from("receipt_items")
-      .select("id, item_name, price, receipt_id")
-      .eq("status", "pending");
-    if (!items?.length) { setPendingItems([]); return; }
-    const receiptIds = [...new Set(items.map((i) => i.receipt_id))];
-    const { data: receiptRows } = await supabase
-      .from("receipts")
-      .select("id, store_name, paid_at, uploader_id")
-      .in("id", receiptIds);
-    const uploaderIds = [...new Set((receiptRows ?? []).map((r) => r.uploader_id))];
-    const { data: uploaderRows } = uploaderIds.length > 0
-      ? await supabase.from("users").select("id, name").in("id", uploaderIds)
-      : { data: [] };
-    setPendingItems(items.map((item) => {
-      const receipt = receiptRows?.find((r) => r.id === item.receipt_id);
-      const uploader = uploaderRows?.find((u) => u.id === receipt?.uploader_id);
-      return {
-        id: item.id,
-        item_name: item.item_name,
-        price: item.price,
-        receipt_id: item.receipt_id,
-        store_name: receipt?.store_name ?? "가맹점 미인식",
-        paid_at: receipt?.paid_at ?? "",
-        uploader_name: uploader?.name ?? "알 수 없음",
-      };
-    }));
-  }, [user]);
-
   useEffect(() => {
     if (!user) return;
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    // 한도·사용액·양도 net을 history API 한 번에 세팅 (플리커 방지)
-    if (user.token) {
-      fetch(`/api/meals/history?year=${year}&month=${month}`, {
-        headers: { Authorization: `Bearer ${user.token}` },
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
-          if (!data) return;
-          setTotalLimit(data.monthlyLimit ?? 0);
-          setMealUsed(data.totalUsed ?? 0);
-          setTransferNet((data.remaining ?? 0) - ((data.monthlyLimit ?? 0) - (data.totalUsed ?? 0)));
-        })
-        .catch(() => {});
+    // 스토어 미로드 상태면 fetch (홈에서 이미 했다면 스킵)
+    if (!useMealStore.getState().loaded && user.token) {
+      fetchMealAll(user.token);
     }
-
-    // 영수증 목록 조회
+    // 영수증 목록은 로컬 상태로 유지
     (async () => {
       const { data: myReceiptItems } = await supabase
         .from("receipt_items")
@@ -178,25 +139,7 @@ export default function MealsPage() {
         };
       }));
     })().catch(() => {});
-
-    // 양도 net 계산 (history API 사용 — RLS 우회)
-    if (user.token) {
-      fetch(`/api/meals/history?year=${year}&month=${month}`, {
-        headers: { Authorization: `Bearer ${user.token}` },
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
-          if (!data) return;
-          // remaining = limit - used - transferOut + transferIn
-          // → transferNet = remaining - (limit - used)
-          setTransferNet((data.remaining ?? 0) - ((data.monthlyLimit ?? 0) - (data.totalUsed ?? 0)));
-        })
-        .catch(() => {});
-    }
-
-    fetchPending();
-    fetchPendingTransfers();
-  }, [user, fetchPending, fetchPendingTransfers]);
+  }, [user]);
 
   useEffect(() => {
     if (!approvingItem || !user) { setReceiptDetail(null); return; }
@@ -226,7 +169,12 @@ export default function MealsPage() {
       setReceiptDetail((prev) =>
         prev ? { ...prev, items: prev.items.map((it) => it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it) } : null
       );
-      await fetchPending();
+      removePendingItem(itemId);
+      // 승인 시 잔여 차감
+      if (action === "approved") {
+        const item = pendingItems.find((i) => i.id === itemId);
+        if (item) adjustRemaining(-item.price);
+      }
     } catch {
       alert("처리 중 오류가 발생했습니다.");
     } finally {

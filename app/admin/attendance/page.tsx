@@ -6,6 +6,7 @@ import AdminBottomNav from "@/components/AdminBottomNav";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors"
+import { useAttendanceStore } from "@/store/attendanceStore"
 
 function toTimestamptz(date: string, time: string): string {
   return `${date}T${time}:00+09:00`
@@ -154,6 +155,7 @@ export default function AdminAttendancePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const { reset: resetAttendance } = useAttendanceStore();
   const initialTab = (searchParams.get("tab") as "schedule" | "records" | "approval" | "vacation") ?? "schedule";
   const [activeTab, setActiveTab] = useState<"schedule" | "records" | "approval" | "vacation">(initialTab);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -569,6 +571,7 @@ export default function AdminAttendancePage() {
       }),
     });
     if (res.ok) {
+      if (editUserId === user?.id) resetAttendance();
       setEditUserId(null);
       await fetchRecords();
     } else {

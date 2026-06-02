@@ -2,9 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, ClipboardList, UtensilsCrossed, User } from "lucide-react";
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/components/AuthProvider";
+import { useMealStore } from "@/store/mealStore";
 
 const NAV_ITEMS = [
   { href: "/",           label: "홈",  Icon: Home },
@@ -15,20 +13,8 @@ const NAV_ITEMS = [
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { user } = useAuth();
-  const [hasPendingMeals, setHasPendingMeals] = useState(false);
-
-  useEffect(() => {
-    if (!user?.token) return;
-    Promise.all([
-      supabase.from("receipt_items").select("id", { count: "exact", head: true }).eq("status", "pending"),
-      fetch("/api/meals/transfers", { headers: { Authorization: `Bearer ${user.token}` } })
-        .then((r) => r.ok ? r.json() : [])
-        .then((data: unknown[]) => ({ count: Array.isArray(data) ? data.length : 0 })),
-    ]).then(([receipts, transfers]) => {
-      setHasPendingMeals(((receipts.count ?? 0) + transfers.count) > 0);
-    });
-  }, [user]);
+  const { pendingItems, pendingTransfers } = useMealStore();
+  const hasPendingMeals = pendingItems.length > 0 || pendingTransfers.length > 0;
 
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] bg-white border-t border-gray-200 flex z-50">

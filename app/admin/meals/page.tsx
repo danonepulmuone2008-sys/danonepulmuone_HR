@@ -6,6 +6,7 @@ import AdminBottomNav from "@/components/AdminBottomNav";
 import { getMonthlyBusinessDays } from "@/lib/holidays";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/lib/supabase";
+import { useMealStore } from "@/store/mealStore";
 
 async function getToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -52,6 +53,7 @@ interface ReceiptItem {
 
 export default function AdminMealsPage() {
   const { user: authUser } = useAuth();
+  const { removePendingItem, adjustRemaining, pendingItems } = useMealStore();
 
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth() + 1);
@@ -105,6 +107,15 @@ export default function AdminMealsPage() {
           }
         )
       );
+      // 스토어 업데이트
+      if (itemStatus === "approved" || itemStatus === "rejected") {
+        removePendingItem(itemId);
+        // 승인된 항목이 현재 로그인한 관리자 본인에게 할당된 경우 잔여 조정
+        if (itemStatus === "approved") {
+          const pending = pendingItems.find((i) => i.id === itemId);
+          if (pending && authUser) adjustRemaining(-pending.price);
+        }
+      }
     } finally {
       setChangingItemStatusId(null);
     }
