@@ -100,6 +100,7 @@ export default function VacationPage() {
         hours: isHourly ? calcHours() : null,
         start_time: isHourly && form.startTime !== "" ? Number(form.startTime) : null,
         end_time: isHourly && form.endTime !== "" ? Number(form.endTime) : null,
+        lunch_break: isHourly ? form.lunchBreak : null,
       });
 
       if (error) {

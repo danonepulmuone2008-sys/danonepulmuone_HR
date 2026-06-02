@@ -11,11 +11,11 @@ const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const MAX_DAY_HOURS = 10;
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
-type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string };
+type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null };
 type RequestItem = { id: string; type: "vacation" | "business_trip"; label: string; date: string; status: string };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
-type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string };
+type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string; startTime?: string | null; endTime?: string | null };
 
 function getMondayOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -198,13 +198,13 @@ export default function AttendancePage() {
     const endDate = `${calYear}-${m}-${String(daysInMonth).padStart(2, "0")}`;
 
     const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes] = await Promise.all([
-      supabase.from("vacation_requests").select("id, type, start_date, end_date, status")
+      supabase.from("vacation_requests").select("id, type, start_date, end_date, status, start_time, end_time, lunch_break, hours")
         .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
         .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
-      supabase.from("vacation_requests").select("id, user_id, type, start_date, end_date, status")
+      supabase.from("vacation_requests").select("id, user_id, type, start_date, end_date, status, start_time, end_time")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
-      supabase.from("business_trip_requests").select("id, user_id, destination, start_date, end_date, status")
+      supabase.from("business_trip_requests").select("id, user_id, destination, start_date, end_date, status, start_time, end_time")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
@@ -222,7 +222,7 @@ export default function AttendancePage() {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!map[day]) map[day] = [];
-          map[day].push({ type: "vacation", label: v.type, status: v.status });
+          map[day].push({ type: "vacation", label: v.type, status: v.status, startTime: v.start_time ?? null, endTime: v.end_time ?? null, lunchBreak: v.lunch_break ?? null, hours: v.hours ?? null });
         }
       }
     });
@@ -244,7 +244,9 @@ export default function AttendancePage() {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!newTeamMap[day]) newTeamMap[day] = [];
-          newTeamMap[day].push({ userId: v.user_id, userName: name, type: "vacation", label: v.type });
+          const vStartTime = v.start_time != null ? `${String(v.start_time).padStart(2, "0")}:00` : null;
+          const vEndTime   = v.end_time   != null ? `${String(v.end_time).padStart(2, "0")}:00`   : null;
+          newTeamMap[day].push({ userId: v.user_id, userName: name, type: "vacation", label: v.type, startTime: vStartTime, endTime: vEndTime });
         }
       }
     });
@@ -254,7 +256,7 @@ export default function AttendancePage() {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!newTeamMap[day]) newTeamMap[day] = [];
-          newTeamMap[day].push({ userId: t.user_id, userName: name, type: "business_trip", label: t.destination });
+          newTeamMap[day].push({ userId: t.user_id, userName: name, type: "business_trip", label: t.destination, startTime: t.start_time ?? null, endTime: t.end_time ?? null });
         }
       }
     });
@@ -619,6 +621,9 @@ export default function AttendancePage() {
                             <span className="text-sm font-semibold text-gray-800">{te.userName}</span>
                             <span className="text-sm text-gray-500">{te.type === "vacation" ? "휴가" : "출장"}</span>
                             <span className="text-sm text-orange-600 truncate">{te.label}</span>
+                            {te.startTime && te.endTime && (
+                              <span className="text-xs text-gray-400 ml-auto flex-shrink-0">{te.startTime} ~ {te.endTime}</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -627,13 +632,26 @@ export default function AttendancePage() {
                   {dayEvents.length > 0 && (
                     <div className="mb-4">
                       <p className="text-xs font-semibold text-gray-500 mb-2">휴가 · 출장</p>
-                      {dayEvents.map((ev, ei) => (
-                        <div key={ei} className="flex items-center gap-2 py-2 px-3 bg-gray-50 rounded-xl">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ev.type === "vacation" ? "bg-green-500" : "bg-blue-500"}`} />
-                          <span className="text-sm font-semibold text-gray-800">나</span>
-                          <span className="text-sm text-gray-500">{ev.label}</span>
-                        </div>
-                      ))}
+                      {dayEvents.map((ev, ei) => {
+                        const hasTime = ev.type === "vacation" && ev.startTime != null && ev.endTime != null;
+                        const timeStr = hasTime
+                          ? `${String(ev.startTime).padStart(2, "0")}:00 ~ ${String(ev.endTime).padStart(2, "0")}:00`
+                          : null;
+                        return (
+                          <div key={ei} className="flex flex-col gap-0.5 py-2 px-3 bg-gray-50 rounded-xl">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ev.type === "vacation" ? "bg-green-500" : "bg-blue-500"}`} />
+                              <span className="text-sm font-semibold text-gray-800">나</span>
+                              <span className="text-sm text-gray-500">{ev.label}</span>
+                              {hasTime && (
+                                <span className="text-xs text-gray-400 ml-auto flex-shrink-0">
+                                  {timeStr}{ev.lunchBreak ? " · 점심 포함" : ""}{ev.hours != null ? ` · 총 ${ev.hours}시간` : ""}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   {dayFlex.length === 0 && (!showTeam || dayTeam.length === 0) && dayEvents.length === 0 && (
