@@ -40,7 +40,7 @@ export default function HomePage() {
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
   // 식대 스토어
-  const { monthlyLimit: mealLimit, totalUsed: mealUsed, remaining: mealRemaining, fetchAll: fetchMealAll } = useMealStore();
+  const { monthlyLimit: mealLimit, totalUsed: mealUsed, remaining: mealRemaining, fetchAll: fetchMealAll, loaded: mealLoaded } = useMealStore();
   const mealPercent = mealLimit > 0 ? Math.max(0, Math.round(((mealLimit - mealRemaining) / mealLimit) * 100)) : 0;
 
   const [modal, setModal] = useState<ModalState>(null);
@@ -234,6 +234,19 @@ export default function HomePage() {
     if (!attendanceLoaded) fetchAttendanceAll(user.token);
     fetchMealAll(user.token);
   }, [user]);
+
+  const isLoading = !attendanceLoaded || !mealLoaded;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col min-h-screen items-center justify-center bg-white">
+        <svg className="animate-spin h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" style={{ color: "#8dc63f" }}>
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen pb-20">
