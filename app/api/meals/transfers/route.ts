@@ -7,15 +7,24 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response
   const userId = auth.user.id
 
-  const direction = new URL(req.url).searchParams.get("direction")
+  const params   = new URL(req.url).searchParams
+  const direction = params.get("direction")
+  const KST = 9 * 60 * 60 * 1000
 
   if (direction === "sent") {
-    // 내가 보낸 대기 건
+    const year  = parseInt(params.get("year")  ?? String(new Date().getFullYear()))
+    const month = parseInt(params.get("month") ?? String(new Date().getMonth() + 1))
+    const startOfMonth = new Date(Date.UTC(year, month - 1, 1) - KST).toISOString()
+    const startOfNext  = new Date(Date.UTC(year, month,     1) - KST).toISOString()
+
+    // 내가 보낸 대기 건 (해당 월)
     const { data } = await supabaseAdmin
       .from("meal_transfers")
       .select("id, to_user_id, amount, note, created_at")
       .eq("from_user_id", userId)
       .eq("status", "pending")
+      .gte("created_at", startOfMonth)
+      .lt("created_at", startOfNext)
       .order("created_at", { ascending: false })
 
     const toIds = [...new Set((data ?? []).map((t) => t.to_user_id))]

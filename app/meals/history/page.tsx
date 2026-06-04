@@ -33,11 +33,11 @@ export default function MealHistoryPage() {
   const [remaining, setRemaining]       = useState(0);
   const [loading, setLoading]           = useState(true);
 
-  const [sentPending, setSentPending] = useState<{ id: string; to_name: string; amount: number; note: string | null }[]>([]);
+  const [sentPending, setSentPending] = useState<{ id: string; to_name: string; amount: number; note: string | null; created_at: string }[]>([]);
 
   const fetchSentPending = async () => {
     if (!user?.token) return;
-    fetch("/api/meals/transfers?direction=sent", { headers: { Authorization: `Bearer ${user.token}` } })
+    fetch(`/api/meals/transfers?direction=sent&year=${year}&month=${month}`, { headers: { Authorization: `Bearer ${user.token}` } })
       .then((r) => r.ok ? r.json() : [])
       .then((data) => setSentPending(Array.isArray(data) ? data : []))
       .catch(() => {});
@@ -177,7 +177,7 @@ export default function MealHistoryPage() {
               <div key={t.id} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-50 last:border-b-0">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-800">{t.to_name}에게 양도 요청</p>
-                  {t.note && <p className="text-xs text-gray-400 mt-0.5">{t.note}</p>}
+                  <p className="text-xs text-gray-400 mt-0.5">{fmtDate(t.created_at)}{t.note ? ` · ${t.note}` : ""}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                   <span className="text-sm font-semibold text-orange-500">-{t.amount.toLocaleString()}원</span>
