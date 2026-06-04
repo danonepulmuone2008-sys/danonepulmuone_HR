@@ -35,14 +35,6 @@ export default function MealHistoryPage() {
 
   const [sentPending, setSentPending] = useState<{ id: string; to_name: string; amount: number; note: string | null; created_at: string }[]>([]);
 
-  const fetchSentPending = async () => {
-    if (!user?.token) return;
-    fetch(`/api/meals/transfers?direction=sent&year=${year}&month=${month}`, { headers: { Authorization: `Bearer ${user.token}` } })
-      .then((r) => r.ok ? r.json() : [])
-      .then((data) => setSentPending(Array.isArray(data) ? data : []))
-      .catch(() => {});
-  };
-
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferSent, setTransferSent] = useState(false);
   const [employees, setEmployees]       = useState<Employee[]>([]);
@@ -51,24 +43,33 @@ export default function MealHistoryPage() {
   const [transferNote, setTransferNote] = useState("");
   const [transferring, setTransferring] = useState(false);
 
-  const fetchHistory = async () => {
+  const fetchAll = async () => {
     if (!user?.token) return;
     setLoading(true);
-    fetch(`/api/meals/history?year=${year}&month=${month}`, {
-      headers: { Authorization: `Bearer ${user.token}` },
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        setEntries(data.entries ?? []);
-        setMonthlyLimit(data.monthlyLimit ?? 0);
-        setTotalUsed(data.totalUsed ?? 0);
-        setRemaining(data.remaining ?? 0);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    try {
+      const [historyRes, pendingRes] = await Promise.all([
+        fetch(`/api/meals/history?year=${year}&month=${month}`, { headers: { Authorization: `Bearer ${user.token}` } }),
+        fetch(`/api/meals/transfers?direction=sent&year=${year}&month=${month}`, { headers: { Authorization: `Bearer ${user.token}` } }),
+      ]);
+      const [historyData, pendingData] = await Promise.all([
+        historyRes.ok ? historyRes.json() : null,
+        pendingRes.ok ? pendingRes.json() : [],
+      ]);
+      if (historyData) {
+        setEntries(historyData.entries ?? []);
+        setMonthlyLimit(historyData.monthlyLimit ?? 0);
+        setTotalUsed(historyData.totalUsed ?? 0);
+        setRemaining(historyData.remaining ?? 0);
+      }
+      setSentPending(Array.isArray(pendingData) ? pendingData : []);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchHistory(); fetchSentPending(); }, [user, year, month]);
+  useEffect(() => { fetchAll(); }, [user, year, month]);
 
   useEffect(() => {
     if (!showTransferModal || !user) return;
@@ -104,7 +105,7 @@ export default function MealHistoryPage() {
       });
       if (!res.ok) { alert("양도 요청에 실패했습니다."); return; }
       setTransferSent(true);
-      await fetchHistory();
+      await fetchAll();
     } finally {
       setTransferring(false);
     }
@@ -129,7 +130,13 @@ export default function MealHistoryPage() {
         <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center text-gray-400 text-2xl leading-none">›</button>
       </div>
 
-      <div className="flex flex-col gap-3 px-4 pt-3 pb-10">
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center py-20">
+          <div className="w-8 h-8 rounded-full animate-spin border-2 border-blue-100 border-t-blue-500" />
+        </div>
+      ) : null}
+
+      <div className="flex flex-col gap-3 px-4 pt-3 pb-10" style={{ display: loading ? "none" : undefined }}>
         {/* 요약 카드 */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-2">
           <div className="flex justify-between text-sm">
