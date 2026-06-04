@@ -4,7 +4,7 @@ import { useAuth } from "@/components/AuthProvider";
 import AppBar from "@/components/AppBar";
 import { supabase } from "@/lib/supabase";
 
-type Entry = { date: string; label: string; amount: number; kind: "grant" | "usage" | "transfer_in" | "transfer_out" };
+type Entry = { date: string; label: string; amount: number; kind: "grant" | "usage" | "transfer_in" | "transfer_out"; note?: string | null };
 type Employee = { id: string; name: string };
 
 const KIND_COLOR: Record<string, string> = {
@@ -201,11 +201,12 @@ export default function MealHistoryPage() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {entries.map((entry, i) => (
               <div key={i} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-50 last:border-b-0">
-                <div>
+                <div className="min-w-0 flex-1 pr-3">
                   <p className="text-sm font-medium text-gray-800">{entry.label}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{fmtDate(entry.date)}</p>
+                  {entry.note && <p className="text-xs text-gray-400 break-words">{entry.note}</p>}
                 </div>
-                <span className={`text-sm font-bold ${KIND_COLOR[entry.kind]}`}>
+                <span className={`text-sm font-bold flex-shrink-0 whitespace-nowrap ${KIND_COLOR[entry.kind]}`}>
                   {KIND_SIGN[entry.kind]}{entry.amount.toLocaleString()}원
                 </span>
               </div>

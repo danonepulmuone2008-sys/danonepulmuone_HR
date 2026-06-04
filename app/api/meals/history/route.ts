@@ -65,12 +65,14 @@ export async function GET(req: Request) {
       label: `${userMap[t.to_user_id] ?? "알 수 없음"}에게 양도`,
       amount: t.amount,
       kind: "transfer_out" as const,
+      note: t.note ?? null,
     })),
     ...(transfersIn ?? []).map((t) => ({
       date: t.responded_at ?? targetMonth,
       label: `${userMap[t.from_user_id] ?? "알 수 없음"}로부터 양도 수신`,
       amount: t.amount,
       kind: "transfer_in" as const,
+      note: t.note ?? null,
     })),
   ]
 

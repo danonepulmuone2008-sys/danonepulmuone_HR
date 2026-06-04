@@ -76,8 +76,13 @@ export default function AdminMealsPage() {
   const [usersLoading, setUsersLoading] = useState(true);
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [sheetTab, setSheetTab] = useState<"receipts" | "transfers">("receipts");
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [receiptsLoading, setReceiptsLoading] = useState(false);
+  type TransferItem = { id: string; amount: number; note: string | null; status: string; created_at: string; to_name?: string; from_name?: string };
+  const [transfersSent, setTransfersSent] = useState<TransferItem[]>([]);
+  const [transfersReceived, setTransfersReceived] = useState<TransferItem[]>([]);
+  const [transfersLoading, setTransfersLoading] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -177,16 +182,38 @@ export default function AdminMealsPage() {
     }
   }, [viewYear, viewMonth]);
 
+  async function fetchTransfers(userId: string) {
+    const token = await getToken();
+    if (!token) return;
+    setTransfersLoading(true);
+    try {
+      const res = await fetch(`/api/admin/meals/user-transfers?userId=${userId}&year=${viewYear}&month=${viewMonth}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTransfersSent(data.sent ?? []);
+        setTransfersReceived(data.received ?? []);
+      }
+    } finally {
+      setTransfersLoading(false);
+    }
+  }
+
   function openSheet(userId: string) {
     setSelectedUserId(userId);
+    setSheetTab("receipts");
     setEditingId(null);
     fetchReceipts(userId);
+    fetchTransfers(userId);
   }
 
   function closeSheet() {
     setSelectedUserId(null);
     setEditingId(null);
     setReceipts([]);
+    setTransfersSent([]);
+    setTransfersReceived([]);
   }
 
 function startEditItem(item: ReceiptItem) {
@@ -416,7 +443,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
         )}
       </div>
 
-      {/* 영수증 내역 바텀시트 */}
+      {/* 식대 내역 바텀시트 */}
       {selectedUserId !== null && selectedUser && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8"
@@ -424,18 +451,85 @@ async function saveItemAmount(receiptId: string, itemId: string) {
         >
           <div
             className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10 flex flex-col"
-            style={{ maxHeight: "80vh" }}
+            style={{ height: "80vh" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div>
-                <h3 className="text-base font-bold text-gray-900">{selectedUser.name} 영수증 내역</h3>
+                <h3 className="text-base font-bold text-gray-900">{selectedUser.name} 식대 내역</h3>
                 <p className="text-xs text-gray-400 mt-0.5">{viewYear}년 {viewMonth}월</p>
               </div>
               <button onClick={closeSheet} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600">×</button>
             </div>
+            {/* 탭 */}
+            <div className="flex border-b border-gray-100 flex-shrink-0">
+              {(["receipts", "transfers"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setSheetTab(tab)}
+                  className={`flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    sheetTab === tab ? "border-[#8dc63f] text-[#8dc63f]" : "border-transparent text-gray-400"
+                  }`}
+                >
+                  {tab === "receipts" ? "영수증 내역" : "양도 내역"}
+                </button>
+              ))}
+            </div>
             <div className="overflow-y-auto flex-1 px-5 pt-4 pb-2">
-              {receiptsLoading ? (
+              {sheetTab === "transfers" ? (
+                transfersLoading ? (
+                  <div className="flex flex-col gap-2 py-2">
+                    {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
+                  </div>
+                ) : transfersSent.length === 0 && transfersReceived.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">양도 내역이 없습니다</p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {transfersSent.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-2">보낸 양도</p>
+                        <div className="flex flex-col gap-2">
+                          {transfersSent.map(t => (
+                            <div key={t.id} className="flex items-center justify-between px-3 py-2.5 bg-orange-50 rounded-xl">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{t.to_name}에게</p>
+                                <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString("ko-KR")}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-orange-500">-{t.amount.toLocaleString()}원</p>
+                                <p className={`text-xs ${t.status === "approved" ? "text-green-500" : t.status === "rejected" ? "text-red-400" : "text-orange-400"}`}>
+                                  {t.status === "approved" ? "수락" : t.status === "rejected" ? "거절" : "대기"}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {transfersReceived.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-2">받은 양도</p>
+                        <div className="flex flex-col gap-2">
+                          {transfersReceived.map(t => (
+                            <div key={t.id} className="flex items-center justify-between px-3 py-2.5 bg-green-50 rounded-xl">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{t.from_name}로부터</p>
+                                <p className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString("ko-KR")}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-green-600">+{t.amount.toLocaleString()}원</p>
+                                <p className={`text-xs ${t.status === "approved" ? "text-green-500" : t.status === "rejected" ? "text-red-400" : "text-orange-400"}`}>
+                                  {t.status === "approved" ? "수락" : t.status === "rejected" ? "거절" : "대기"}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              ) : receiptsLoading ? (
                 <div className="flex flex-col gap-3 py-2">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />
