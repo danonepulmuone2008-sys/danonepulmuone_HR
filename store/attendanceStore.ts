@@ -13,7 +13,7 @@ interface AttendanceState {
   clockIn: string | null
   clockOut: string | null
   openSessionId: string | null
-  todaySessions: { start: string; end: string | null }[]
+  todaySessions: { start: string; end: string | null; date?: string }[]
   weeklyHours: number
   weeklyGoal: number
   loaded: boolean
@@ -22,7 +22,7 @@ interface AttendanceState {
   fetchAll: (token: string) => Promise<void>
   doClockIn: (time: string, sessionId?: string | null) => void
   doClockOut: (time: string) => void
-  addSession: (start: string, sessionId: string) => void
+  addSession: (start: string, sessionId: string, date?: string) => void
   closeSession: (endTime: string) => void
   addWeeklyHours: (delta: number) => void
   reset: () => void
@@ -92,11 +92,11 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     })
   },
 
-  addSession: (start, sessionId) => {
+  addSession: (start, sessionId, date) => {
     set((s) => ({
       clockIn: start,
       openSessionId: sessionId,
-      todaySessions: [...s.todaySessions, { start, end: null }],
+      todaySessions: [...s.todaySessions, { start, end: null, date }],
     }))
   },
 

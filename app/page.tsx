@@ -51,6 +51,7 @@ export default function HomePage() {
   const [clockBlockReason, setClockBlockReason] = useState<string | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [lunchBreak, setLunchBreak] = useState(true);
+  const [sessionEdit, setSessionEdit] = useState<{ dir: "in" | "out"; time: string; reason: string; date: string; startTime: string; endTime: string } | null>(null);
 
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
@@ -399,11 +400,19 @@ export default function HomePage() {
                 {todaySessions.map((s, i) => (
                   <div key={i} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50">
                     <span className="text-xs text-gray-400">세션 {i + 1}</span>
-                    <span className="text-sm font-semibold text-gray-700">
-                      {s.start}
-                      <span className="text-gray-400 font-normal mx-1.5">→</span>
-                      {s.end ? <span className="text-gray-700">{s.end}</span> : <span className="text-blue-500">진행 중</span>}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-700">
+                        {s.start}
+                        <span className="text-gray-400 font-normal mx-1.5">→</span>
+                        {s.end ? <span className="text-gray-700">{s.end}</span> : <span className="text-blue-500">진행 중</span>}
+                      </span>
+                      <button
+                        onClick={() => setSessionEdit({ dir: "in", time: s.start, reason: "", date: s.date ?? todayStr, startTime: s.start, endTime: s.end ?? "" })}
+                        className="text-[11px] font-medium text-blue-500 bg-blue-100 px-2 py-0.5 rounded-full"
+                      >
+                        수정
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -516,6 +525,60 @@ export default function HomePage() {
       </div>
 
       <BottomNav />
+
+      {/* 세션 수정 요청 모달 */}
+      {sessionEdit && (
+        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <p className="text-base font-bold text-gray-900 mb-1">출퇴근 수정 요청</p>
+            <p className="text-xs text-gray-400 mb-4">수정 요청은 관리자 승인 후 반영됩니다.</p>
+            <div className="flex gap-2 mb-3">
+              {(["in", "out"] as const).map(dir => (
+                <button key={dir} onClick={() => setSessionEdit(e => e ? { ...e, dir, time: dir === "in" ? e.startTime : e.endTime } : e)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors ${sessionEdit.dir === dir ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-500"}`}>
+                  {dir === "in" ? "출근 시간" : "퇴근 시간"}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs font-medium text-gray-500 mb-1.5">수정 일자</p>
+            <input type="date" value={sessionEdit.date}
+              onChange={e => setSessionEdit(s => s ? { ...s, date: e.target.value } : s)}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 mb-3" />
+            <p className="text-xs font-medium text-gray-500 mb-1.5">수정 시간</p>
+            <input type="time" value={sessionEdit.time}
+              onChange={e => setSessionEdit(s => s ? { ...s, time: e.target.value } : s)}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 mb-3" />
+            <p className="text-xs font-medium text-gray-500 mb-1.5">수정 사유</p>
+            <textarea value={sessionEdit.reason}
+              onChange={e => setSessionEdit(s => s ? { ...s, reason: e.target.value } : s)}
+              placeholder="수정 사유를 입력해주세요" rows={3}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 resize-none mb-4" />
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!user || !sessionEdit.time || !sessionEdit.reason.trim()) return;
+                  await supabase.from("attendance_edit_requests").insert({
+                    user_id: user.id,
+                    date: sessionEdit.date,
+                    direction: sessionEdit.dir,
+                    requested_time: sessionEdit.time,
+                    reason: sessionEdit.reason.trim(),
+                    requested_at: new Date().toISOString(),
+                    status: "pending",
+                  });
+                  setSessionEdit(null);
+                  showToast("수정 요청이 전송되었습니다.");
+                }}
+                disabled={!sessionEdit.time || !sessionEdit.reason.trim()}
+                className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium disabled:opacity-40">
+                요청 전송
+              </button>
+              <button onClick={() => setSessionEdit(null)}
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -219,7 +219,13 @@ export default function AttendancePage() {
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
     ]);
 
-    // 미완료 날 계산 (과거 평일 중 출근/퇴근 누락)
+    // 세션 트래킹 유저는 work_sessions도 조회
+    const isSessionTracking = useAttendanceStore.getState().profile.use_session_tracking;
+    const { data: sessionRecs } = isSessionTracking
+      ? await supabase.from("work_sessions").select("date, start_time, end_time").eq("user_id", uid).gte("date", startDate).lte("date", endDate)
+      : { data: [] };
+
+    // 미완료 날 계산 (과거 평일 중 퇴근 누락)
     const todayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
     const approvedFullDayVacs = new Set(
       (myVacRes.data ?? [])
@@ -241,8 +247,13 @@ export default function AttendancePage() {
       if (dow === 0 || dow === 6) continue;
       if (isHoliday(dateStr)) continue;
       if (approvedFullDayVacs.has(dateStr)) continue;
-      const rec = attMap[dateStr];
-      if (rec?.clock_in && !rec.clock_out) newMissing.add(dateStr);
+      if (isSessionTracking) {
+        const hasOpen = (sessionRecs ?? []).some(s => s.date === dateStr && s.start_time && !s.end_time);
+        if (hasOpen) newMissing.add(dateStr);
+      } else {
+        const rec = attMap[dateStr];
+        if (rec?.clock_in && !rec.clock_out) newMissing.add(dateStr);
+      }
     }
     setMissingDays(newMissing);
 
@@ -767,7 +778,9 @@ export default function AttendancePage() {
               {modalMode === "attendance-edit" && (
                 <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
                   <div className="mb-4 px-3 py-2.5 bg-red-50 rounded-xl">
-                    <p className="text-xs text-red-500 font-medium">퇴근 기록 누락 — 퇴근 시간을 입력해주세요</p>
+                    <p className="text-xs text-red-500 font-medium">
+                      {useSessionTracking ? "세션 종료 누락 — 종료 시간을 입력해주세요" : "퇴근 기록 누락 — 퇴근 시간을 입력해주세요"}
+                    </p>
                   </div>
                   <label className="text-xs text-gray-500 mb-1.5 block">수정 시간</label>
                   <input type="time" value={attEditTime} onChange={e => setAttEditTime(e.target.value)}

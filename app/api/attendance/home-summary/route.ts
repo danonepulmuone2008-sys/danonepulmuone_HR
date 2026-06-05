@@ -59,14 +59,33 @@ export async function GET(req: Request) {
   let todaySessions: { start: string; end: string | null }[] = []
 
   if (useSessionTracking) {
+    const yesterdayStr = getKSTDateStr(-1)
     const { data: sessions } = await supabaseAdmin
       .from("work_sessions")
-      .select("id, start_time, end_time")
+      .select("id, start_time, end_time, date")
       .eq("user_id", userId)
       .eq("date", todayStr)
       .order("start_time")
-    const open = (sessions ?? []).find(s => !s.end_time)
-    todaySessions = (sessions ?? []).map(s => ({ start: fmtTime(s.start_time), end: s.end_time ? fmtTime(s.end_time) : null }))
+    let open = (sessions ?? []).find(s => !s.end_time)
+    todaySessions = (sessions ?? []).map(s => ({ start: fmtTime(s.start_time), end: s.end_time ? fmtTime(s.end_time) : null, date: s.date }))
+
+    // 오늘 세션이 아예 없을 때만 어제 오픈 세션 확인 (자정 넘긴 경우)
+    if (!open && (sessions ?? []).length === 0) {
+      const { data: yesterdaySessions } = await supabaseAdmin
+        .from("work_sessions")
+        .select("id, start_time, end_time, date")
+        .eq("user_id", userId)
+        .eq("date", yesterdayStr)
+      open = (yesterdaySessions ?? []).find(s => !s.end_time)
+      // 어제 세션도 표시 목록에 포함
+      if (yesterdaySessions?.length) {
+        todaySessions = [
+          ...(yesterdaySessions.map(s => ({ start: fmtTime(s.start_time), end: s.end_time ? fmtTime(s.end_time) : null, date: s.date }))),
+          ...todaySessions,
+        ]
+      }
+    }
+
     openSessionId = open?.id ?? null
     if (open) clockIn = fmtTime(open.start_time)
   } else {
