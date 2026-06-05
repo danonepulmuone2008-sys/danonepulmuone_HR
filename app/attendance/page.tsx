@@ -91,7 +91,7 @@ export default function AttendancePage() {
   const [showVacDetail, setShowVacDetail] = useState(false);
   const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage" }[]>([]);
   const [vacHistoryLoading, setVacHistoryLoading] = useState(false);
-  const [missingDays, setMissingDays] = useState<Set<string>>(new Set());
+  const [missingDays, setMissingDays] = useState<Record<string, { clockIn: string }>>({});
   const [attEditDir, setAttEditDir] = useState<"in" | "out">("out");
   const [attEditTime, setAttEditTime] = useState("");
   const [attEditReason, setAttEditReason] = useState("");
@@ -239,7 +239,9 @@ export default function AttendancePage() {
         })
     );
     const attMap = Object.fromEntries((attRecRes.data ?? []).map(r => [r.date, r]));
-    const newMissing = new Set<string>();
+    const fmtTs = (ts: string) => { const d = new Date(ts); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    // work_sessions start_time은 timestamptz → 브라우저 로컬 KST로 표시됨
+    const newMissing: Record<string, { clockIn: string }> = {};
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${calYear}-${m}-${String(day).padStart(2, "0")}`;
       if (dateStr >= todayStr) continue;
@@ -248,11 +250,11 @@ export default function AttendancePage() {
       if (isHoliday(dateStr)) continue;
       if (approvedFullDayVacs.has(dateStr)) continue;
       if (isSessionTracking) {
-        const hasOpen = (sessionRecs ?? []).some(s => s.date === dateStr && s.start_time && !s.end_time);
-        if (hasOpen) newMissing.add(dateStr);
+        const openSession = (sessionRecs ?? []).find(s => s.date === dateStr && s.start_time && !s.end_time);
+        if (openSession) newMissing[dateStr] = { clockIn: fmtTs(openSession.start_time) };
       } else {
         const rec = attMap[dateStr];
-        if (rec?.clock_in && !rec.clock_out) newMissing.add(dateStr);
+        if (rec?.clock_in && !rec.clock_out) newMissing[dateStr] = { clockIn: fmtTs(rec.clock_in) };
       }
     }
     setMissingDays(newMissing);
@@ -367,7 +369,7 @@ export default function AttendancePage() {
   useEffect(() => {
     if (!userId) return;
     fetchMonthData(userId);
-  }, [userId, fetchMonthData]);
+  }, [userId, fetchMonthData, useSessionTracking]);
 
   const totalHours = weekDays.reduce((sum, d) => sum + d.hours, 0);
   const goalMonday = getMondayOfWeek(new Date());
@@ -517,7 +519,7 @@ export default function AttendancePage() {
                   const flexEntries = day ? (flexMap[day] ?? []) : [];
                   const teamEntries = day ? (teamMap[day] ?? []) : [];
                   const isToday = calYear === currentYear && calMonth === currentMonth && day === todayDate;
-                  const isMissing = day ? missingDays.has(dayStr) : false;
+                  const isMissing = day ? !!missingDays[dayStr] : false;
                   const dayColor = isToday ? "" : (holiday || isSunday) ? "text-red-500" : isSaturday ? "text-blue-400" : "text-gray-700";
                   return (
                     <div key={di} className="relative flex flex-col items-center py-0.5" onClick={() => { if (day) { setSelectedDay(day); setModalMode("detail"); } }}>
@@ -610,7 +612,8 @@ export default function AttendancePage() {
         const myFlexForDay = dayFlex.find(f => f.userId === userId);
         const isSelectedDayPast = new Date(calYear, calMonth, selectedDay) < new Date(currentYear, currentMonth, todayDate);
         const selectedDateStr = `${calYear}-${calMm}-${String(selectedDay).padStart(2, "0")}`;
-        const isDayMissing = missingDays.has(selectedDateStr);
+        const isDayMissing = !!missingDays[selectedDateStr];
+        const missingClockIn = missingDays[selectedDateStr]?.clockIn;
         const closeModal = () => {
           setSelectedDay(null);
           setModalMode("detail");
@@ -777,10 +780,15 @@ export default function AttendancePage() {
 
               {modalMode === "attendance-edit" && (
                 <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
-                  <div className="mb-4 px-3 py-2.5 bg-red-50 rounded-xl">
-                    <p className="text-xs text-red-500 font-medium">
-                      {useSessionTracking ? "세션 종료 누락 — 종료 시간을 입력해주세요" : "퇴근 기록 누락 — 퇴근 시간을 입력해주세요"}
-                    </p>
+                  <div className="mb-4 bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">출근 시간</span>
+                      <span className="font-medium text-gray-700">{missingClockIn ?? "--:--"}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">퇴근 시간</span>
+                      <span className="font-medium text-red-500">누락</span>
+                    </div>
                   </div>
                   <label className="text-xs text-gray-500 mb-1.5 block">수정 시간</label>
                   <input type="time" value={attEditTime} onChange={e => setAttEditTime(e.target.value)}
