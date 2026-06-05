@@ -76,7 +76,7 @@ export default function AttendancePage() {
   const [showTeam, setShowTeam] = useState(false);
   const [showFlex, setShowFlex] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [modalMode, setModalMode] = useState<"detail" | "flex-add">("detail");
+  const [modalMode, setModalMode] = useState<"detail" | "flex-add" | "attendance-edit">("detail");
   const [flexInput, setFlexInput] = useState({ startTime: "", endTime: "" });
   const [weekDays, setWeekDays] = useState<DayData[]>(DAY_LABELS.map(day => ({ day, hours: 0 })));
   const [eventMap, setEventMap] = useState<Record<number, CalEvent[]>>({});
@@ -91,6 +91,11 @@ export default function AttendancePage() {
   const [showVacDetail, setShowVacDetail] = useState(false);
   const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage" }[]>([]);
   const [vacHistoryLoading, setVacHistoryLoading] = useState(false);
+  const [missingDays, setMissingDays] = useState<Set<string>>(new Set());
+  const [attEditDir, setAttEditDir] = useState<"in" | "out">("out");
+  const [attEditTime, setAttEditTime] = useState("");
+  const [attEditReason, setAttEditReason] = useState("");
+  const [attEditSubmitting, setAttEditSubmitting] = useState(false);
   const { user } = useAuth();
   const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll } = useAttendanceStore();
   const useSessionTracking = attProfile.use_session_tracking;
@@ -197,7 +202,7 @@ export default function AttendancePage() {
     const startDate = `${calYear}-${m}-01`;
     const endDate = `${calYear}-${m}-${String(daysInMonth).padStart(2, "0")}`;
 
-    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes] = await Promise.all([
+    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes, attRecRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status, start_time, end_time, lunch_break, hours")
         .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
@@ -211,7 +216,35 @@ export default function AttendancePage() {
       supabase.from("users").select("id, name").eq("is_active", true),
       supabase.from("vacation_requests").select("id, type, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("business_trip_requests").select("id, destination, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
+      supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
     ]);
+
+    // 미완료 날 계산 (과거 평일 중 출근/퇴근 누락)
+    const todayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`;
+    const approvedFullDayVacs = new Set(
+      (myVacRes.data ?? [])
+        .filter(v => v.status === "approved" && !v.hours)
+        .flatMap(v => {
+          const days: string[] = [];
+          for (let d = new Date(v.start_date + "T00:00:00"); d <= new Date(v.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
+            days.push(d.toISOString().slice(0, 10));
+          }
+          return days;
+        })
+    );
+    const attMap = Object.fromEntries((attRecRes.data ?? []).map(r => [r.date, r]));
+    const newMissing = new Set<string>();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${calYear}-${m}-${String(day).padStart(2, "0")}`;
+      if (dateStr >= todayStr) continue;
+      const dow = new Date(dateStr + "T00:00:00").getDay();
+      if (dow === 0 || dow === 6) continue;
+      if (isHoliday(dateStr)) continue;
+      if (approvedFullDayVacs.has(dateStr)) continue;
+      const rec = attMap[dateStr];
+      if (rec?.clock_in && !rec.clock_out) newMissing.add(dateStr);
+    }
+    setMissingDays(newMissing);
 
     const nameMap = Object.fromEntries((usersRes.data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
     const activeIds = new Set(Object.keys(nameMap));
@@ -473,6 +506,7 @@ export default function AttendancePage() {
                   const flexEntries = day ? (flexMap[day] ?? []) : [];
                   const teamEntries = day ? (teamMap[day] ?? []) : [];
                   const isToday = calYear === currentYear && calMonth === currentMonth && day === todayDate;
+                  const isMissing = day ? missingDays.has(dayStr) : false;
                   const dayColor = isToday ? "" : (holiday || isSunday) ? "text-red-500" : isSaturday ? "text-blue-400" : "text-gray-700";
                   return (
                     <div key={di} className="relative flex flex-col items-center py-0.5" onClick={() => { if (day) { setSelectedDay(day); setModalMode("detail"); } }}>
@@ -485,6 +519,9 @@ export default function AttendancePage() {
                         ))}
                         {showTeam && teamEntries.length > 0 && (
                           <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                        )}
+                        {isMissing && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                         )}
                       </div>
                       {showFlex && flexEntries.length > 0 && (
@@ -561,19 +598,42 @@ export default function AttendancePage() {
         const dayTeam = teamMap[selectedDay] ?? [];
         const myFlexForDay = dayFlex.find(f => f.userId === userId);
         const isSelectedDayPast = new Date(calYear, calMonth, selectedDay) < new Date(currentYear, currentMonth, todayDate);
+        const selectedDateStr = `${calYear}-${calMm}-${String(selectedDay).padStart(2, "0")}`;
+        const isDayMissing = missingDays.has(selectedDateStr);
         const closeModal = () => {
           setSelectedDay(null);
           setModalMode("detail");
           setFlexInput({ startTime: "", endTime: "" });
+          setAttEditDir("out"); setAttEditTime(""); setAttEditReason("");
         };
         const goBack = () => {
           setModalMode("detail");
           setFlexInput({ startTime: "", endTime: "" });
+          setAttEditDir("out"); setAttEditTime(""); setAttEditReason("");
+        };
+        const handleAttEditSubmit = async () => {
+          if (!user || !attEditTime || !attEditReason.trim()) return;
+          setAttEditSubmitting(true);
+          try {
+            await supabase.from("attendance_edit_requests").insert({
+              user_id: user.id,
+              date: selectedDateStr,
+              direction: attEditDir,
+              requested_time: attEditTime,
+              reason: attEditReason.trim(),
+              requested_at: new Date().toISOString(),
+              status: "pending",
+            });
+            goBack();
+          } finally {
+            setAttEditSubmitting(false);
+          }
         };
         const modalTitle = modalMode === "flex-add"
           ? (myFlexForDay ? "유연근무 수정" : "유연근무 등록")
+          : modalMode === "attendance-edit" ? "출퇴근 수정 요청"
           : `${calMonth + 1}월 ${selectedDay}일`;
-        const modalSub = modalMode === "flex-add" ? "나의 근무 시간을 입력하세요" : "해당 날의 전체 일정";
+        const modalSub = modalMode === "flex-add" ? "나의 근무 시간을 입력하세요" : modalMode === "attendance-edit" ? "관리자에게 수정을 요청합니다" : "해당 날의 전체 일정";
         return (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8" onClick={closeModal}>
             <div className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col" style={{ maxHeight: "80vh" }} onClick={e => e.stopPropagation()}>
@@ -659,7 +719,16 @@ export default function AttendancePage() {
                   )}
                   <div className="mt-2 mb-1">
                     {isSelectedDayPast ? (
-                      <p className="text-xs text-gray-400 text-center py-3">지난 날짜는 수정할 수 없습니다</p>
+                      isDayMissing ? (
+                        <button
+                          onClick={() => setModalMode("attendance-edit")}
+                          className="w-full py-3.5 bg-red-500 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
+                        >
+                          출퇴근 수정 요청
+                        </button>
+                      ) : (
+                        <p className="text-xs text-gray-400 text-center py-3">지난 날짜는 수정할 수 없습니다</p>
+                      )
                     ) : (
                       <button
                         onClick={() => { if (myFlexForDay) setFlexInput({ startTime: myFlexForDay.startTime, endTime: myFlexForDay.endTime }); setModalMode("flex-add"); }}
@@ -694,6 +763,25 @@ export default function AttendancePage() {
                   </div>
                 );
               })()}
+
+              {modalMode === "attendance-edit" && (
+                <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
+                  <div className="mb-4 px-3 py-2.5 bg-red-50 rounded-xl">
+                    <p className="text-xs text-red-500 font-medium">퇴근 기록 누락 — 퇴근 시간을 입력해주세요</p>
+                  </div>
+                  <label className="text-xs text-gray-500 mb-1.5 block">수정 시간</label>
+                  <input type="time" value={attEditTime} onChange={e => setAttEditTime(e.target.value)}
+                    className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-red-400 bg-gray-50 mb-3" />
+                  <label className="text-xs text-gray-500 mb-1.5 block">수정 사유</label>
+                  <textarea value={attEditReason} onChange={e => setAttEditReason(e.target.value)}
+                    placeholder="수정 사유를 입력해주세요" rows={3}
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-red-400 bg-gray-50 resize-none mb-4" />
+                  <button onClick={handleAttEditSubmit} disabled={!attEditTime || !attEditReason.trim() || attEditSubmitting}
+                    className="w-full py-4 bg-red-500 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all disabled:opacity-40">
+                    {attEditSubmitting ? "전송 중..." : "요청 전송"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         );
