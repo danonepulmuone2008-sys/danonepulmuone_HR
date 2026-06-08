@@ -197,6 +197,7 @@ export default function AdminAttendancePage() {
   const [confirmChange, setConfirmChange] = useState<{ req: ApprovalRequest; targetAction: "approved" | "rejected" } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ApprovalRequest | null>(null);
   const [deleteToast, setDeleteToast] = useState(false);
+  const [approvalToast, setApprovalToast] = useState<string | null>(null);
   const APPROVAL_PAGE_SIZE = 5;
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
@@ -447,7 +448,13 @@ export default function AdminAttendancePage() {
     }
   }
 
+  function showApprovalToast(msg: string) {
+    setApprovalToast(msg);
+    setTimeout(() => setApprovalToast(null), 1000);
+  }
+
   async function handleApproval(req: ApprovalRequest, action: "approved" | "rejected") {
+    const label = action === "approved" ? "승인" : "반려";
     setProcessingId(req.id);
     try {
       const token = user?.token;
@@ -464,7 +471,12 @@ export default function AdminAttendancePage() {
         } else {
           setRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: action } : r));
         }
+        showApprovalToast(`${label} 완료되었습니다`);
+      } else {
+        showApprovalToast(`${label} 실패하였습니다`);
       }
+    } catch {
+      showApprovalToast(`${label} 실패하였습니다`);
     } finally {
       setProcessingId(null);
     }
@@ -630,6 +642,12 @@ export default function AdminAttendancePage() {
       {deleteToast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none">
           삭제 되었습니다
+        </div>
+      )}
+
+      {approvalToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none">
+          {approvalToast}
         </div>
       )}
 
