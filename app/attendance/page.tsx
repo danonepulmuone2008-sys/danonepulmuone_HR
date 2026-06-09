@@ -87,7 +87,6 @@ export default function AttendancePage() {
   const [deletingReqId, setDeletingReqId] = useState<string | null>(null);
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
-  const [vacRemaining, setVacRemaining] = useState<number | null>(null);
   const [showVacDetail, setShowVacDetail] = useState(false);
   const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage" }[]>([]);
   const [vacHistoryLoading, setVacHistoryLoading] = useState(false);
@@ -97,7 +96,7 @@ export default function AttendancePage() {
   const [attEditReason, setAttEditReason] = useState("");
   const [attEditSubmitting, setAttEditSubmitting] = useState(false);
   const { user } = useAuth();
-  const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll } = useAttendanceStore();
+  const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining } = useAttendanceStore();
   const useSessionTracking = attProfile.use_session_tracking;
   const userId = user?.id ?? null;
 
@@ -335,16 +334,8 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (!userId) return;
-    Promise.all([
-      supabase.from("vacation_grants").select("hours").eq("user_id", userId).eq("year", currentYear),
-      supabase.from("vacation_requests").select("hours").eq("user_id", userId).eq("status", "approved")
-        .gte("start_date", `${currentYear}-01-01`).lte("start_date", `${currentYear}-12-31`),
-    ]).then(([{ data: grants }, { data: usage }]) => {
-      const granted = (grants ?? []).reduce((sum, g) => sum + (g.hours ?? 0), 0);
-      const used = (usage ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0);
-      setVacRemaining(Math.max(0, granted - used));
-    });
-  }, [userId]);
+    fetchVacRemaining(userId);
+  }, [userId, fetchVacRemaining]);
 
   const handleOpenVacDetail = async () => {
     if (!userId) return;

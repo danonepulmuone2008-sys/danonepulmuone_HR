@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { supabase } from "@/lib/supabase"
 
 export interface AttendanceProfile {
   name: string
@@ -16,10 +17,12 @@ interface AttendanceState {
   todaySessions: { start: string; end: string | null; date?: string }[]
   weeklyHours: number
   weeklyGoal: number
+  vacRemaining: number | null
   loaded: boolean
   loading: boolean
 
   fetchAll: (token: string) => Promise<void>
+  fetchVacRemaining: (userId: string) => Promise<void>
   doClockIn: (time: string, sessionId?: string | null) => void
   doClockOut: (time: string) => void
   addSession: (start: string, sessionId: string, date?: string) => void
@@ -40,8 +43,21 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   todaySessions: [],
   weeklyHours: 0,
   weeklyGoal: 0,
+  vacRemaining: null,
   loaded: false,
   loading: false,
+
+  fetchVacRemaining: async (userId: string) => {
+    const currentYear = new Date().getFullYear()
+    const [{ data: grants }, { data: usage }] = await Promise.all([
+      supabase.from("vacation_grants").select("hours").eq("user_id", userId).eq("year", currentYear),
+      supabase.from("vacation_requests").select("hours").eq("user_id", userId).eq("status", "approved")
+        .gte("start_date", `${currentYear}-01-01`).lte("start_date", `${currentYear}-12-31`),
+    ])
+    const granted = (grants ?? []).reduce((sum, g) => sum + (g.hours ?? 0), 0)
+    const used = (usage ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0)
+    set({ vacRemaining: Math.max(0, granted - used) })
+  },
 
   fetchAll: async (token: string) => {
     if (get().loading) return
@@ -120,6 +136,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       clockIn: null, clockOut: null,
       openSessionId: null, todaySessions: [],
       weeklyHours: 0, weeklyGoal: 0,
+      vacRemaining: null,
       loaded: false, loading: false,
     })
   },

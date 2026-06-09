@@ -1,13 +1,17 @@
 "use client";
 import AppBar from "@/components/AppBar";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
+import { useAttendanceStore } from "@/store/attendanceStore";
 
 const VACATION_TYPES = ["연차", "반차(오전)", "반차(오후)", "병가", "경조사", "면접", "시간 휴가"];
 
 export default function VacationPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { vacRemaining, fetchVacRemaining } = useAttendanceStore();
   const [form, setForm] = useState({ startDate: "", endDate: "", type: "연차", reason: "", startTime: "", endTime: "", lunchBreak: false });
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -15,6 +19,11 @@ export default function VacationPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isHourly = form.type === "시간 휴가";
+  const noHourlyLeft = vacRemaining !== null && vacRemaining <= 0;
+
+  useEffect(() => {
+    if (user?.id) fetchVacRemaining(user.id);
+  }, [user?.id, fetchVacRemaining]);
 
   const calcHours = (): number | null => {
     if (!form.startTime || !form.endTime) return null;
@@ -129,21 +138,35 @@ export default function VacationPage() {
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">휴가 종류</label>
             <div className="flex flex-wrap gap-2">
-              {VACATION_TYPES.map(type => (
-                <button
-                  key={type}
-                  onClick={() => update("type", type)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                    form.type === type
-                      ? type === "시간 휴가"
-                        ? "bg-green-500 text-white border-green-500"
-                        : "bg-blue-600 text-white border-blue-600"
-                      : "bg-gray-50 text-gray-600 border-gray-200"
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
+              {VACATION_TYPES.map(type => {
+                const disabled = type === "시간 휴가" && noHourlyLeft;
+                const btn = (
+                  <button
+                    onClick={() => { if (!disabled) update("type", type); }}
+                    aria-disabled={disabled}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                      disabled
+                        ? "bg-gray-100 text-gray-300 border-gray-200"
+                        : form.type === type
+                          ? type === "시간 휴가"
+                            ? "bg-green-500 text-white border-green-500"
+                            : "bg-blue-600 text-white border-blue-600"
+                          : "bg-gray-50 text-gray-600 border-gray-200"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                );
+                if (!disabled) return <span key={type}>{btn}</span>;
+                return (
+                  <span key={type} className="relative group">
+                    {btn}
+                    <span className="pointer-events-none absolute top-full mt-1.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                      잔여 휴가 없음
+                    </span>
+                  </span>
+                );
+              })}
             </div>
           </div>
 
