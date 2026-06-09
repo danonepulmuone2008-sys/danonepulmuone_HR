@@ -802,7 +802,7 @@ export default function AttendancePage() {
       {/* 휴가 내역 모달 */}
       {showVacDetail && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowVacDetail(false)}>
-          <div className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col" style={{ minHeight: "50vh", maxHeight: "75vh" }} onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col" style={{ minHeight: "50dvh", maxHeight: "75dvh" }} onClick={e => e.stopPropagation()}>
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
