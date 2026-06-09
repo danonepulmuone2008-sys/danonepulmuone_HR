@@ -83,5 +83,5 @@ export async function GET(req: Request) {
   const totalIn       = (transfersIn ?? []).reduce((sum, t) => sum + t.amount, 0)
   const remaining     = monthlyLimit - totalUsed - totalOut + totalIn
 
-  return NextResponse.json({ entries, monthlyLimit, totalUsed, remaining })
+  return NextResponse.json({ entries, monthlyLimit, totalUsed, transferredOut: totalOut, transferredIn: totalIn, remaining })
 }

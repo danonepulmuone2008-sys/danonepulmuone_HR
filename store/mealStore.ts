@@ -22,6 +22,8 @@ interface MealState {
   // 한도/사용/잔여
   monthlyLimit: number
   totalUsed: number
+  transferredOut: number
+  transferredIn: number
   remaining: number
   // 승인 대기
   pendingItems: PendingItem[]
@@ -41,6 +43,8 @@ interface MealState {
 export const useMealStore = create<MealState>((set, get) => ({
   monthlyLimit: 0,
   totalUsed: 0,
+  transferredOut: 0,
+  transferredIn: 0,
   remaining: 0,
   pendingItems: [],
   pendingTransfers: [],
@@ -77,6 +81,8 @@ export const useMealStore = create<MealState>((set, get) => ({
       set({
         monthlyLimit: historyData?.monthlyLimit ?? 0,
         totalUsed: historyData?.totalUsed ?? 0,
+        transferredOut: historyData?.transferredOut ?? 0,
+        transferredIn: historyData?.transferredIn ?? 0,
         remaining: historyData?.remaining ?? 0,
         pendingItems: Array.isArray(pendingItemsData) ? pendingItemsData : [],
         pendingTransfers: Array.isArray(pendingTransfersData) ? pendingTransfersData : [],

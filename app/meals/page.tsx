@@ -65,6 +65,8 @@ export default function MealsPage() {
   const {
     monthlyLimit: totalLimit,
     totalUsed: mealUsed,
+    transferredOut: mealTransferredOut,
+    transferredIn: mealTransferredIn,
     remaining,
     pendingItems,
     pendingTransfers,
@@ -81,6 +83,8 @@ export default function MealsPage() {
   const [actioning, setActioning] = useState(false);
   const [transferActioning, setTransferActioning] = useState(false);
 
+  const mealTotal = totalLimit + mealTransferredIn - mealTransferredOut;
+  const hasTransfer = mealTransferredIn > 0 || mealTransferredOut > 0;
   const mealPercent = totalLimit > 0 ? Math.round(((totalLimit - remaining) / totalLimit) * 100) : 0;
 
   const handleTransferAction = async (id: string, action: "approved" | "rejected") => {
@@ -280,7 +284,10 @@ export default function MealsPage() {
           <p className="text-xl font-extrabold text-blue-500 mb-0.5">
             {year}년 {month}월
           </p>
-          <p className="text-xs text-gray-900 mb-4">한도 {totalLimit.toLocaleString()}원</p>
+          <p className={`text-xs text-gray-900 ${hasTransfer ? "mb-0.5" : "mb-4"}`}>한도 {totalLimit.toLocaleString()}원</p>
+          {hasTransfer && (
+            <p className="text-xs text-blue-600 font-medium mb-4">양도/수신 후 {mealTotal.toLocaleString()}원</p>
+          )}
           <div className="flex justify-between items-end mb-3">
             <div>
               <p className="text-base font-semibold text-gray-900">{mealUsed.toLocaleString()}원</p>
