@@ -813,7 +813,7 @@ export default function AttendancePage() {
               </div>
               <button onClick={() => setShowVacDetail(false)} className="text-gray-400 text-xl leading-none">×</button>
             </div>
-            <div className="overflow-y-auto flex-1 px-5 py-3">
+            <div className="overflow-y-auto flex-1 px-5 pt-3 pb-[calc(5rem+env(safe-area-inset-bottom))]">
               {vacHistoryLoading ? (
                 <div className="flex justify-center py-10">
                   <div className="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
