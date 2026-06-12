@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
 import { requireUser } from "@/lib/auth"
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays"
+import { kstMinutesOfDay, overlapHours, toWindow, type HourlyVacWindow } from "@/lib/workHours"
 
 const KST = 9 * 60 * 60 * 1000
 const toMin = (ts: string) => Math.floor(new Date(ts).getTime() / 60000)
@@ -107,19 +108,30 @@ export async function GET(req: Request) {
       ? supabaseAdmin.from("work_sessions").select("date, start_time, end_time, lunch_break").eq("user_id", userId).gte("date", mondayStr).lte("date", fridayStr).not("end_time", "is", null).then(r => r.data ?? [])
       : supabaseAdmin.from("attendance_records").select("date, clock_in, clock_out, lunch_break").eq("user_id", userId).gte("date", mondayStr).lte("date", fridayStr).then(r => r.data ?? []),
     supabaseAdmin.from("business_trip_requests").select("start_date, end_date, start_time, end_time").eq("user_id", userId).eq("status", "approved").lte("start_date", fridayStr).gte("end_date", mondayStr),
-    supabaseAdmin.from("vacation_requests").select("start_date, hours").eq("user_id", userId).eq("status", "approved").not("hours", "is", null).gte("start_date", mondayStr).lte("start_date", fridayStr),
+    supabaseAdmin.from("vacation_requests").select("start_date, hours, start_time, end_time").eq("user_id", userId).eq("status", "approved").not("hours", "is", null).gte("start_date", mondayStr).lte("start_date", fridayStr),
   ])
+
+  // 시간 휴가 창(날짜별) — 근무 구간과 겹치는 만큼 근무시간에서 차감
+  const vacWindowsByDate: Record<string, HourlyVacWindow[]> = {}
+  for (const v of weekVacations ?? []) {
+    const w = toWindow(v.start_time, v.end_time)
+    if (w) (vacWindowsByDate[v.start_date] ??= []).push(w)
+  }
 
   if (useSessionTracking) {
     weeklyHours = (weekAttendance as any[]).reduce((sum: number, s: any) => {
       const h = (toMin(s.end_time) - toMin(s.start_time)) / 60
-      return sum + (s.lunch_break && h >= 1 ? h - 1 : h)
+      const worked = s.lunch_break && h >= 1 ? h - 1 : h
+      const ded = overlapHours(kstMinutesOfDay(s.start_time), kstMinutesOfDay(s.end_time), vacWindowsByDate[s.date] ?? [])
+      return sum + Math.max(0, worked - ded)
     }, 0)
   } else {
     weeklyHours = (weekAttendance as any[]).reduce((sum: number, r: any) => {
       if (!r.clock_in || !r.clock_out) return sum
       const h = (toMin(r.clock_out) - toMin(r.clock_in)) / 60
-      return sum + (r.lunch_break && h >= 1 ? h - 1 : h)
+      const worked = r.lunch_break && h >= 1 ? h - 1 : h
+      const ded = overlapHours(kstMinutesOfDay(r.clock_in), kstMinutesOfDay(r.clock_out), vacWindowsByDate[r.date] ?? [])
+      return sum + Math.max(0, worked - ded)
     }, 0)
   }
 

@@ -85,52 +85,68 @@ export default function HomePage() {
       return;
     }
 
-    if (direction === "in" && user) {
-      const [{ data: vacations }, { data: flexEntry }, { data: businessTrips }] = await Promise.all([
-        supabase.from("vacation_requests")
-          .select("type")
-          .eq("user_id", user.id)
-          .eq("status", "approved")
-          .lte("start_date", todayStr)
-          .gte("end_date", todayStr)
-          .limit(1),
-        supabase.from("flex_schedules")
-          .select("start_time, end_time")
-          .eq("user_id", user.id)
-          .eq("date", todayStr)
-          .maybeSingle(),
-        supabase.from("business_trip_requests")
-          .select("start_time, end_time, destination")
-          .eq("user_id", user.id)
-          .eq("status", "approved")
-          .lte("start_date", todayStr)
-          .gte("end_date", todayStr),
-      ]);
+    if (user) {
+      const currentTime = getNow();
+      const curMin = parseInt(currentTime.split(":")[0]) * 60 + parseInt(currentTime.split(":")[1]);
 
-      if (vacations && vacations.length > 0) {
-        setClockBlockReason("휴가 등록일입니다.");
+      // 휴가 확인 (출근·퇴근 공통)
+      const { data: vacations } = await supabase.from("vacation_requests")
+        .select("type, start_time, end_time")
+        .eq("user_id", user.id)
+        .eq("status", "approved")
+        .lte("start_date", todayStr)
+        .gte("end_date", todayStr);
+
+      // 시간 휴가: 해당 시간대에만 출근·퇴근 차단
+      const hourlyVac = (vacations ?? []).find(
+        (v) => v.type === "시간 휴가" && v.start_time != null && v.end_time != null
+          && curMin >= v.start_time * 60 && curMin < v.end_time * 60
+      );
+      if (hourlyVac) {
+        setClockBlockReason(`시간 휴가(${hourlyVac.start_time}:00~${hourlyVac.end_time}:00) 시간에는 출퇴근을 기록할 수 없습니다.`);
         return;
       }
 
-      if (businessTrips && businessTrips.length > 0) {
-        const currentTime = getNow();
-        const onTrip = businessTrips.some(
-          (t) => currentTime >= t.start_time && currentTime <= t.end_time
-        );
-        if (onTrip) {
-          setClockBlockReason("출장 중인 시간입니다.");
+      if (direction === "in") {
+        // 종일성 휴가(연차·반차 등)는 출근 차단
+        const fullDayVac = (vacations ?? []).some((v) => v.type !== "시간 휴가");
+        if (fullDayVac) {
+          setClockBlockReason("휴가 등록일입니다.");
           return;
         }
-      }
 
-      if (flexEntry) {
-        const currentTime = getNow();
-        const [sh, sm] = flexEntry.start_time.split(":").map(Number);
-        const totalMins = Math.max(0, sh * 60 + sm - 30);
-        const flexStartMinus30 = `${String(Math.floor(totalMins / 60)).padStart(2, "0")}:${String(totalMins % 60).padStart(2, "0")}`;
-        if (currentTime < flexStartMinus30 || currentTime > flexEntry.end_time) {
-          setClockBlockReason(`유연근무 설정 시간(${flexEntry.start_time} ~ ${flexEntry.end_time}) 외 출근입니다. (출근 가능: ${flexStartMinus30} ~ ${flexEntry.end_time})`);
-          return;
+        const [{ data: flexEntry }, { data: businessTrips }] = await Promise.all([
+          supabase.from("flex_schedules")
+            .select("start_time, end_time")
+            .eq("user_id", user.id)
+            .eq("date", todayStr)
+            .maybeSingle(),
+          supabase.from("business_trip_requests")
+            .select("start_time, end_time, destination")
+            .eq("user_id", user.id)
+            .eq("status", "approved")
+            .lte("start_date", todayStr)
+            .gte("end_date", todayStr),
+        ]);
+
+        if (businessTrips && businessTrips.length > 0) {
+          const onTrip = businessTrips.some(
+            (t) => currentTime >= t.start_time && currentTime <= t.end_time
+          );
+          if (onTrip) {
+            setClockBlockReason("출장 중인 시간입니다.");
+            return;
+          }
+        }
+
+        if (flexEntry) {
+          const [sh, sm] = flexEntry.start_time.split(":").map(Number);
+          const totalMins = Math.max(0, sh * 60 + sm - 30);
+          const flexStartMinus30 = `${String(Math.floor(totalMins / 60)).padStart(2, "0")}:${String(totalMins % 60).padStart(2, "0")}`;
+          if (currentTime < flexStartMinus30 || currentTime > flexEntry.end_time) {
+            setClockBlockReason(`유연근무 설정 시간(${flexEntry.start_time} ~ ${flexEntry.end_time}) 외 출근입니다. (출근 가능: ${flexStartMinus30} ~ ${flexEntry.end_time})`);
+            return;
+          }
         }
       }
     }

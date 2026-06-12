@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase"
+import { kstMinutesOfDay, overlapHours, toWindow, type HourlyVacWindow } from "@/lib/workHours"
 
 function calcHours(clockIn: string | null, clockOut: string | null, lunchBreak: boolean | null): number | null {
   if (!clockIn || !clockOut) return null
@@ -102,13 +103,20 @@ export async function GET(req: Request) {
         .gte("end_date", monday),
       supabaseAdmin
         .from("vacation_requests")
-        .select("user_id, start_date, hours")
+        .select("user_id, start_date, hours, start_time, end_time")
         .in("user_id", userIds)
         .eq("status", "approved")
         .not("hours", "is", null)
         .gte("start_date", monday)
         .lte("start_date", friday),
     ])
+
+    // 시간 휴가 창 맵: user_id__date → 분 단위 창 목록 (근무 구간 겹침 차감용)
+    const vacWindowMap: Record<string, HourlyVacWindow[]> = {}
+    for (const v of vacHourRows ?? []) {
+      const w = toWindow(v.start_time, v.end_time)
+      if (w) (vacWindowMap[`${v.user_id}__${v.start_date}`] ??= []).push(w)
+    }
 
     // 휴가/출장 맵: user_id__date → "vacation" | "business_trip"
     const vacMap: Record<string, "vacation" | "business_trip"> = {}
@@ -144,8 +152,13 @@ export async function GET(req: Request) {
     // 일반 출퇴근 기록
     for (const row of attendanceRows ?? []) {
       const key = `${row.user_id}__${row.date}`
+      let hours = calcHours(row.clock_in, row.clock_out, row.lunch_break)
+      if (hours !== null && row.clock_in && row.clock_out) {
+        const ded = overlapHours(kstMinutesOfDay(row.clock_in), kstMinutesOfDay(row.clock_out), vacWindowMap[key] ?? [])
+        hours = Math.round(Math.max(0, hours - ded) * 10) / 10
+      }
       recMap[key] = {
-        hours: calcHours(row.clock_in, row.clock_out, row.lunch_break),
+        hours,
         checkedIn: !!row.clock_in && !row.clock_out,
         clockIn: row.clock_in ?? undefined,
         clockOut: row.clock_out ?? undefined,
@@ -158,7 +171,8 @@ export async function GET(req: Request) {
       const key = `${s.user_id}__${s.date}`
       const h = (toMin(s.end_time) - toMin(s.start_time)) / 60
       const adjusted = s.lunch_break && h >= 1 ? h - 1 : h
-      const rounded = Math.round(adjusted * 10) / 10
+      const ded = overlapHours(kstMinutesOfDay(s.start_time), kstMinutesOfDay(s.end_time), vacWindowMap[key] ?? [])
+      const rounded = Math.round(Math.max(0, adjusted - ded) * 10) / 10
       if (recMap[key]) {
         recMap[key] = { ...recMap[key], hours: Math.round(((recMap[key].hours ?? 0) + rounded) * 10) / 10 }
       } else {
