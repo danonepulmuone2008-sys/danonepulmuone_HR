@@ -74,7 +74,7 @@ export default function AttendancePage() {
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [showTeam, setShowTeam] = useState(false);
-  const [showFlex, setShowFlex] = useState(false);
+  const [showFlex, setShowFlex] = useState(true);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [modalMode, setModalMode] = useState<"detail" | "flex-add" | "attendance-edit">("detail");
   const [flexInput, setFlexInput] = useState({ startTime: "", endTime: "" });
@@ -313,6 +313,8 @@ export default function AttendancePage() {
       if (!newFlexMap[day]) newFlexMap[day] = [];
       newFlexMap[day].push({ id: f.id, userId: f.user_id, userName: f.user_name, startTime: f.start_time, endTime: f.end_time });
     });
+    // 유연근무 목록을 이름순으로 정렬
+    Object.values(newFlexMap).forEach(list => list.sort((a, b) => a.userName.localeCompare(b.userName, "ko")));
     setFlexMap(newFlexMap);
 
     const reqList: RequestItem[] = [
