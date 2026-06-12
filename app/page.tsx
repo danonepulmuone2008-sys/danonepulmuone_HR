@@ -107,9 +107,21 @@ export default function HomePage() {
         return;
       }
 
+      // 반차(오전): 13:30부터 출근 가능 / 반차(오후): 12:30 이전 퇴근 가능
+      if (direction === "in" && (vacations ?? []).some((v) => v.type === "반차(오전)") && curMin < 13 * 60 + 30) {
+        setClockBlockReason("반차(오전) 사용일입니다. 13:30부터 출근할 수 있습니다.");
+        return;
+      }
+      if (direction === "out" && (vacations ?? []).some((v) => v.type === "반차(오후)") && curMin >= 12 * 60 + 30) {
+        setClockBlockReason("반차(오후) 사용일입니다. 12:30 이전에 퇴근해야 합니다.");
+        return;
+      }
+
       if (direction === "in") {
-        // 종일성 휴가(연차·반차 등)는 출근 차단
-        const fullDayVac = (vacations ?? []).some((v) => v.type !== "시간 휴가");
+        // 종일성 휴가(연차 등)는 출근 차단 (반차는 위에서 시간대로 처리)
+        const fullDayVac = (vacations ?? []).some(
+          (v) => v.type !== "시간 휴가" && v.type !== "반차(오전)" && v.type !== "반차(오후)"
+        );
         if (fullDayVac) {
           setClockBlockReason("휴가 등록일입니다.");
           return;
