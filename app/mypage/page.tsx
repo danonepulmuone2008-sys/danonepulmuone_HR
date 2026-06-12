@@ -392,6 +392,32 @@ const [showInquiry, setShowInquiry] = useState(false);
     setActiveAlarm(null);
   };
 
+  /* 알림 ON/OFF 토글 (즉시 DB 반영) */
+  const persistAlarm = async (next: { alarmOn?: boolean; mealAlarmOn?: boolean }) => {
+    if (!authUser) return;
+    await supabase.from("alarm_settings").upsert({
+      id: authUser.id,
+      alarm_on: next.alarmOn ?? alarmOn,
+      alarm_time: alarmTime,
+      alarm_days: alarmDays,
+      meal_alarm_on: next.mealAlarmOn ?? mealAlarmOn,
+      meal_alarm_time: mealAlarmTime,
+      meal_alarm_days: mealAlarmDays,
+    });
+  };
+
+  const toggleAttendanceAlarm = () => {
+    const next = !alarmOn;
+    setAlarmOn(next);
+    persistAlarm({ alarmOn: next });
+  };
+
+  const toggleMealAlarm = () => {
+    const next = !mealAlarmOn;
+    setMealAlarmOn(next);
+    persistAlarm({ mealAlarmOn: next });
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {toast && (
@@ -442,8 +468,8 @@ const [showInquiry, setShowInquiry] = useState(false);
               </button>
             </div>
           )}
-          <AlarmRow Icon={AlarmClock} label="근태" on={alarmOn} time={alarmTime} days={alarmDays} onToggle={() => setAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("근태")} />
-          <AlarmRow Icon={Utensils} label="식대" on={mealAlarmOn} time={mealAlarmTime} days={mealAlarmDays} onToggle={() => setMealAlarmOn((v) => !v)} onOpenDetail={() => openAlarm("식대")} />
+          <AlarmRow Icon={AlarmClock} label="근태" on={alarmOn} time={alarmTime} days={alarmDays} onToggle={toggleAttendanceAlarm} onOpenDetail={() => openAlarm("근태")} />
+          <AlarmRow Icon={Utensils} label="식대" on={mealAlarmOn} time={mealAlarmTime} days={mealAlarmDays} onToggle={toggleMealAlarm} onOpenDetail={() => openAlarm("식대")} />
         </section>
 
         {/* 보안 */}
