@@ -3,11 +3,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { supabaseAdmin } from "@/lib/supabase"
 import sharp from "sharp"
 
+// 재시도(아래 runGeminiOcr)가 누적돼도 함수가 강제 종료되지 않도록 실행시간 한도를 늘린다.
+// (설정이 없으면 Vercel 기본값이 적용돼 재시도 도중 504로 죽는다.)
+export const maxDuration = 60
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 const MODEL = "gemini-2.5-flash"
-const OCR_TIMEOUT_MS = 20000
-const OCR_MAX_ATTEMPTS = 3
+const OCR_TIMEOUT_MS = 15000
+const OCR_MAX_ATTEMPTS = 2
 
 const PROMPT = `이 영수증 이미지를 분석해서 아래 JSON 형식으로만 응답해. 다른 텍스트는 절대 포함하지 마.
 
