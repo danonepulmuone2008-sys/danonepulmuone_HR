@@ -42,6 +42,7 @@ export default function AdminHomePage() {
   const [users, setUsers] = useState<User[]>([]);
   const [todayStatusMap, setTodayStatusMap] = useState<Record<string, "출근" | "퇴근">>({});
   const [showLogout, setShowLogout] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ name: string; role: string } | null>(null);
 
   // 정보 수정
   const [editTarget, setEditTarget] = useState<User | null>(null);
@@ -49,9 +50,17 @@ export default function AdminHomePage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    fetchCurrentUser();
     fetchUsers();
     fetchTodayAttendance();
   }, []);
+
+  async function fetchCurrentUser() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { data } = await supabase.from("users").select("name, role").eq("id", session.user.id).single();
+    if (data) setCurrentUser(data);
+  }
 
   async function fetchUsers() {
     const token = await getToken();
@@ -119,7 +128,9 @@ export default function AdminHomePage() {
     <div className="flex flex-col min-h-screen pb-20">
       <header className="bg-white px-5 pt-5 pb-2 border-b border-gray-100 flex items-start justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">관리자</h1>
+          <h1 className="text-lg font-bold text-gray-900">
+            {currentUser?.role === "admin" ? "관리자" : `${currentUser?.name ?? ""}님`}
+          </h1>
           <p className="text-xs text-gray-400 mt-0.5">직원 현황</p>
         </div>
         <button
@@ -244,7 +255,7 @@ export default function AdminHomePage() {
                     {["employee", "manager", "admin"].map((r) => (
                       <button key={r} onClick={() => setEditForm((f) => f ? { ...f, role: r } : f)}
                         className={`flex-1 h-11 rounded-xl text-sm font-medium border transition-colors ${editForm.role === r ? "bg-blue-500 text-white border-blue-500" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
-                        {r === "employee" ? "직원" : r === "manager" ? "관리자" : "앱 관리자"}
+                        {r === "employee" ? "직원" : r === "manager" ? "인사담당자" : "관리자"}
                       </button>
                     ))}
                   </div>

@@ -7,12 +7,19 @@ export async function GET(req: Request) {
     const auth = await requireAdmin(req);
     if (!auth.ok) return auth.response;
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("users")
       .select("id, name, email, phone, department, position, role, is_active, created_at, is_remote, use_session_tracking")
-      .eq("role", "employee")
       .order("is_active", { ascending: false })
       .order("name", { ascending: true });
+
+    if (auth.profile.role === "admin") {
+      query = query.neq("role", "admin");
+    } else {
+      query = query.eq("role", "employee");
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
 
