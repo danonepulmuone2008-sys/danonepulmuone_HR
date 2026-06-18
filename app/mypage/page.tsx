@@ -305,11 +305,19 @@ const [showInquiry, setShowInquiry] = useState(false);
   const [mealAlarmDays, setMealAlarmDays] = useState<string[]>(["월","화","수","목","금"]);
 
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
+  const [isIos, setIsIos] = useState(false);
+  const [isPwa, setIsPwa] = useState(false);
 
   useEffect(() => {
     if (typeof Notification !== "undefined") {
       setNotifPermission(Notification.permission);
     }
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const pwa =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setIsIos(ios);
+    setIsPwa(pwa);
   }, []);
 
   const subscribeToPush = async () => {
@@ -456,7 +464,15 @@ const [showInquiry, setShowInquiry] = useState(false);
         {/* 알림 설정 */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
           <SectionLabel Icon={Bell} label="알림 설정" color={BRAND_BLUE} />
-          {notifPermission === "default" && (
+          {isIos && !isPwa ? (
+            <div className="border-t border-gray-50 px-4 py-3 flex items-start gap-2">
+              <span className="text-base mt-0.5">📲</span>
+              <div>
+                <p className="text-sm font-medium text-gray-700">홈화면에 추가 후 알림 사용 가능</p>
+                <p className="text-xs text-gray-400 mt-0.5">Safari 하단 공유 버튼 → 홈 화면에 추가</p>
+              </div>
+            </div>
+          ) : notifPermission === "default" ? (
             <div className="border-t border-gray-50 px-4 py-3 flex items-center justify-between">
               <p className="text-sm text-gray-500">알림을 받으려면 허용이 필요해요</p>
               <button
@@ -467,7 +483,7 @@ const [showInquiry, setShowInquiry] = useState(false);
                 알림 허용
               </button>
             </div>
-          )}
+          ) : null}
           <AlarmRow Icon={AlarmClock} label="근태" on={alarmOn} time={alarmTime} days={alarmDays} onToggle={toggleAttendanceAlarm} onOpenDetail={() => openAlarm("근태")} />
           <AlarmRow Icon={Utensils} label="식대" on={mealAlarmOn} time={mealAlarmTime} days={mealAlarmDays} onToggle={toggleMealAlarm} onOpenDetail={() => openAlarm("식대")} />
         </section>
