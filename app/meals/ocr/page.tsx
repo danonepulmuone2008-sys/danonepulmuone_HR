@@ -28,7 +28,7 @@ type OcrResult = {
   storagePath: string
 }
 
-type ManualItem = { amount: string; assigneeIds: string[] }
+type ManualItem = { name: string; amount: string; assigneeIds: string[] }
 type ManualForm = {
   date: string
   time: string
@@ -64,7 +64,7 @@ export default function OcrPage() {
     date: "",
     time: "",
     storeName: "",
-    items: [{ amount: "", assigneeIds: [] }],
+    items: [{ name: "", amount: "", assigneeIds: [] }],
   })
 
   const [manualAssigneeIdx, setManualAssigneeIdx] = useState<number | null>(null)
@@ -72,6 +72,12 @@ export default function OcrPage() {
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [savedNeedsApproval, setSavedNeedsApproval] = useState(false)
   const [selectingItemIdx, setSelectingItemIdx] = useState<number | null>(null)
+
+  const updateManualName = (idx: number, value: string) =>
+    setManual((prev) => ({
+      ...prev,
+      items: prev.items.map((it, i) => i === idx ? { ...it, name: value } : it),
+    }))
 
   const updateManualAmount = (idx: number, value: string) =>
     setManual((prev) => ({
@@ -92,7 +98,7 @@ export default function OcrPage() {
     }))
 
   const addManualItem = () =>
-    setManual((prev) => ({ ...prev, items: [...prev.items, { amount: "", assigneeIds: [] }] }))
+    setManual((prev) => ({ ...prev, items: [...prev.items, { name: "", amount: "", assigneeIds: [] }] }))
 
   const removeManualItem = (idx: number) =>
     setManual((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))
@@ -128,7 +134,7 @@ export default function OcrPage() {
         date: data.paidAt ? data.paidAt.slice(0, 10) : "",
         time: data.paidAt ? data.paidAt.slice(11, 16) : "",
         storeName: data.storeName ?? "",
-        items: [{ amount: "", assigneeIds: [] }],
+        items: [{ name: "", amount: "", assigneeIds: [] }],
       })
       return
     }
@@ -142,7 +148,7 @@ export default function OcrPage() {
         date: data.paidAt ? data.paidAt.slice(0, 10) : "",
         time: data.paidAt ? data.paidAt.slice(11, 16) : "",
         storeName: data.storeName ?? "",
-        items: [{ amount: "", assigneeIds: [] }],
+        items: [{ name: "", amount: "", assigneeIds: [] }],
       })
       return
     }
@@ -175,7 +181,7 @@ export default function OcrPage() {
         date: result.paidAt ? result.paidAt.slice(0, 10) : "",
         time: result.paidAt ? result.paidAt.slice(11, 16) : "",
         storeName: result.storeName ?? "",
-        items: [{ amount: result.totalAmount ? String(result.totalAmount) : "", assigneeIds: [] }],
+        items: [{ name: "", amount: result.totalAmount ? String(result.totalAmount) : "", assigneeIds: [] }],
       })
     }
   }
@@ -241,7 +247,7 @@ export default function OcrPage() {
           isLunchTime: false,
           ocrRaw: null,
           items: manual.items.map((it) => ({
-            name: "식대",
+            name: it.name.trim() || "식대",
             unitPrice: Number(it.amount),
             qty: 1,
             total: Number(it.amount),
@@ -503,6 +509,13 @@ export default function OcrPage() {
               const perPerson = n > 1 && it.amount ? Math.round(Number(it.amount) / n) : null
               return (
                 <div key={idx} className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-500">메뉴명 <span className="text-red-400">*</span></label>
+                  <input
+                    type="text" value={it.name}
+                    onChange={(e) => updateManualName(idx, e.target.value)}
+                    placeholder="식대"
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
+                  />
                   <div className="flex gap-3 items-center">
                     <div className="flex-1 relative">
                       <input
