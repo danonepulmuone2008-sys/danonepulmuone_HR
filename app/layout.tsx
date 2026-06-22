@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "풀무원다논 HR",
   },
   icons: {
@@ -20,8 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <head>
-        <meta name="theme-color" content="#72bf44" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#62a83a" />
       </head>
       <body className="bg-gray-200 min-h-screen flex justify-center">
         <div className="w-full max-w-[390px] min-h-screen bg-gray-50 relative overflow-x-hidden">
