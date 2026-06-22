@@ -35,13 +35,13 @@ export async function PATCH(req: Request) {
     if (type === "business_trip") {
       const { error } = await supabaseAdmin
         .from("business_trip_requests")
-        .update({ status: action })
+        .update({ status: action, reviewed_by: userId })
         .eq("id", id)
       if (error) throw new Error(error.message)
     } else if (type === "vacation") {
       const { error } = await supabaseAdmin
         .from("vacation_requests")
-        .update({ status: action })
+        .update({ status: action, reviewed_by: userId })
         .eq("id", id)
       if (error) throw new Error(error.message)
     } else if (type === "attendance_edit") {

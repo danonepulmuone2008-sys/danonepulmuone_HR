@@ -12,7 +12,7 @@ const MAX_DAY_HOURS = 10;
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null };
-type RequestItem = { id: string; type: "vacation" | "business_trip"; label: string; date: string; status: string };
+type RequestItem = { id: string; type: "vacation" | "business_trip" | "attendance_edit"; label: string; date: string; status: string; reviewedBy?: string | null };
 type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
@@ -98,6 +98,9 @@ export default function AttendancePage() {
   const [attEditLunchBreak, setAttEditLunchBreak] = useState(true);
   const [attEditSubmitting, setAttEditSubmitting] = useState(false);
   const [attEditRequests, setAttEditRequests] = useState<Record<string, AttEditReq[]>>({});
+  const [tripVacPage, setTripVacPage] = useState(1);
+  const [editReqPage, setEditReqPage] = useState(1);
+  const PAGE_SIZE = 5;
   const { user } = useAuth();
   const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining } = useAttendanceStore();
   const useSessionTracking = attProfile.use_session_tracking;
@@ -216,11 +219,11 @@ export default function AttendancePage() {
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
       supabase.from("users").select("id, name").eq("is_active", true),
-      supabase.from("vacation_requests").select("id, type, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
-      supabase.from("business_trip_requests").select("id, destination, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
+      supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
+      supabase.from("business_trip_requests").select("id, destination, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
       supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by")
-        .eq("user_id", uid).gte("date", startDate).lte("date", endDate).order("requested_at", { ascending: false }),
+        .eq("user_id", uid).order("requested_at", { ascending: false }),
     ]);
 
     // 세션 트래킹 유저는 work_sessions도 조회
@@ -323,17 +326,13 @@ export default function AttendancePage() {
     setFlexMap(newFlexMap);
 
     const reqList: RequestItem[] = [
-      ...(reqVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status) })),
-      ...(reqTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status) })),
+      ...(reqVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status), reviewedBy: v.reviewed_by ? (nameMap[v.reviewed_by] ?? null) : null })),
+      ...(reqTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status), reviewedBy: t.reviewed_by ? (nameMap[t.reviewed_by] ?? null) : null })),
+      ...(attEditReqRes.data ?? []).map(r => ({ id: r.id, type: "attendance_edit" as const, label: `${r.direction === "in" ? "출근" : "퇴근"} ${r.requested_time}`, date: r.date, status: statusKo(r.status), reviewedBy: r.reviewed_by ? (nameMap[r.reviewed_by] ?? null) : null })),
     ].sort((a, b) => b.date.localeCompare(a.date));
     setRequests(reqList);
-
-    const reviewerIds = [...new Set((attEditReqRes.data ?? []).map(r => r.reviewed_by).filter(Boolean))] as string[];
-    let reviewerNameMap: Record<string, string> = {};
-    if (reviewerIds.length > 0) {
-      const { data: reviewers } = await supabase.from("users").select("id, name").in("id", reviewerIds);
-      reviewerNameMap = Object.fromEntries((reviewers ?? []).map(u => [u.id, u.name]));
-    }
+    setTripVacPage(1);
+    setEditReqPage(1);
 
     const newAttEditReqs: Record<string, AttEditReq[]> = {};
     (attEditReqRes.data ?? []).forEach(r => {
@@ -344,7 +343,7 @@ export default function AttendancePage() {
         requestedTime: r.requested_time,
         status: r.status,
         lunchBreak: r.lunch_break,
-        reviewedBy: r.reviewed_by ? (reviewerNameMap[r.reviewed_by] ?? null) : null,
+        reviewedBy: r.reviewed_by ? (nameMap[r.reviewed_by] ?? null) : null,
       });
     });
     setAttEditRequests(newAttEditReqs);
@@ -414,7 +413,7 @@ export default function AttendancePage() {
   const handleDeleteReq = async (req: RequestItem) => {
     setDeletingReqId(req.id);
     try {
-      const table = req.type === "vacation" ? "vacation_requests" : "business_trip_requests";
+      const table = req.type === "vacation" ? "vacation_requests" : req.type === "business_trip" ? "business_trip_requests" : "attendance_edit_requests";
       await supabase.from(table).delete().eq("id", req.id);
       setRequests(prev => prev.filter(r => r.id !== req.id));
       if (userId) await fetchMonthData(userId);
@@ -581,47 +580,109 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* 신청 현황 + 버튼 카드 */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-          <p className="text-xs font-medium text-gray-400 mb-3">신청 현황</p>
-          <div className="flex flex-col gap-2 mb-4">
-            {requests.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-3">신청 내역이 없습니다</p>
-            ) : requests.map(req => (
-              <div key={req.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.type === "vacation" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
-                    {req.type === "vacation" ? "휴가" : "출장"}
-                  </span>
-                  <span className="text-sm text-gray-700 truncate">{req.label}</span>
-                  <span className="text-xs text-gray-400 flex-shrink-0">{req.date.slice(5)}</span>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${req.status === "승인완료" ? "bg-green-50 text-green-600" : req.status === "반려" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
-                    {req.status}
-                  </span>
-                  {req.status === "승인대기" && (
-                    <button
-                      onClick={() => setConfirmDeleteReq(req)}
-                      disabled={deletingReqId === req.id}
-                      className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40"
-                    >
-                      삭제
-                    </button>
-                  )}
-                </div>
+        {/* 출장 · 휴가 신청 카드 */}
+        {(() => {
+          const tripVacAll = requests.filter(r => r.type !== "attendance_edit");
+          const tripVacTotal = Math.ceil(tripVacAll.length / PAGE_SIZE);
+          const tripVacSlice = tripVacAll.slice((tripVacPage - 1) * PAGE_SIZE, tripVacPage * PAGE_SIZE);
+          return (
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              <p className="text-xs font-medium text-gray-400 mb-2">출장 · 휴가 신청</p>
+              <div className="flex flex-col gap-2 mb-4">
+                {tripVacAll.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-2">신청 내역이 없습니다</p>
+                ) : tripVacSlice.map(req => (
+                  <div key={req.id} className="flex flex-col gap-0.5 py-1.5 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.type === "vacation" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
+                          {req.type === "vacation" ? "휴가" : "출장"}
+                        </span>
+                        <span className="text-sm text-gray-700 truncate">{req.label}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{req.date.slice(5)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${req.status === "승인완료" ? "bg-green-50 text-green-600" : req.status === "반려" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
+                          {req.status}
+                        </span>
+                        {req.status === "승인대기" && (
+                          <button onClick={() => setConfirmDeleteReq(req)} disabled={deletingReqId === req.id} className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40">삭제</button>
+                        )}
+                      </div>
+                    </div>
+                    {req.reviewedBy && (
+                      <p className="text-xs text-gray-400 pl-1">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            <Link href="/attendance/business-trip" className="flex-1">
-              <button className="w-full py-4 rounded-2xl bg-blue-600 text-white text-sm font-semibold active:scale-95 transition-all shadow-sm">출장 신청</button>
-            </Link>
-            <Link href="/attendance/vacation" className="flex-1">
-              <button className="w-full py-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-semibold active:scale-95 transition-all shadow-sm">휴가 신청</button>
-            </Link>
-          </div>
-        </div>
+              {tripVacTotal > 1 && (
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <button onClick={() => setTripVacPage(p => Math.max(1, p - 1))} disabled={tripVacPage === 1} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">‹</button>
+                  {Array.from({ length: tripVacTotal }, (_, i) => i + 1).map(p => (
+                    <button key={p} onClick={() => setTripVacPage(p)} className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-medium transition-colors ${p === tripVacPage ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}>{p}</button>
+                  ))}
+                  <button onClick={() => setTripVacPage(p => Math.min(tripVacTotal, p + 1))} disabled={tripVacPage === tripVacTotal} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">›</button>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Link href="/attendance/business-trip" className="flex-1">
+                  <button className="w-full py-4 rounded-2xl bg-blue-600 text-white text-sm font-semibold active:scale-95 transition-all shadow-sm">출장 신청</button>
+                </Link>
+                <Link href="/attendance/vacation" className="flex-1">
+                  <button className="w-full py-4 rounded-2xl bg-white border border-gray-200 text-gray-700 text-sm font-semibold active:scale-95 transition-all shadow-sm">휴가 신청</button>
+                </Link>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 출퇴근 수정 요청 카드 */}
+        {(() => {
+          const editAll = requests.filter(r => r.type === "attendance_edit");
+          const editTotal = Math.ceil(editAll.length / PAGE_SIZE);
+          const editSlice = editAll.slice((editReqPage - 1) * PAGE_SIZE, editReqPage * PAGE_SIZE);
+          return (
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              <p className="text-xs font-medium text-gray-400 mb-2">출퇴근 수정 요청</p>
+              <div className="flex flex-col gap-2 mb-4">
+                {editAll.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-2">수정 요청 내역이 없습니다</p>
+                ) : editSlice.map(req => (
+                  <div key={req.id} className="flex flex-col gap-0.5 py-1.5 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 bg-orange-50 text-orange-700">수정요청</span>
+                        <span className="text-sm text-gray-700 truncate">{req.label}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{req.date.slice(5)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${req.status === "승인완료" ? "bg-green-50 text-green-600" : req.status === "반려" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
+                          {req.status}
+                        </span>
+                        {req.status === "승인대기" && (
+                          <button onClick={() => setConfirmDeleteReq(req)} disabled={deletingReqId === req.id} className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40">삭제</button>
+                        )}
+                      </div>
+                    </div>
+                    {req.reviewedBy && (
+                      <p className="text-xs text-gray-400 pl-1">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {editTotal > 1 && (
+                <div className="flex items-center justify-center gap-2">
+                  <button onClick={() => setEditReqPage(p => Math.max(1, p - 1))} disabled={editReqPage === 1} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">‹</button>
+                  {Array.from({ length: editTotal }, (_, i) => i + 1).map(p => (
+                    <button key={p} onClick={() => setEditReqPage(p)} className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-medium transition-colors ${p === editReqPage ? "bg-orange-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}>{p}</button>
+                  ))}
+                  <button onClick={() => setEditReqPage(p => Math.min(editTotal, p + 1))} disabled={editReqPage === editTotal} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">›</button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {selectedDay !== null && (() => {

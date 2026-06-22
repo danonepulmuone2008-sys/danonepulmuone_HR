@@ -279,6 +279,24 @@ const [showInquiry, setShowInquiry] = useState(false);
   const [inquiry, setInquiry] = useState({ subject: "", content: "" });
   const [inquirySent, setInquirySent] = useState(false);
 
+  /* 내 문의 내역 */
+  const [showInquiries, setShowInquiries] = useState(false);
+  type InquiryItem = { id: string; subject: string; content: string; status: string; created_at: string };
+  const [myInquiries, setMyInquiries] = useState<InquiryItem[]>([]);
+  const [inquiriesLoading, setInquiriesLoading] = useState(false);
+
+  const openInquiries = async () => {
+    if (!authUser) return;
+    setShowInquiries(true);
+    setInquiriesLoading(true);
+    try {
+      const { data } = await supabase.from("inquiries").select("id, subject, content, status, created_at").eq("user_id", authUser.id).order("created_at", { ascending: false });
+      setMyInquiries(data ?? []);
+    } finally {
+      setInquiriesLoading(false);
+    }
+  };
+
   const handleSendInquiry = async () => {
     if (authUser) {
       await supabase.from("inquiries").insert({ user_id: authUser.id, subject: inquiry.subject, content: inquiry.content });
@@ -498,6 +516,7 @@ const [showInquiry, setShowInquiry] = useState(false);
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-shrink-0">
           <SectionLabel Icon={MessageCircle} label="문의" color={BRAND_BLUE} />
           <MenuItem Icon={Phone} label="관리자 문의" onClick={() => setShowInquiry(true)} />
+          <MenuItem Icon={MessageCircle} label="내 문의 내역" onClick={openInquiries} />
         </section>
 
         {/* 로그아웃 + 회원탈퇴 */}
@@ -728,6 +747,44 @@ const [showInquiry, setShowInquiry] = useState(false);
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 내 문의 내역 모달 */}
+      {showInquiries && (
+        <div className="absolute inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowInquiries(false)} />
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10" style={{ maxHeight: "75vh", display: "flex", flexDirection: "column" }}>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
+              <p className="text-base font-bold text-gray-800">내 문의 내역</p>
+              <button onClick={() => setShowInquiries(false)} className="text-gray-400 text-xl leading-none">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-4 pb-10">
+              {inquiriesLoading ? (
+                <p className="text-sm text-gray-400 text-center py-8">불러오는 중...</p>
+              ) : myInquiries.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">문의 내역이 없습니다</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {myInquiries.map(item => (
+                    <div key={item.id} className="border border-gray-100 rounded-xl p-4 flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-gray-800 truncate flex-1">{item.subject}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${item.status === "resolved" ? "bg-green-50 text-green-600" : "bg-yellow-50 text-yellow-600"}`}>
+                          {item.status === "resolved" ? "처리완료" : "미처리"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{item.content}</p>
+                      <p className="text-xs text-gray-300">{new Date(item.created_at).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
