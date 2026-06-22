@@ -13,6 +13,7 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null };
 type RequestItem = { id: string; type: "vacation" | "business_trip"; label: string; date: string; status: string };
+type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string; startTime?: string | null; endTime?: string | null };
@@ -94,7 +95,9 @@ export default function AttendancePage() {
   const [attEditDir, setAttEditDir] = useState<"in" | "out">("out");
   const [attEditTime, setAttEditTime] = useState("");
   const [attEditReason, setAttEditReason] = useState("");
+  const [attEditLunchBreak, setAttEditLunchBreak] = useState(true);
   const [attEditSubmitting, setAttEditSubmitting] = useState(false);
+  const [attEditRequests, setAttEditRequests] = useState<Record<string, AttEditReq[]>>({});
   const { user } = useAuth();
   const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining } = useAttendanceStore();
   const useSessionTracking = attProfile.use_session_tracking;
@@ -201,7 +204,7 @@ export default function AttendancePage() {
     const startDate = `${calYear}-${m}-01`;
     const endDate = `${calYear}-${m}-${String(daysInMonth).padStart(2, "0")}`;
 
-    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes, attRecRes] = await Promise.all([
+    const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes, attRecRes, attEditReqRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status, start_time, end_time, lunch_break, hours")
         .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
@@ -216,6 +219,8 @@ export default function AttendancePage() {
       supabase.from("vacation_requests").select("id, type, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("business_trip_requests").select("id, destination, start_date, status").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
+      supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by")
+        .eq("user_id", uid).gte("date", startDate).lte("date", endDate).order("requested_at", { ascending: false }),
     ]);
 
     // 세션 트래킹 유저는 work_sessions도 조회
@@ -322,6 +327,27 @@ export default function AttendancePage() {
       ...(reqTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status) })),
     ].sort((a, b) => b.date.localeCompare(a.date));
     setRequests(reqList);
+
+    const reviewerIds = [...new Set((attEditReqRes.data ?? []).map(r => r.reviewed_by).filter(Boolean))] as string[];
+    let reviewerNameMap: Record<string, string> = {};
+    if (reviewerIds.length > 0) {
+      const { data: reviewers } = await supabase.from("users").select("id, name").in("id", reviewerIds);
+      reviewerNameMap = Object.fromEntries((reviewers ?? []).map(u => [u.id, u.name]));
+    }
+
+    const newAttEditReqs: Record<string, AttEditReq[]> = {};
+    (attEditReqRes.data ?? []).forEach(r => {
+      if (!newAttEditReqs[r.date]) newAttEditReqs[r.date] = [];
+      newAttEditReqs[r.date].push({
+        id: r.id, date: r.date,
+        direction: r.direction as "in" | "out",
+        requestedTime: r.requested_time,
+        status: r.status,
+        lunchBreak: r.lunch_break,
+        reviewedBy: r.reviewed_by ? (reviewerNameMap[r.reviewed_by] ?? null) : null,
+      });
+    });
+    setAttEditRequests(newAttEditReqs);
   }, [calYear, calMonth]);
 
   // 스토어 미로드 시 fetch (홈에서 안 들어온 경우 대비)
@@ -611,12 +637,12 @@ export default function AttendancePage() {
           setSelectedDay(null);
           setModalMode("detail");
           setFlexInput({ startTime: "", endTime: "" });
-          setAttEditDir("out"); setAttEditTime(""); setAttEditReason("");
+          setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true);
         };
         const goBack = () => {
           setModalMode("detail");
           setFlexInput({ startTime: "", endTime: "" });
-          setAttEditDir("out"); setAttEditTime(""); setAttEditReason("");
+          setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true);
         };
         const handleAttEditSubmit = async () => {
           if (!user || !attEditTime || !attEditReason.trim()) return;
@@ -630,7 +656,9 @@ export default function AttendancePage() {
               reason: attEditReason.trim(),
               requested_at: new Date().toISOString(),
               status: "pending",
+              lunch_break: attEditDir === "out" ? attEditLunchBreak : null,
             });
+            if (userId) await fetchMonthData(userId);
             goBack();
           } finally {
             setAttEditSubmitting(false);
@@ -726,16 +754,41 @@ export default function AttendancePage() {
                   )}
                   <div className="mt-2 mb-1">
                     {isSelectedDayPast ? (
-                      isDayMissing ? (
-                        <button
-                          onClick={() => setModalMode("attendance-edit")}
-                          className="w-full py-3.5 bg-red-500 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
-                        >
-                          출퇴근 수정 요청
-                        </button>
-                      ) : (
-                        <p className="text-xs text-gray-400 text-center py-3">지난 날짜는 수정할 수 없습니다</p>
-                      )
+                      <>
+                        {(attEditRequests[selectedDateStr] ?? []).length > 0 && (
+                          <div className="flex flex-col gap-2 mb-3">
+                            <p className="text-xs font-semibold text-gray-400">출퇴근 수정 요청</p>
+                            {attEditRequests[selectedDateStr].map(req => (
+                              <div key={req.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.status === "pending" ? "bg-yellow-50 text-yellow-600" : req.status === "approved" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}>
+                                    {req.status === "pending" ? "대기" : req.status === "approved" ? "승인" : "반려"}
+                                  </span>
+                                  <span className="text-sm text-gray-700">{req.direction === "in" ? "출근" : "퇴근"} {req.requestedTime}</span>
+                                  {req.direction === "out" && req.lunchBreak != null && (
+                                    <span className="text-xs text-gray-400">{req.lunchBreak ? "점심O" : "점심X"}</span>
+                                  )}
+                                  {req.reviewedBy && (
+                                    <span className="text-xs text-gray-400 ml-auto flex-shrink-0">{req.reviewedBy}</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {isDayMissing && (
+                          !(attEditRequests[selectedDateStr] ?? []).some(r => r.status === "pending") ? (
+                            <button
+                              onClick={() => setModalMode("attendance-edit")}
+                              className="w-full py-3.5 bg-red-500 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
+                            >
+                              출퇴근 수정 요청
+                            </button>
+                          ) : (
+                            <p className="text-xs text-gray-400 text-center py-2">승인 대기 중인 요청이 있습니다</p>
+                          )
+                        )}
+                      </>
                     ) : (
                       <button
                         onClick={() => { if (myFlexForDay) setFlexInput({ startTime: myFlexForDay.startTime, endTime: myFlexForDay.endTime }); setModalMode("flex-add"); }}
@@ -773,19 +826,36 @@ export default function AttendancePage() {
 
               {modalMode === "attendance-edit" && (
                 <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
-                  <div className="mb-4 bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">출근 시간</span>
-                      <span className="font-medium text-gray-700">{missingClockIn ?? "--:--"}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">퇴근 시간</span>
-                      <span className="font-medium text-red-500">누락</span>
-                    </div>
+                  <div className="flex gap-2 mb-4">
+                    {(["in", "out"] as const).map(dir => (
+                      <button key={dir} onClick={() => setAttEditDir(dir)}
+                        className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors ${attEditDir === dir ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-500"}`}>
+                        {dir === "in" ? "출근 시간" : "퇴근 시간"}
+                      </button>
+                    ))}
                   </div>
+                  {isDayMissing && (
+                    <div className="mb-4 bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">출근 시간</span>
+                        <span className="font-medium text-gray-700">{missingClockIn ?? "--:--"}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">퇴근 시간</span>
+                        <span className="font-medium text-red-500">누락</span>
+                      </div>
+                    </div>
+                  )}
                   <label className="text-xs text-gray-500 mb-1.5 block">수정 시간</label>
                   <input type="time" value={attEditTime} onChange={e => setAttEditTime(e.target.value)}
                     className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-red-400 bg-gray-50 mb-3" />
+                  {attEditDir === "out" && (
+                    <label className="flex items-center gap-2.5 mb-3 cursor-pointer">
+                      <input type="checkbox" checked={attEditLunchBreak} onChange={e => setAttEditLunchBreak(e.target.checked)}
+                        className="w-4 h-4 rounded accent-blue-600" />
+                      <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
+                    </label>
+                  )}
                   <label className="text-xs text-gray-500 mb-1.5 block">수정 사유</label>
                   <textarea value={attEditReason} onChange={e => setAttEditReason(e.target.value)}
                     placeholder="수정 사유를 입력해주세요" rows={3}

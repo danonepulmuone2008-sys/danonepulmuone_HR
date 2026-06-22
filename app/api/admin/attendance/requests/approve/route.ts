@@ -54,7 +54,7 @@ export async function PATCH(req: Request) {
 
       const { error: updateError } = await supabaseAdmin
         .from("attendance_edit_requests")
-        .update({ status: action })
+        .update({ status: action, reviewed_by: userId })
         .eq("id", id)
       if (updateError) throw new Error(updateError.message)
 
