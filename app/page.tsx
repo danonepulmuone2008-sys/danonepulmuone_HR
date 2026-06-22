@@ -52,6 +52,7 @@ export default function HomePage() {
   const [networkChecking, setNetworkChecking] = useState(false);
   const [lunchBreak, setLunchBreak] = useState(true);
   const [sessionEdit, setSessionEdit] = useState<{ dir: "in" | "out"; time: string; reason: string; date: string; startTime: string; endTime: string } | null>(null);
+  const [showNotifBanner, setShowNotifBanner] = useState(false);
 
   const _now = new Date();
   const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, "0")}-${String(_now.getDate()).padStart(2, "0")}`;
@@ -263,6 +264,42 @@ export default function HomePage() {
     if (!attendanceLoaded) fetchAttendanceAll(user.token);
     fetchMealAll(user.token);
   }, [user]);
+
+  // 알림 권한 체크 — 로그인 후 홈 진입 시 1회
+  useEffect(() => {
+    if (!user) return;
+    if (typeof Notification === "undefined") return;
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const pwa = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (Notification.permission === "default" && !(ios && !pwa)) {
+      setShowNotifBanner(true);
+    }
+  }, [user]);
+
+  const subscribeToPush = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !user) return;
+    try {
+      await navigator.serviceWorker.register("/sw.js");
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      const subscription = existing ?? await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+      });
+      await supabase.from("push_subscriptions").upsert({
+        user_id: user.id,
+        subscription: JSON.parse(JSON.stringify(subscription)),
+      }, { onConflict: "user_id" });
+    } catch (e) {
+      console.warn("Push subscription failed:", e);
+    }
+  };
+
+  const handleRequestNotif = async () => {
+    setShowNotifBanner(false);
+    const result = await Notification.requestPermission();
+    if (result === "granted") await subscribeToPush();
+  };
 
   const isLoading = !attendanceLoaded || !mealLoaded;
 
@@ -551,6 +588,25 @@ export default function HomePage() {
           </Link>
         </div>
       </div>
+
+      {/* 알림 허용 배너 */}
+      {showNotifBanner && (
+        <div className="fixed bottom-[68px] left-0 right-0 z-40 px-4">
+          <div className="bg-gray-900 rounded-2xl px-4 py-3.5 flex items-center justify-between shadow-xl gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-xl flex-shrink-0">🔔</span>
+              <div className="min-w-0">
+                <p className="text-white text-sm font-semibold leading-tight">알림을 허용해주세요</p>
+                <p className="text-gray-400 text-xs mt-0.5 leading-tight">근태·식대 알람을 받을 수 있어요</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={() => setShowNotifBanner(false)} className="text-gray-500 text-xs px-2 py-1.5">나중에</button>
+              <button onClick={handleRequestNotif} className="bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl">허용</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
 
