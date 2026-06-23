@@ -74,6 +74,8 @@ export default function MealsPage() {
     removePendingItem,
     removePendingTransfer,
     adjustRemaining,
+    adjustTransferredIn,
+    adjustTotalUsed,
   } = useMealStore();
 
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -97,11 +99,11 @@ export default function MealsPage() {
         body: JSON.stringify({ id, action }),
       });
       if (!res.ok) throw new Error();
+      const t = pendingTransfers.find((t) => t.id === id);
       removePendingTransfer(id);
-      // 수락 시 잔여 증가
-      if (action === "approved") {
-        const t = pendingTransfers.find((t) => t.id === id);
-        if (t) adjustRemaining(t.amount);
+      if (action === "approved" && t) {
+        adjustRemaining(t.amount);
+        adjustTransferredIn(t.amount);
       }
     } catch {
       alert("처리 중 오류가 발생했습니다.");
@@ -173,11 +175,11 @@ export default function MealsPage() {
       setReceiptDetail((prev) =>
         prev ? { ...prev, items: prev.items.map((it) => it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it) } : null
       );
+      const item = pendingItems.find((i) => i.id === itemId);
       removePendingItem(itemId);
-      // 승인 시 잔여 차감
-      if (action === "approved") {
-        const item = pendingItems.find((i) => i.id === itemId);
-        if (item) adjustRemaining(-item.price);
+      if (action === "approved" && item) {
+        adjustRemaining(-item.price);
+        adjustTotalUsed(item.price);
       }
     } catch {
       alert("처리 중 오류가 발생했습니다.");

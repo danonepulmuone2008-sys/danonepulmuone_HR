@@ -38,6 +38,8 @@ interface MealState {
   removePendingItem: (itemId: string) => void
   removePendingTransfer: (id: string) => void
   adjustRemaining: (delta: number) => void
+  adjustTransferredIn: (delta: number) => void
+  adjustTotalUsed: (delta: number) => void
 }
 
 export const useMealStore = create<MealState>((set, get) => ({
@@ -104,5 +106,13 @@ export const useMealStore = create<MealState>((set, get) => ({
 
   adjustRemaining: (delta: number) => {
     set((s) => ({ remaining: s.remaining + delta }))
+  },
+
+  adjustTransferredIn: (delta: number) => {
+    set((s) => ({ transferredIn: s.transferredIn + delta }))
+  },
+
+  adjustTotalUsed: (delta: number) => {
+    set((s) => ({ totalUsed: s.totalUsed + delta }))
   },
 }))
