@@ -813,6 +813,15 @@ export default function AttendancePage() {
                   {dayFlex.length === 0 && (!showTeam || dayTeam.length === 0) && dayEvents.length === 0 && (
                     <p className="text-sm text-gray-400 text-center py-6">등록된 일정이 없습니다</p>
                   )}
+                  {isSelectedDayPast && isDayMissing && (
+                    <div className="flex items-center gap-2.5 px-4 py-3 bg-red-50 rounded-xl mb-3">
+                      <span className="text-base flex-shrink-0">⚠️</span>
+                      <div>
+                        <p className="text-sm font-semibold text-red-600">퇴근 타각 누락</p>
+                        <p className="text-xs text-red-400 mt-0.5">출근 {missingClockIn} · 퇴근 기록 없음</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-2 mb-1">
                     {isSelectedDayPast ? (
                       <>
