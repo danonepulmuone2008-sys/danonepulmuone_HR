@@ -13,7 +13,7 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null };
 type RequestItem = { id: string; type: "vacation" | "business_trip" | "attendance_edit"; label: string; date: string; status: string; reviewedBy?: string | null };
-type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null };
+type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null; reason: string };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string; startTime?: string | null; endTime?: string | null };
@@ -98,6 +98,7 @@ export default function AttendancePage() {
   const [attEditLunchBreak, setAttEditLunchBreak] = useState(true);
   const [attEditSubmitting, setAttEditSubmitting] = useState(false);
   const [attEditRequests, setAttEditRequests] = useState<Record<string, AttEditReq[]>>({});
+  const [editingAttReqId, setEditingAttReqId] = useState<string | null>(null);
   const [tripVacPage, setTripVacPage] = useState(1);
   const [editReqPage, setEditReqPage] = useState(1);
   const PAGE_SIZE = 5;
@@ -222,7 +223,7 @@ export default function AttendancePage() {
       supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("business_trip_requests").select("id, destination, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
-      supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by")
+      supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by, reason")
         .eq("user_id", uid).order("requested_at", { ascending: false }),
     ]);
 
@@ -344,6 +345,7 @@ export default function AttendancePage() {
         status: r.status,
         lunchBreak: r.lunch_break,
         reviewedBy: r.reviewed_by ? (nameMap[r.reviewed_by] ?? null) : null,
+        reason: r.reason ?? "",
       });
     });
     setAttEditRequests(newAttEditReqs);
@@ -698,27 +700,37 @@ export default function AttendancePage() {
           setSelectedDay(null);
           setModalMode("detail");
           setFlexInput({ startTime: "", endTime: "" });
-          setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true);
+          setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true); setEditingAttReqId(null);
         };
         const goBack = () => {
           setModalMode("detail");
           setFlexInput({ startTime: "", endTime: "" });
-          setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true);
+          setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true); setEditingAttReqId(null);
         };
         const handleAttEditSubmit = async () => {
           if (!user || !attEditTime || !attEditReason.trim()) return;
           setAttEditSubmitting(true);
           try {
-            await supabase.from("attendance_edit_requests").insert({
-              user_id: user.id,
-              date: selectedDateStr,
-              direction: attEditDir,
-              requested_time: attEditTime,
-              reason: attEditReason.trim(),
-              requested_at: new Date().toISOString(),
-              status: "pending",
-              lunch_break: attEditDir === "out" ? attEditLunchBreak : null,
-            });
+            if (editingAttReqId) {
+              await supabase.from("attendance_edit_requests").update({
+                direction: attEditDir,
+                requested_time: attEditTime,
+                reason: attEditReason.trim(),
+                requested_at: new Date().toISOString(),
+                lunch_break: attEditDir === "out" ? attEditLunchBreak : null,
+              }).eq("id", editingAttReqId);
+            } else {
+              await supabase.from("attendance_edit_requests").insert({
+                user_id: user.id,
+                date: selectedDateStr,
+                direction: attEditDir,
+                requested_time: attEditTime,
+                reason: attEditReason.trim(),
+                requested_at: new Date().toISOString(),
+                status: "pending",
+                lunch_break: attEditDir === "out" ? attEditLunchBreak : null,
+              });
+            }
             if (userId) await fetchMonthData(userId);
             goBack();
           } finally {
@@ -727,7 +739,7 @@ export default function AttendancePage() {
         };
         const modalTitle = modalMode === "flex-add"
           ? (myFlexForDay ? "유연근무 수정" : "유연근무 등록")
-          : modalMode === "attendance-edit" ? "출퇴근 수정 요청"
+          : modalMode === "attendance-edit" ? (editingAttReqId ? "수정 요청 변경" : "출퇴근 수정 요청")
           : `${calMonth + 1}월 ${selectedDay}일`;
         const modalSub = modalMode === "flex-add" ? "나의 근무 시간을 입력하세요" : modalMode === "attendance-edit" ? "관리자에게 수정을 요청합니다" : "해당 날의 전체 일정";
         return (
@@ -830,7 +842,7 @@ export default function AttendancePage() {
                             <p className="text-xs font-semibold text-gray-400">출퇴근 수정 요청</p>
                             {attEditRequests[selectedDateStr].map(req => (
                               <div key={req.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
                                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.status === "pending" ? "bg-yellow-50 text-yellow-600" : req.status === "approved" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}>
                                     {req.status === "pending" ? "대기" : req.status === "approved" ? "승인" : "반려"}
                                   </span>
@@ -842,6 +854,21 @@ export default function AttendancePage() {
                                     <span className="text-xs text-gray-400 ml-auto flex-shrink-0">{req.reviewedBy}</span>
                                   )}
                                 </div>
+                                {req.status === "pending" && (
+                                  <button
+                                    onClick={() => {
+                                      setEditingAttReqId(req.id);
+                                      setAttEditDir(req.direction);
+                                      setAttEditTime(req.requestedTime);
+                                      setAttEditReason(req.reason);
+                                      setAttEditLunchBreak(req.lunchBreak ?? true);
+                                      setModalMode("attendance-edit");
+                                    }}
+                                    className="text-xs text-blue-500 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50 transition-colors flex-shrink-0 ml-2"
+                                  >
+                                    수정
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
