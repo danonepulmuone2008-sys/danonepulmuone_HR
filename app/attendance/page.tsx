@@ -873,18 +873,28 @@ export default function AttendancePage() {
                             ))}
                           </div>
                         )}
-                        {isDayMissing && (
-                          !(attEditRequests[selectedDateStr] ?? []).some(r => r.status === "pending") ? (
+                        {(() => {
+                          const pendingDirs = new Set(
+                            (attEditRequests[selectedDateStr] ?? [])
+                              .filter(r => r.status === "pending")
+                              .map(r => r.direction)
+                          );
+                          const canRequest = isDayMissing && pendingDirs.size < 2;
+                          if (!canRequest) return null;
+                          return (
                             <button
-                              onClick={() => setModalMode("attendance-edit")}
+                              onClick={() => {
+                                if (pendingDirs.has("out")) setAttEditDir("in");
+                                else if (pendingDirs.has("in")) setAttEditDir("out");
+                                else setAttEditDir("out");
+                                setModalMode("attendance-edit");
+                              }}
                               className="w-full py-3.5 bg-red-500 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
                             >
                               출퇴근 수정 요청
                             </button>
-                          ) : (
-                            <p className="text-xs text-gray-400 text-center py-2">승인 대기 중인 요청이 있습니다</p>
-                          )
-                        )}
+                          );
+                        })()}
                       </>
                     ) : (
                       <button
@@ -924,12 +934,24 @@ export default function AttendancePage() {
               {modalMode === "attendance-edit" && (
                 <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
                   <div className="flex gap-2 mb-4">
-                    {(["in", "out"] as const).map(dir => (
-                      <button key={dir} onClick={() => setAttEditDir(dir)}
-                        className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors ${attEditDir === dir ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-500"}`}>
-                        {dir === "in" ? "출근 시간" : "퇴근 시간"}
-                      </button>
-                    ))}
+                    {(["in", "out"] as const).map(dir => {
+                      const pendingDirs = new Set(
+                        (attEditRequests[selectedDateStr] ?? [])
+                          .filter(r => r.status === "pending")
+                          .map(r => r.direction)
+                      );
+                      const isDisabled = !editingAttReqId && pendingDirs.has(dir);
+                      return (
+                        <button key={dir}
+                          onClick={() => !isDisabled && setAttEditDir(dir)}
+                          disabled={isDisabled}
+                          className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-colors
+                            ${attEditDir === dir ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-500"}
+                            ${isDisabled ? "opacity-30 cursor-not-allowed" : ""}`}>
+                          {dir === "in" ? "출근 시간" : "퇴근 시간"}
+                        </button>
+                      );
+                    })}
                   </div>
                   {isDayMissing && (
                     <div className="mb-4 bg-gray-50 rounded-xl px-4 py-3 flex flex-col gap-1.5">
