@@ -614,7 +614,7 @@ export default function AttendancePage() {
                       </div>
                     </div>
                     {req.reviewedBy && (
-                      <p className="text-xs text-gray-400 pl-1">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
+                      <p className="text-xs text-gray-400 text-right">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
                     )}
                   </div>
                 ))}
@@ -669,7 +669,7 @@ export default function AttendancePage() {
                       </div>
                     </div>
                     {req.reviewedBy && (
-                      <p className="text-xs text-gray-400 pl-1">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
+                      <p className="text-xs text-gray-400 text-right">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
                     )}
                   </div>
                 ))}
