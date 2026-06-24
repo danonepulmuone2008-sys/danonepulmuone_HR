@@ -13,7 +13,7 @@ const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null };
 type RequestItem = { id: string; type: "vacation" | "business_trip" | "attendance_edit"; label: string; date: string; status: string; reviewedBy?: string | null };
-type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null; reason: string };
+type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null; reviewedAt: string | null; reason: string };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string; startTime?: string | null; endTime?: string | null };
@@ -223,7 +223,7 @@ export default function AttendancePage() {
       supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("business_trip_requests").select("id, destination, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
-      supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by, reason")
+      supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by, reviewed_at, reason")
         .eq("user_id", uid).order("requested_at", { ascending: false }),
     ]);
 
@@ -345,6 +345,7 @@ export default function AttendancePage() {
         status: r.status,
         lunchBreak: r.lunch_break,
         reviewedBy: r.reviewed_by ? (nameMap[r.reviewed_by] ?? null) : null,
+        reviewedAt: r.reviewed_at ?? null,
         reason: r.reason ?? "",
       });
     });
@@ -840,37 +841,49 @@ export default function AttendancePage() {
                         {(attEditRequests[selectedDateStr] ?? []).length > 0 && (
                           <div className="flex flex-col gap-2 mb-3">
                             <p className="text-xs font-semibold text-gray-400">출퇴근 수정 요청</p>
-                            {attEditRequests[selectedDateStr].map(req => (
-                              <div key={req.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.status === "pending" ? "bg-yellow-50 text-yellow-600" : req.status === "approved" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}>
-                                    {req.status === "pending" ? "대기" : req.status === "approved" ? "승인" : "반려"}
-                                  </span>
-                                  <span className="text-sm text-gray-700">{req.direction === "in" ? "출근" : "퇴근"} {req.requestedTime}</span>
-                                  {req.direction === "out" && req.lunchBreak != null && (
-                                    <span className="text-xs text-gray-400">{req.lunchBreak ? "점심O" : "점심X"}</span>
-                                  )}
-                                  {req.reviewedBy && (
-                                    <span className="text-xs text-gray-400 ml-auto flex-shrink-0">{req.reviewedBy}</span>
+                            {attEditRequests[selectedDateStr].map(req => {
+                              const fmtAt = (iso: string) => {
+                                const d = new Date(iso);
+                                const mo = String(d.getMonth() + 1).padStart(2, "0");
+                                const dy = String(d.getDate()).padStart(2, "0");
+                                const hh = String(d.getHours()).padStart(2, "0");
+                                const mm = String(d.getMinutes()).padStart(2, "0");
+                                return `${mo}/${dy} ${hh}:${mm}`;
+                              };
+                              return (
+                                <div key={req.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.status === "pending" ? "bg-yellow-50 text-yellow-600" : req.status === "approved" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}>
+                                      {req.status === "pending" ? "대기" : req.status === "approved" ? "승인" : "반려"}
+                                    </span>
+                                    <span className="text-sm text-gray-700">{req.direction === "in" ? "출근" : "퇴근"} {req.requestedTime}</span>
+                                    {req.direction === "out" && req.lunchBreak != null && (
+                                      <span className="text-xs text-gray-400">{req.lunchBreak ? "점심O" : "점심X"}</span>
+                                    )}
+                                    {req.reviewedBy && (
+                                      <span className="text-xs text-gray-400 ml-auto flex-shrink-0">
+                                        처리자 {req.reviewedBy}{req.reviewedAt ? ` · ${fmtAt(req.reviewedAt)}` : ""}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {req.status === "pending" && (
+                                    <button
+                                      onClick={() => {
+                                        setEditingAttReqId(req.id);
+                                        setAttEditDir(req.direction);
+                                        setAttEditTime(req.requestedTime);
+                                        setAttEditReason(req.reason);
+                                        setAttEditLunchBreak(req.lunchBreak ?? true);
+                                        setModalMode("attendance-edit");
+                                      }}
+                                      className="text-xs text-blue-500 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50 transition-colors flex-shrink-0 ml-2"
+                                    >
+                                      수정
+                                    </button>
                                   )}
                                 </div>
-                                {req.status === "pending" && (
-                                  <button
-                                    onClick={() => {
-                                      setEditingAttReqId(req.id);
-                                      setAttEditDir(req.direction);
-                                      setAttEditTime(req.requestedTime);
-                                      setAttEditReason(req.reason);
-                                      setAttEditLunchBreak(req.lunchBreak ?? true);
-                                      setModalMode("attendance-edit");
-                                    }}
-                                    className="text-xs text-blue-500 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50 transition-colors flex-shrink-0 ml-2"
-                                  >
-                                    수정
-                                  </button>
-                                )}
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                         {(() => {
