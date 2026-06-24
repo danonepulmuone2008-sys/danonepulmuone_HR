@@ -172,12 +172,13 @@ export default function MealsPage() {
         body: JSON.stringify({ itemId, action }),
       });
       if (!res.ok) throw new Error();
+      const data = await res.json();
       setReceiptDetail((prev) =>
         prev ? { ...prev, items: prev.items.map((it) => it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it) } : null
       );
       const item = pendingItems.find((i) => i.id === itemId);
       removePendingItem(itemId);
-      if (action === "approved" && item) {
+      if (action === "approved" && item && data.receiptFullyApproved) {
         adjustRemaining(-item.price);
         adjustTotalUsed(item.price);
       }

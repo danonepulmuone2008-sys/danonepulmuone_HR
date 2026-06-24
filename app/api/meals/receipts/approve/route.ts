@@ -31,6 +31,7 @@ export async function PATCH(req: Request) {
       .eq("receipt_id", item.receipt_id)
       .eq("status", "pending")
 
+    let receiptFullyApproved = false;
     if (pending && pending.length === 0) {
       const { data: rejected } = await supabaseAdmin
         .from("receipt_items")
@@ -43,9 +44,10 @@ export async function PATCH(req: Request) {
         .from("receipts")
         .update({ status: newStatus })
         .eq("id", item.receipt_id)
+      receiptFullyApproved = newStatus === "approved"
     }
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, receiptFullyApproved })
   } catch (err) {
     console.error("[receipts approve]", err)
     return NextResponse.json({ error: "처리에 실패했습니다" }, { status: 500 })
