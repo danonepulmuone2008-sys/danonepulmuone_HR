@@ -113,14 +113,47 @@ const AlarmRow = ({
   );
 };
 
-/* 알람 시간 피커 (▲▼ 버튼) */
+/* 알람 시간 피커 (▲▼ 버튼 + 직접 입력) */
 const TimePicker = ({ time, onChange }: { time: string; onChange: (t: string) => void }) => {
-  const [h, m] = time.split(":").map(Number);
   const pad = (n: number) => String(n).padStart(2, "0");
-  const setH = (v: number) => onChange(`${pad((v + 24) % 24)}:${pad(m)}`);
-  const setM = (v: number) => onChange(`${pad(h)}:${pad((v + 60) % 60)}`);
-  const period = h < 12 ? "오전" : "오후";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
+  const [h24, m] = time.split(":").map(Number);
+  const isAm = h24 < 12;
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+
+  const [hRaw, setHRaw] = useState(pad(h12));
+  const [mRaw, setMRaw] = useState(pad(m));
+
+  useEffect(() => {
+    const [nh24, nm] = time.split(":").map(Number);
+    const nh12 = nh24 % 12 === 0 ? 12 : nh24 % 12;
+    setHRaw(pad(nh12));
+    setMRaw(pad(nm));
+  }, [time]);
+
+  const setH24 = (v: number) => onChange(`${pad(((v % 24) + 24) % 24)}:${pad(m)}`);
+  const setM60 = (v: number) => onChange(`${pad(h24)}:${pad(((v % 60) + 60) % 60)}`);
+  const togglePeriod = () => setH24(isAm ? h24 + 12 : h24 - 12);
+
+  const commitHour = (val: string) => {
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num >= 1 && num <= 12) {
+      const next = isAm ? (num === 12 ? 0 : num) : (num === 12 ? 12 : num + 12);
+      onChange(`${pad(next)}:${pad(m)}`);
+      setHRaw(pad(num));
+    } else {
+      setHRaw(pad(h12));
+    }
+  };
+
+  const commitMinute = (val: string) => {
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num >= 0 && num <= 59) {
+      onChange(`${pad(h24)}:${pad(num)}`);
+      setMRaw(pad(num));
+    } else {
+      setMRaw(pad(m));
+    }
+  };
 
   const ArrowBtn = ({ onClick, up }: { onClick: () => void; up: boolean }) => (
     <button
@@ -134,8 +167,6 @@ const TimePicker = ({ time, onChange }: { time: string; onChange: (t: string) =>
     </button>
   );
 
-  const togglePeriod = () => setH(h < 12 ? h + 12 : h - 12);
-
   return (
     <div className="flex flex-col items-center py-4">
       <button
@@ -143,27 +174,41 @@ const TimePicker = ({ time, onChange }: { time: string; onChange: (t: string) =>
         className="text-sm font-semibold px-5 py-1.5 rounded-full mb-3 active:opacity-70 transition-opacity"
         style={{ background: `${BRAND_BLUE}18`, color: BRAND_BLUE }}
       >
-        {period}
+        {isAm ? "오전" : "오후"}
       </button>
       <div className="flex items-center gap-2">
         {/* 시 */}
         <div className="flex flex-col items-center">
-          <ArrowBtn onClick={() => setH(h + 1)} up />
-          <span className="text-5xl font-bold w-20 text-center" style={{ color: BRAND_BLUE }}>
-            {pad(h12)}
-          </span>
-          <ArrowBtn onClick={() => setH(h - 1)} up={false} />
+          <ArrowBtn onClick={() => setH24(h24 + 1)} up />
+          <input
+            type="text"
+            inputMode="numeric"
+            value={hRaw}
+            onChange={(e) => setHRaw(e.target.value.replace(/\D/g, "").slice(0, 2))}
+            onBlur={(e) => commitHour(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            className="text-5xl font-bold w-20 text-center bg-transparent outline-none"
+            style={{ color: BRAND_BLUE }}
+          />
+          <ArrowBtn onClick={() => setH24(h24 - 1)} up={false} />
         </div>
 
         <span className="text-4xl font-bold text-gray-300 mb-1">:</span>
 
         {/* 분 */}
         <div className="flex flex-col items-center">
-          <ArrowBtn onClick={() => setM(m + 1)} up />
-          <span className="text-5xl font-bold w-20 text-center" style={{ color: BRAND_BLUE }}>
-            {pad(m)}
-          </span>
-          <ArrowBtn onClick={() => setM(m - 1)} up={false} />
+          <ArrowBtn onClick={() => setM60(m + 1)} up />
+          <input
+            type="text"
+            inputMode="numeric"
+            value={mRaw}
+            onChange={(e) => setMRaw(e.target.value.replace(/\D/g, "").slice(0, 2))}
+            onBlur={(e) => commitMinute(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            className="text-5xl font-bold w-20 text-center bg-transparent outline-none"
+            style={{ color: BRAND_BLUE }}
+          />
+          <ArrowBtn onClick={() => setM60(m - 1)} up={false} />
         </div>
       </div>
     </div>
