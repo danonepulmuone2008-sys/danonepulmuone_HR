@@ -11,7 +11,7 @@ const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const MAX_DAY_HOURS = 10;
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
-type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null };
+type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null; tripStartTime?: string | null; tripEndTime?: string | null };
 type RequestItem = { id: string; type: "vacation" | "business_trip" | "attendance_edit"; label: string; date: string; status: string; reviewedBy?: string | null };
 type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null; reviewedAt: string | null; reason: string };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
@@ -73,6 +73,11 @@ export default function AttendancePage() {
   const currentMonth = now.getMonth();
   const todayDate = now.getDate();
 
+  const [pageToast, setPageToast] = useState<string | null>(null);
+  const showPageToast = (msg: string) => {
+    setPageToast(msg);
+    setTimeout(() => setPageToast(null), 3000);
+  };
   const [weekOffset, setWeekOffset] = useState(0);
   const [showTeam, setShowTeam] = useState(false);
   const [showFlex, setShowFlex] = useState(true);
@@ -210,9 +215,9 @@ export default function AttendancePage() {
 
     const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes, attRecRes, attEditReqRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status, start_time, end_time, lunch_break, hours")
-        .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
-      supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status")
-        .eq("user_id", uid).neq("status", "rejected").lte("start_date", endDate).gte("end_date", startDate),
+        .eq("user_id", uid).eq("status", "approved").lte("start_date", endDate).gte("end_date", startDate),
+      supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status, start_time, end_time")
+        .eq("user_id", uid).eq("status", "approved").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("vacation_requests").select("id, user_id, type, start_date, end_date, status, start_time, end_time")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("business_trip_requests").select("id, user_id, destination, start_date, end_date, status, start_time, end_time")
@@ -285,7 +290,7 @@ export default function AttendancePage() {
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!map[day]) map[day] = [];
-          map[day].push({ type: "business_trip", label: t.destination, status: t.status });
+          map[day].push({ type: "business_trip", label: t.destination, status: t.status, tripStartTime: t.start_time ?? null, tripEndTime: t.end_time ?? null });
         }
       }
     });
@@ -358,6 +363,11 @@ export default function AttendancePage() {
   }, [user]);
 
   useEffect(() => {
+    const msg = sessionStorage.getItem("attendance_toast");
+    if (msg) { sessionStorage.removeItem("attendance_toast"); showPageToast(msg); }
+  }, []);
+
+  useEffect(() => {
     if (!userId) return;
     fetchWeekData(userId, weekOffset, useSessionTracking);
   }, [userId, weekOffset, fetchWeekData, useSessionTracking]);
@@ -420,6 +430,8 @@ export default function AttendancePage() {
       await supabase.from(table).delete().eq("id", req.id);
       setRequests(prev => prev.filter(r => r.id !== req.id));
       if (userId) await fetchMonthData(userId);
+      const label = req.type === "vacation" ? "휴가" : req.type === "business_trip" ? "출장" : "수정 요청";
+      showPageToast(`${label} 신청 내역이 삭제되었습니다`);
     } finally {
       setDeletingReqId(null);
     }
@@ -800,21 +812,23 @@ export default function AttendancePage() {
                   )}
                   {dayEvents.length > 0 && (
                     <div className="mb-4">
-                      <p className="text-xs font-semibold text-gray-500 mb-2">휴가 · 출장</p>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">출장/휴가</p>
                       {dayEvents.map((ev, ei) => {
-                        const hasTime = ev.type === "vacation" && ev.startTime != null && ev.endTime != null;
-                        const timeStr = hasTime
+                        const isVac = ev.type === "vacation";
+                        const hasVacTime = isVac && ev.startTime != null && ev.endTime != null;
+                        const hasTripTime = !isVac && ev.tripStartTime != null && ev.tripEndTime != null;
+                        const timeStr = hasVacTime
                           ? `${String(ev.startTime).padStart(2, "0")}:00 ~ ${String(ev.endTime).padStart(2, "0")}:00`
-                          : null;
+                          : hasTripTime ? `${ev.tripStartTime} ~ ${ev.tripEndTime}` : null;
                         return (
                           <div key={ei} className="flex flex-col gap-0.5 py-2 px-3 bg-gray-50 rounded-xl">
                             <div className="flex items-center gap-2">
-                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ev.type === "vacation" ? "bg-green-500" : "bg-blue-500"}`} />
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isVac ? "bg-green-500" : "bg-blue-500"}`} />
                               <span className="text-sm font-semibold text-gray-800">나</span>
                               <span className="text-sm text-gray-500">{ev.label}</span>
-                              {hasTime && (
+                              {timeStr && (
                                 <span className="text-xs text-gray-400 ml-auto flex-shrink-0">
-                                  {timeStr}{ev.lunchBreak ? " · 점심 포함" : ""}{ev.hours != null ? ` · 총 ${ev.hours}시간` : ""}
+                                  {timeStr}{hasVacTime && ev.lunchBreak ? " · 점심 포함" : ""}{hasVacTime && ev.hours != null ? ` · 총 ${ev.hours}시간` : ""}
                                 </span>
                               )}
                             </div>
@@ -886,14 +900,13 @@ export default function AttendancePage() {
                             })}
                           </div>
                         )}
-                        {(() => {
+                        {isDayMissing ? (() => {
                           const pendingDirs = new Set(
                             (attEditRequests[selectedDateStr] ?? [])
                               .filter(r => r.status === "pending")
                               .map(r => r.direction)
                           );
-                          const canRequest = isDayMissing && pendingDirs.size < 2;
-                          if (!canRequest) return null;
+                          if (pendingDirs.size >= 2) return null;
                           return (
                             <button
                               onClick={() => {
@@ -907,7 +920,9 @@ export default function AttendancePage() {
                               출퇴근 수정 요청
                             </button>
                           );
-                        })()}
+                        })() : (
+                          <p className="text-xs text-gray-400 text-center py-3">지난 날짜는 수정할 수 없습니다</p>
+                        )}
                       </>
                     ) : (
                       <button
@@ -1055,12 +1070,11 @@ export default function AttendancePage() {
       )}
 
       {confirmDeleteReq && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setConfirmDeleteReq(null)}>
-          <div className="bg-white rounded-t-3xl w-full max-w-[390px] px-5 pt-6 pb-8" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-8" onClick={() => setConfirmDeleteReq(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-[280px] px-6 py-7 shadow-xl" onClick={e => e.stopPropagation()}>
             <p className="text-base font-bold text-gray-900 mb-1">신청 삭제</p>
             <p className="text-sm text-gray-500 mb-6">삭제 후 복구할 수 없습니다. 삭제하시겠습니까?</p>
             <div className="flex gap-2">
-              <button onClick={() => setConfirmDeleteReq(null)} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium">취소</button>
               <button
                 onClick={async () => {
                   const req = confirmDeleteReq;
@@ -1068,14 +1082,20 @@ export default function AttendancePage() {
                   await handleDeleteReq(req);
                 }}
                 className="flex-1 h-11 rounded-xl bg-red-400 text-sm text-white font-semibold"
-              >
-                삭제
-              </button>
+              >삭제</button>
+              <button onClick={() => setConfirmDeleteReq(null)} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium">취소</button>
             </div>
           </div>
         </div>
       )}
 
+      {pageToast && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none">
+          <div className="bg-gray-900/90 text-white text-sm font-medium px-6 py-3.5 rounded-2xl shadow-lg whitespace-nowrap">
+            {pageToast}
+          </div>
+        </div>
+      )}
       <BottomNav />
     </div>
   );

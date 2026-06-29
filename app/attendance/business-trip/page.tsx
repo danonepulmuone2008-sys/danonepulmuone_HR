@@ -60,8 +60,8 @@ export default function BusinessTripPage() {
       if (error) {
         showToast("신청 중 오류가 발생했습니다.", true);
       } else {
-        showToast("출장 신청이 완료되었습니다.");
-        setTimeout(() => router.push("/attendance"), 1500);
+        sessionStorage.setItem("attendance_toast", "출장 신청이 완료되었습니다");
+        router.push("/attendance");
       }
     } finally {
       setLoading(false);
