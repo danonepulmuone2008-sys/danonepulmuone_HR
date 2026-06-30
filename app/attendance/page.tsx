@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
@@ -94,7 +95,7 @@ export default function AttendancePage() {
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
   const [showVacDetail, setShowVacDetail] = useState(false);
-  const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage" }[]>([]);
+  const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage"; appliedAt?: string }[]>([]);
   const [vacHistoryLoading, setVacHistoryLoading] = useState(false);
   const [missingDays, setMissingDays] = useState<Record<string, { clockIn: string }>>({});
   const [attEditDir, setAttEditDir] = useState<"in" | "out">("out");
@@ -106,7 +107,9 @@ export default function AttendancePage() {
   const [editingAttReqId, setEditingAttReqId] = useState<string | null>(null);
   const [tripVacPage, setTripVacPage] = useState(1);
   const [editReqPage, setEditReqPage] = useState(1);
+  const [attEditDetailReq, setAttEditDetailReq] = useState<AttEditReq | null>(null);
   const PAGE_SIZE = 5;
+  const router = useRouter();
   const { user } = useAuth();
   const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining } = useAttendanceStore();
   const useSessionTracking = attProfile.use_session_tracking;
@@ -384,13 +387,17 @@ export default function AttendancePage() {
     try {
       const [{ data: grants }, { data: usage }] = await Promise.all([
         supabase.from("vacation_grants").select("hours, note, created_at").eq("user_id", userId).eq("year", currentYear),
-        supabase.from("vacation_requests").select("type, start_date, hours").eq("user_id", userId).eq("status", "approved")
+        supabase.from("vacation_requests").select("type, start_date, hours, created_at").eq("user_id", userId).eq("status", "approved")
           .gte("start_date", `${currentYear}-01-01`).lte("start_date", `${currentYear}-12-31`),
       ]);
       const history = [
         ...(grants ?? []).map(g => ({ date: g.created_at, label: g.note || "휴가 부여", hours: g.hours ?? 0, kind: "grant" as const })),
-        ...(usage ?? []).map(u => ({ date: u.start_date, label: u.type, hours: u.hours ?? 0, kind: "usage" as const })),
-      ].sort((a, b) => b.date.localeCompare(a.date));
+        ...(usage ?? []).map(u => ({ date: u.start_date, label: u.type, hours: u.hours ?? 0, kind: "usage" as const, appliedAt: u.created_at })),
+      ].sort((a, b) => {
+        const keyA = a.kind === "usage" && a.appliedAt ? a.appliedAt : a.date;
+        const keyB = b.kind === "usage" && b.appliedAt ? b.appliedAt : b.date;
+        return keyB.localeCompare(keyA);
+      });
       setVacHistory(history);
     } finally {
       setVacHistoryLoading(false);
@@ -607,7 +614,7 @@ export default function AttendancePage() {
                 {tripVacAll.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-2">신청 내역이 없습니다</p>
                 ) : tripVacSlice.map(req => (
-                  <div key={req.id} className="flex flex-col gap-0.5 py-1.5 border-b border-gray-50 last:border-0">
+                  <div key={req.id} className="flex flex-col gap-0.5 py-1.5 border-b border-gray-50 last:border-0 cursor-pointer active:bg-gray-50 rounded-xl px-1 -mx-1 transition-colors" onClick={() => router.push(`/attendance/${req.type === "vacation" ? "vacation" : "business-trip"}/${req.id}`)}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${req.type === "vacation" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>
@@ -621,7 +628,7 @@ export default function AttendancePage() {
                           {req.status}
                         </span>
                         {req.status === "승인대기" && (
-                          <button onClick={() => setConfirmDeleteReq(req)} disabled={deletingReqId === req.id} className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40">삭제</button>
+                          <button onClick={e => { e.stopPropagation(); setConfirmDeleteReq(req); }} disabled={deletingReqId === req.id} className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40">삭제</button>
                         )}
                       </div>
                     </div>
@@ -663,28 +670,31 @@ export default function AttendancePage() {
               <div className="flex flex-col gap-2 mb-4">
                 {editAll.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-2">수정 요청 내역이 없습니다</p>
-                ) : editSlice.map(req => (
-                  <div key={req.id} className="flex flex-col gap-0.5 py-1.5 border-b border-gray-50 last:border-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 bg-orange-50 text-orange-700">수정요청</span>
-                        <span className="text-sm text-gray-700 truncate">{req.label}</span>
-                        <span className="text-xs text-gray-400 flex-shrink-0">{req.date.slice(5)}</span>
+                ) : editSlice.map(req => {
+                  const fullReq = Object.values(attEditRequests).flat().find(r => r.id === req.id) ?? null;
+                  return (
+                    <div key={req.id} className="flex flex-col gap-0.5 py-1.5 border-b border-gray-50 last:border-0 cursor-pointer active:bg-gray-50 rounded-xl px-1 -mx-1 transition-colors" onClick={() => fullReq && setAttEditDetailReq(fullReq)}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 bg-orange-50 text-orange-700">수정요청</span>
+                          <span className="text-sm text-gray-700 truncate">{req.label}</span>
+                          <span className="text-xs text-gray-400 flex-shrink-0">{req.date.slice(5)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${req.status === "승인완료" ? "bg-green-50 text-green-600" : req.status === "반려" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
+                            {req.status}
+                          </span>
+                          {req.status === "승인대기" && (
+                            <button onClick={e => { e.stopPropagation(); setConfirmDeleteReq(req); }} disabled={deletingReqId === req.id} className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40">삭제</button>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${req.status === "승인완료" ? "bg-green-50 text-green-600" : req.status === "반려" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
-                          {req.status}
-                        </span>
-                        {req.status === "승인대기" && (
-                          <button onClick={() => setConfirmDeleteReq(req)} disabled={deletingReqId === req.id} className="text-xs text-red-400 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50 transition-colors disabled:opacity-40">삭제</button>
-                        )}
-                      </div>
+                      {req.reviewedBy && (
+                        <p className="text-xs text-gray-400 text-right">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
+                      )}
                     </div>
-                    {req.reviewedBy && (
-                      <p className="text-xs text-gray-400 text-right">{req.status === "승인완료" ? "승인" : "반려"}: {req.reviewedBy}</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {editTotal > 1 && (
                 <div className="flex items-center justify-center gap-2">
@@ -1042,8 +1052,10 @@ export default function AttendancePage() {
               ) : (
                 <div className="flex flex-col divide-y divide-gray-50">
                   {vacHistory.map((item, i) => {
-                    const d = new Date(item.date);
-                    const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+                    const fmtDate = (str: string) => {
+                      const d = new Date(str);
+                      return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+                    };
                     const isGrant = item.kind === "grant";
                     return (
                       <div key={i} className="flex items-center justify-between py-3">
@@ -1053,7 +1065,16 @@ export default function AttendancePage() {
                           </span>
                           <div>
                             <p className="text-sm font-medium text-gray-800">{item.label}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>
+                            {isGrant ? (
+                              <p className="text-xs text-gray-400 mt-0.5">지급일 {fmtDate(item.date)}</p>
+                            ) : (
+                              <>
+                                <p className="text-xs text-gray-400 mt-0.5">{fmtDate(item.date)}</p>
+                                {item.appliedAt && (
+                                  <p className="text-xs text-gray-300 mt-0.5">신청일 {fmtDate(item.appliedAt)}</p>
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
                         <span className={`text-sm font-bold ${isGrant ? "text-green-600" : "text-red-400"}`}>
@@ -1068,6 +1089,66 @@ export default function AttendancePage() {
           </div>
         </div>
       )}
+
+      {/* 출퇴근 수정 요청 상세 모달 */}
+      {attEditDetailReq && (() => {
+        const req = attEditDetailReq;
+        const fmtAt = (iso: string) => {
+          const d = new Date(iso);
+          return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        };
+        const statusLabel = req.status === "approved" ? "승인완료" : req.status === "rejected" ? "반려" : "승인대기";
+        return (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8" onClick={() => setAttEditDetailReq(null)}>
+            <div className="bg-white rounded-t-2xl w-full max-w-[390px]" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">출퇴근 수정 요청 상세</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{req.date}</p>
+                </div>
+                <button onClick={() => setAttEditDetailReq(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl hover:text-gray-600">×</button>
+              </div>
+              <div className="px-5 pt-4 pb-8 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">상태</span>
+                  <span className={`text-xs font-medium px-3 py-1 rounded-full ${req.status === "approved" ? "bg-green-50 text-green-600" : req.status === "rejected" ? "bg-red-50 text-red-600" : "bg-yellow-50 text-yellow-600"}`}>
+                    {statusLabel}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">구분</span>
+                  <span className="text-sm text-gray-700">{req.direction === "in" ? "출근" : "퇴근"} 수정</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">요청 시간</span>
+                  <span className="text-sm text-gray-700">{req.requestedTime}</span>
+                </div>
+                {req.direction === "out" && req.lunchBreak != null && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">점심 식사</span>
+                    <span className="text-sm text-gray-700">{req.lunchBreak ? "포함 (-1시간)" : "미포함"}</span>
+                  </div>
+                )}
+                {req.reason ? (
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-xs text-gray-400 flex-shrink-0 pt-0.5">수정 사유</span>
+                    <span className="text-sm text-gray-700 text-right">{req.reason}</span>
+                  </div>
+                ) : null}
+                {req.reviewedBy && (
+                  <>
+                    <div className="h-px bg-gray-100" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400">{req.status === "approved" ? "승인자" : "처리자"}</span>
+                      <span className="text-sm text-gray-700">{req.reviewedBy}{req.reviewedAt ? ` · ${fmtAt(req.reviewedAt)}` : ""}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {confirmDeleteReq && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-8" onClick={() => setConfirmDeleteReq(null)}>
