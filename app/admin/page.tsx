@@ -212,8 +212,8 @@ export default function AdminHomePage() {
           <div className="bg-white rounded-2xl px-6 py-5 mx-6 shadow-xl w-full max-w-xs">
             <p className="text-base font-semibold text-gray-900 text-center mb-5">로그아웃하시겠습니까?</p>
             <div className="flex gap-3">
-              <button onClick={() => setShowLogout(false)} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium">아니오</button>
-              <button onClick={handleLogout} className="flex-1 h-11 rounded-xl text-sm text-white font-semibold" style={{ backgroundColor: "#8dc63f" }}>예</button>
+              <button onClick={handleLogout} className="flex-1 h-11 rounded-xl text-sm text-white font-semibold" style={{ backgroundColor: "#8dc63f" }}>확인</button>
+              <button onClick={() => setShowLogout(false)} className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium">취소</button>
             </div>
           </div>
         </div>

@@ -222,18 +222,18 @@ export default function AdminReceiptDetailPage() {
             </div>
             <div className="border-t border-gray-100 flex">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={deleting}
-                className="flex-1 h-12 text-sm text-gray-500 border-r border-gray-100"
-              >
-                취소
-              </button>
-              <button
                 onClick={deleteReceipt}
                 disabled={deleting}
-                className="flex-1 h-12 text-sm font-semibold text-red-500 disabled:opacity-50"
+                className="flex-1 h-12 text-sm font-semibold text-red-500 border-r border-gray-100 disabled:opacity-50"
               >
                 {deleting ? "삭제 중..." : "삭제"}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 h-12 text-sm text-gray-500"
+              >
+                취소
               </button>
             </div>
           </div>

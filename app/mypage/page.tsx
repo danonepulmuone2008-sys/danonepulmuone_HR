@@ -708,21 +708,21 @@ const [showInquiry, setShowInquiry] = useState(false);
             </div>
             <div className="flex border-t border-gray-100">
               <button
-                onClick={() => setShowLogout(false)}
-                className="flex-1 py-3.5 text-sm font-medium text-gray-500 active:bg-gray-50 transition-colors border-r border-gray-100"
-              >
-                취소
-              </button>
-              <button
                 onClick={async () => {
                   await supabase.auth.signOut();
                   setShowLogout(false);
                   window.location.href = "/login";
                 }}
-                className="flex-1 py-3.5 text-sm font-semibold active:bg-red-50 transition-colors"
+                className="flex-1 py-3.5 text-sm font-semibold active:bg-red-50 transition-colors border-r border-gray-100"
                 style={{ color: "#EF4444" }}
               >
                 확인
+              </button>
+              <button
+                onClick={() => setShowLogout(false)}
+                className="flex-1 py-3.5 text-sm font-medium text-gray-500 active:bg-gray-50 transition-colors"
+              >
+                취소
               </button>
             </div>
           </div>
@@ -895,14 +895,14 @@ const [showInquiry, setShowInquiry] = useState(false);
                   </div>
                 </div>
                 <div className="px-5 pb-8 flex gap-3">
-                  <button onClick={closeWithdraw}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold border border-gray-200 text-gray-500 active:bg-gray-50">
-                    취소
-                  </button>
                   <button onClick={() => setWithdrawStep(2)}
                     className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
                     style={{ background: "#EF4444" }}>
                     다음
+                  </button>
+                  <button onClick={closeWithdraw}
+                    className="flex-1 py-3 rounded-xl text-sm font-semibold border border-gray-200 text-gray-500 active:bg-gray-50">
+                    취소
                   </button>
                 </div>
               </>

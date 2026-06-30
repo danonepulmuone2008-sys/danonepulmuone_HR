@@ -713,12 +713,6 @@ export default function AdminAttendancePage() {
             <p className="text-sm text-gray-500 mb-6">삭제 후 복구할 수 없습니다. 삭제하시겠습니까?</p>
             <div className="flex gap-2">
               <button
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
-              >
-                취소
-              </button>
-              <button
                 onClick={async () => {
                   const req = confirmDelete;
                   setConfirmDelete(null);
@@ -727,6 +721,12 @@ export default function AdminAttendancePage() {
                 className="flex-1 h-11 rounded-xl text-sm text-white font-semibold bg-red-400"
               >
                 삭제
+              </button>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
+              >
+                취소
               </button>
             </div>
           </div>
@@ -749,12 +749,6 @@ export default function AdminAttendancePage() {
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => setConfirmChange(null)}
-                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
-              >
-                취소
-              </button>
-              <button
                 onClick={async () => {
                   const { req, targetAction } = confirmChange;
                   setConfirmChange(null);
@@ -764,6 +758,12 @@ export default function AdminAttendancePage() {
                 style={confirmChange.targetAction === "approved" ? { backgroundColor: "#8dc63f" } : {}}
               >
                 {confirmChange.targetAction === "rejected" ? "반려" : "승인완료"}
+              </button>
+              <button
+                onClick={() => setConfirmChange(null)}
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
+              >
+                취소
               </button>
             </div>
           </div>

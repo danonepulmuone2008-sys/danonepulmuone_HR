@@ -255,16 +255,16 @@ export default function AdminInquiryPage() {
             <p className="text-xs text-gray-400 text-center">삭제된 문의는 복구할 수 없습니다.</p>
             <div className="flex gap-2">
               <button
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1 h-10 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition-colors"
-              >
-                취소
-              </button>
-              <button
                 onClick={() => deleteInquiry(confirmDelete)}
                 className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
               >
                 삭제
+              </button>
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 h-10 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition-colors"
+              >
+                취소
               </button>
             </div>
           </div>

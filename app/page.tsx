@@ -377,16 +377,16 @@ export default function HomePage() {
                 })()}
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setModal(null)}
-                    className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium"
-                  >
-                    취소
-                  </button>
-                  <button
                     onClick={handleConfirm}
                     className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium"
                   >
                     확인
+                  </button>
+                  <button
+                    onClick={() => setModal(null)}
+                    className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium"
+                  >
+                    취소
                   </button>
                 </div>
               </>
@@ -425,17 +425,17 @@ export default function HomePage() {
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setModal(null); setEditReason(""); setEditTime(""); setEditLunchBreak(true); }}
-                    className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium"
-                  >
-                    취소
-                  </button>
-                  <button
                     onClick={handleEditConfirm}
                     disabled={!editTime || !editReason.trim()}
                     className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium disabled:opacity-40"
                   >
                     요청 전송
+                  </button>
+                  <button
+                    onClick={() => { setModal(null); setEditReason(""); setEditTime(""); setEditLunchBreak(true); }}
+                    className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium"
+                  >
+                    취소
                   </button>
                 </div>
               </>
