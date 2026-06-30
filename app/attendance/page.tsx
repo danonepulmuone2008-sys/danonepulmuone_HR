@@ -153,7 +153,7 @@ export default function AttendancePage() {
             supabase.from("attendance_records").select("clock_in, clock_out, lunch_break").eq("user_id", uid).eq("date", date).maybeSingle().then(r => r.data)
           )),
       supabase.from("business_trip_requests")
-        .select("start_date, end_date, start_time, end_time")
+        .select("start_date, end_date, start_time, end_time, lunch_break")
         .eq("user_id", uid).eq("status", "approved")
         .lte("start_date", fmt(friday)).gte("end_date", fmt(monday)),
       supabase.from("vacation_requests")
@@ -199,7 +199,8 @@ export default function AttendancePage() {
         const endStr = isSingleDay || trip.end_date === date ? trip.end_time : "18:00";
         const [sh, sm] = startStr.split(":").map(Number);
         const [eh, em] = endStr.split(":").map(Number);
-        hours += (eh * 60 + em - sh * 60 - sm) / 60;
+        const tripH = (eh * 60 + em - sh * 60 - sm) / 60;
+        hours += trip.lunch_break && tripH >= 1 ? tripH - 1 : tripH;
         if (!clockIn) { clockIn = startStr; clockOut = endStr; }
       }
       const vac = (vacHours ?? []).find(v => v.start_date === date);
@@ -219,7 +220,7 @@ export default function AttendancePage() {
     const [myVacRes, myTripRes, allVacRes, allTripRes, flexRes, usersRes, reqVacRes, reqTripRes, attRecRes, attEditReqRes] = await Promise.all([
       supabase.from("vacation_requests").select("id, type, start_date, end_date, status, start_time, end_time, lunch_break, hours")
         .eq("user_id", uid).eq("status", "approved").lte("start_date", endDate).gte("end_date", startDate),
-      supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status, start_time, end_time")
+      supabase.from("business_trip_requests").select("id, destination, start_date, end_date, status, start_time, end_time, lunch_break")
         .eq("user_id", uid).eq("status", "approved").lte("start_date", endDate).gte("end_date", startDate),
       supabase.from("vacation_requests").select("id, user_id, type, start_date, end_date, status, start_time, end_time")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),

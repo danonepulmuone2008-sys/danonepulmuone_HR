@@ -6,11 +6,11 @@ import { supabase } from "@/lib/supabase";
 
 export default function BusinessTripPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ startDate: "", endDate: "", destination: "", reason: "", startTime: "", endTime: "" });
+  const [form, setForm] = useState({ startDate: "", endDate: "", destination: "", reason: "", startTime: "", endTime: "", lunchBreak: false });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
 
-  const update = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
+  const update = (key: string, value: string | boolean) => setForm(prev => ({ ...prev, [key]: value }));
 
   const showToast = (msg: string, isError = false) => {
     setToast({ msg, isError });
@@ -55,6 +55,7 @@ export default function BusinessTripPage() {
         start_time: form.startTime,
         end_time: form.endTime,
         reason: form.reason || null,
+        lunch_break: form.lunchBreak,
       });
 
       if (error) {
@@ -129,6 +130,15 @@ export default function BusinessTripPage() {
               />
             </div>
           </div>
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.lunchBreak}
+              onChange={e => update("lunchBreak", e.target.checked)}
+              className="w-5 h-5 rounded accent-blue-600"
+            />
+            <span className="text-sm text-gray-700">점심 식사 포함 (-1시간)</span>
+          </label>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 사유</label>
             <textarea

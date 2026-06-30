@@ -235,6 +235,7 @@ export default function AdminAttendancePage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editIsSession, setEditIsSession] = useState(false);
   const [editSessions, setEditSessions] = useState<EditSession[]>([]);
+  const [sessionResetIds, setSessionResetIds] = useState<string[]>([]);
 
   const scheduleInterns = realInterns;
   const colorMap = buildColorMap(scheduleInterns);
@@ -512,6 +513,7 @@ export default function AdminAttendancePage() {
     setEditDate(date);
     setEditIsSession(false);
     setEditSessions([]);
+    setSessionResetIds([]);
     const user_ = recordsData?.users.find(u => u.id === userId);
     if (user_?.use_session_tracking) {
       setEditIsSession(true);
@@ -535,6 +537,13 @@ export default function AdminAttendancePage() {
     const token = user?.token;
     if (!token) { setEditSaving(false); return; }
     try {
+      for (const id of sessionResetIds) {
+        await fetch(`/api/admin/work-sessions?id=${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      setSessionResetIds([]);
       for (const s of editSessions) {
         if (s.id) {
           await fetch("/api/admin/work-sessions", {
@@ -1698,6 +1707,18 @@ export default function AdminAttendancePage() {
                   >
                     + 세션 추가
                   </button>
+                  {user?.role === "admin" && (
+                    <button
+                      onClick={() => {
+                        const idsToDelete = editSessions.filter(s => s.id).map(s => s.id as string);
+                        setSessionResetIds(idsToDelete);
+                        setEditSessions([]);
+                      }}
+                      className="w-full h-11 rounded-xl border border-red-200 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors mb-3"
+                    >
+                      초기화
+                    </button>
+                  )}
                   <button
                     onClick={saveSessionRecord}
                     disabled={editSaving}
@@ -1738,6 +1759,14 @@ export default function AdminAttendancePage() {
                     />
                     <span className="text-sm text-gray-700">점심 식사 (-1시간)</span>
                   </label>
+                  {user?.role === "admin" && (
+                    <button
+                      onClick={() => { setEditCheckIn(""); setEditCheckOut(""); setEditLunchBreak(true); }}
+                      className="w-full h-11 rounded-xl border border-red-200 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors mb-3"
+                    >
+                      초기화
+                    </button>
+                  )}
                   <button
                     onClick={saveAttendanceRecord}
                     disabled={editSaving}

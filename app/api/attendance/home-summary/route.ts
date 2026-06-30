@@ -107,7 +107,7 @@ export async function GET(req: Request) {
     useSessionTracking
       ? supabaseAdmin.from("work_sessions").select("date, start_time, end_time, lunch_break").eq("user_id", userId).gte("date", mondayStr).lte("date", fridayStr).not("end_time", "is", null).then(r => r.data ?? [])
       : supabaseAdmin.from("attendance_records").select("date, clock_in, clock_out, lunch_break").eq("user_id", userId).gte("date", mondayStr).lte("date", fridayStr).then(r => r.data ?? []),
-    supabaseAdmin.from("business_trip_requests").select("start_date, end_date, start_time, end_time").eq("user_id", userId).eq("status", "approved").lte("start_date", fridayStr).gte("end_date", mondayStr),
+    supabaseAdmin.from("business_trip_requests").select("start_date, end_date, start_time, end_time, lunch_break").eq("user_id", userId).eq("status", "approved").lte("start_date", fridayStr).gte("end_date", mondayStr),
     supabaseAdmin.from("vacation_requests").select("start_date, hours, start_time, end_time").eq("user_id", userId).eq("status", "approved").not("hours", "is", null).gte("start_date", mondayStr).lte("start_date", fridayStr),
   ])
 
@@ -149,7 +149,8 @@ export async function GET(req: Request) {
       const [eh, em] = endStr.split(":").map(Number)
       dayHours += (eh * 60 + em - sh * 60 - sm) / 60
     }
-    return sum + dayHours
+    const adjusted = t.lunch_break && dayHours >= 1 ? dayHours - 1 : dayHours
+    return sum + adjusted
   }, 0)
 
   const vacTotal = (weekVacations ?? []).reduce((s, v) => s + (v.hours ?? 0), 0)
