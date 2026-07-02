@@ -118,15 +118,23 @@ export async function GET(req: Request) {
     if (w) (vacWindowsByDate[v.start_date] ??= []).push(w)
   }
 
+  // 출장이 있는 날짜는 세션/기록 시간 제외 (출장 시간으로 대체)
+  const tripDates = new Set<string>()
+  for (const t of weekTrips ?? []) {
+    for (const date of weekDates) {
+      if (date >= t.start_date && date <= t.end_date) tripDates.add(date)
+    }
+  }
+
   if (useSessionTracking) {
-    weeklyHours = (weekAttendance as any[]).reduce((sum: number, s: any) => {
+    weeklyHours = (weekAttendance as any[]).filter((s: any) => !tripDates.has(s.date)).reduce((sum: number, s: any) => {
       const h = (toMin(s.end_time) - toMin(s.start_time)) / 60
       const worked = s.lunch_break && h >= 1 ? h - 1 : h
       const ded = overlapHours(kstMinutesOfDay(s.start_time), kstMinutesOfDay(s.end_time), vacWindowsByDate[s.date] ?? [])
       return sum + Math.max(0, worked - ded)
     }, 0)
   } else {
-    weeklyHours = (weekAttendance as any[]).reduce((sum: number, r: any) => {
+    weeklyHours = (weekAttendance as any[]).filter((r: any) => !tripDates.has(r.date)).reduce((sum: number, r: any) => {
       if (!r.clock_in || !r.clock_out) return sum
       const h = (toMin(r.clock_out) - toMin(r.clock_in)) / 60
       const worked = r.lunch_break && h >= 1 ? h - 1 : h
@@ -139,7 +147,7 @@ export async function GET(req: Request) {
   const tripTotal = (weekTrips ?? []).reduce((sum, t) => {
     if (!t.start_time || !t.end_time) return sum
     const isSingleDay = t.start_date === t.end_date
-    let dayHours = 0
+    let dayHoursTotal = 0
     for (let i = 0; i < 5; i++) {
       const date = weekDates[i]
       if (date < t.start_date || date > t.end_date) continue
@@ -147,10 +155,11 @@ export async function GET(req: Request) {
       const endStr   = isSingleDay || t.end_date === date   ? t.end_time   : "18:00"
       const [sh, sm] = startStr.split(":").map(Number)
       const [eh, em] = endStr.split(":").map(Number)
-      dayHours += (eh * 60 + em - sh * 60 - sm) / 60
+      const dayH = (eh * 60 + em - sh * 60 - sm) / 60
+      const includesLunch = t.lunch_break && (sh * 60 + sm) <= 12 * 60 + 30 && (eh * 60 + em) >= 13 * 60 + 30
+      dayHoursTotal += includesLunch && dayH >= 1 ? dayH - 1 : dayH
     }
-    const adjusted = t.lunch_break && dayHours >= 1 ? dayHours - 1 : dayHours
-    return sum + adjusted
+    return sum + dayHoursTotal
   }, 0)
 
   const vacTotal = (weekVacations ?? []).reduce((s, v) => s + (v.hours ?? 0), 0)

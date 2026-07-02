@@ -509,20 +509,23 @@ export default function AdminAttendancePage() {
 
   async function openEditForRecord(userId: string, userName: string, date: string) {
     setEditUserName(userName);
-    setEditUserId(userId);
     setEditDate(date);
     setEditIsSession(false);
     setEditSessions([]);
     setSessionResetIds([]);
-    const user_ = recordsData?.users.find(u => u.id === userId);
-    if (user_?.use_session_tracking) {
-      setEditIsSession(true);
-    }
-    const rec = recordsData?.records[`${userId}__${date}`];
-    setEditCheckIn(rec?.clockIn ? toTimeStr(rec.clockIn) : "");
-    setEditCheckOut(rec?.clockOut ? toTimeStr(rec.clockOut) : "");
-    setEditLunchBreak(rec?.lunchBreak ?? true);
+    setEditCheckIn("");
+    setEditCheckOut("");
+    setEditLunchBreak(true);
     await loadEditRecord(userId, date);
+    // 출장일이고 실제 출퇴근 기록이 없으면 출장 시간으로 채움
+    const rec = recordsData?.records[`${userId}__${date}`];
+    const vacType = recordsData?.vacations[`${userId}__${date}`];
+    if (vacType === "business_trip" && rec?.clockIn) {
+      setEditCheckIn(toTimeStr(rec.clockIn));
+      setEditCheckOut(rec.clockOut ? toTimeStr(rec.clockOut) : "");
+      setEditLunchBreak(rec.lunchBreak ?? false);
+    }
+    setEditUserId(userId);  // 데이터 준비 후 모달 열기
   }
 
   async function handleEditDateChange(date: string) {
@@ -1256,19 +1259,19 @@ export default function AdminAttendancePage() {
                 {!showHistory && (req.type === "attendance_edit" || canApprove) && (
                   <div className="flex gap-2">
                     <button
-                      onClick={() => handleApproval(req, "rejected")}
-                      disabled={isProcessing}
-                      className="flex-1 h-10 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition-colors disabled:opacity-40"
-                    >
-                      반려
-                    </button>
-                    <button
                       onClick={() => handleApproval(req, "approved")}
                       disabled={isProcessing}
                       className="flex-1 h-10 rounded-xl text-sm text-white font-semibold transition-colors disabled:opacity-40"
                       style={{ backgroundColor: "#8dc63f" }}
                     >
                       승인
+                    </button>
+                    <button
+                      onClick={() => handleApproval(req, "rejected")}
+                      disabled={isProcessing}
+                      className="flex-1 h-10 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition-colors disabled:opacity-40"
+                    >
+                      반려
                     </button>
                   </div>
                 )}

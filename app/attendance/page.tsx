@@ -200,8 +200,9 @@ export default function AttendancePage() {
         const [sh, sm] = startStr.split(":").map(Number);
         const [eh, em] = endStr.split(":").map(Number);
         const tripH = (eh * 60 + em - sh * 60 - sm) / 60;
-        hours += trip.lunch_break && tripH >= 1 ? tripH - 1 : tripH;
-        if (!clockIn) { clockIn = startStr; clockOut = endStr; }
+        const includesLunch = trip.lunch_break && (sh * 60 + sm) <= 12 * 60 + 30 && (eh * 60 + em) >= 13 * 60 + 30;
+        hours = includesLunch && tripH >= 1 ? tripH - 1 : tripH;
+        clockIn = startStr; clockOut = endStr; daySessions = undefined;
       }
       const vac = (vacHours ?? []).find(v => v.start_date === date);
       const hasVacation = !!(vac?.hours);

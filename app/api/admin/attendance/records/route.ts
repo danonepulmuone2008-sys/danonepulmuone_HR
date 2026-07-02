@@ -96,7 +96,7 @@ export async function GET(req: Request) {
         .gte("end_date", monday),
       supabaseAdmin
         .from("business_trip_requests")
-        .select("user_id, start_date, end_date, start_time, end_time")
+        .select("user_id, start_date, end_date, start_time, end_time, lunch_break")
         .in("user_id", userIds)
         .eq("status", "approved")
         .lte("start_date", friday)
@@ -127,8 +127,8 @@ export async function GET(req: Request) {
         }
       }
     }
-    // 출장 시간 맵: user_id__date → trip hours
-    const tripHoursMap: Record<string, number> = {}
+    // 출장 맵: user_id__date → { hours, clockIn, clockOut, lunchBreak }
+    const tripMap: Record<string, { hours: number; clockIn: string; clockOut: string; lunchBreak: boolean }> = {}
     for (const t of tripRows ?? []) {
       const isSingleDay = t.start_date === t.end_date
       for (const date of weekDates) {
@@ -138,7 +138,21 @@ export async function GET(req: Request) {
             const startStr = isSingleDay || t.start_date === date ? t.start_time : "09:00"
             const endStr   = isSingleDay || t.end_date   === date ? t.end_time   : "18:00"
             const h = calcTripHours(startStr, endStr)
-            if (h !== null) tripHoursMap[`${t.user_id}__${date}`] = h
+            if (h !== null) {
+              const [sh, sm] = startStr.split(":").map(Number)
+              const [eh, em] = endStr.split(":").map(Number)
+              // 12:30~13:30 포함 여부로 점심 차감 결정
+              const includesLunch = !!(t as any).lunch_break
+                && sh * 60 + sm <= 12 * 60 + 30
+                && eh * 60 + em >= 13 * 60 + 30
+              const adjusted = includesLunch && h >= 1 ? h - 1 : h
+              tripMap[`${t.user_id}__${date}`] = {
+                hours: Math.round(adjusted * 10) / 10,
+                clockIn: `${date}T${startStr}:00+09:00`,
+                clockOut: `${date}T${endStr}:00+09:00`,
+                lunchBreak: includesLunch,
+              }
+            }
           }
         }
       }
@@ -189,12 +203,12 @@ export async function GET(req: Request) {
         recMap[key] = { hours: null, checkedIn: true }
       }
     }
-    // 출장 시간을 attendance 시간에 합산
-    for (const [key, tripH] of Object.entries(tripHoursMap)) {
+    // 출장 시간으로 attendance 시간 대체 (세션/기록보다 우선, 출퇴근·점심 여부도 출장 기준으로 덮어씀)
+    for (const [key, trip] of Object.entries(tripMap)) {
       if (recMap[key]) {
-        recMap[key] = { ...recMap[key], hours: Math.round(((recMap[key].hours ?? 0) + tripH) * 10) / 10 }
+        recMap[key] = { ...recMap[key], hours: trip.hours, clockIn: trip.clockIn, clockOut: trip.clockOut, lunchBreak: trip.lunchBreak }
       } else {
-        recMap[key] = { hours: tripH, checkedIn: false }
+        recMap[key] = { hours: trip.hours, checkedIn: false, clockIn: trip.clockIn, clockOut: trip.clockOut, lunchBreak: trip.lunchBreak }
       }
     }
     // 시간 휴가를 attendance 시간에 합산
