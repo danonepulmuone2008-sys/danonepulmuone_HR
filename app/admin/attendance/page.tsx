@@ -1272,8 +1272,8 @@ export default function AdminAttendancePage() {
                     </button>
                   </div>
                 )}
-                {showHistory && req.type === "attendance_edit" && (
-                  <div className="flex justify-end">
+                {user?.role === "admin" && (
+                  <div className={`flex justify-end${!showHistory && (req.type === "attendance_edit" || canApprove) ? " mt-2" : ""}`}>
                     <button
                       onClick={() => setConfirmDelete(req)}
                       disabled={isProcessing}

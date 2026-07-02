@@ -129,6 +129,9 @@ export async function DELETE(req: Request) {
     const userId = decodeJwtSub(token)
     if (!userId) return NextResponse.json({ error: "JWT 디코딩 실패" }, { status: 401 })
 
+    const { data: caller } = await supabaseAdmin.from("users").select("role").eq("id", userId).single()
+    if (caller?.role !== "admin") return NextResponse.json({ error: "관리자만 삭제할 수 있습니다" }, { status: 403 })
+
     const { type, id } = await req.json()
     if (!type || !id) return NextResponse.json({ error: "올바른 값을 입력해주세요" }, { status: 400 })
 
