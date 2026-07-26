@@ -48,7 +48,7 @@ export default function HomePage() {
   const [editReason, setEditReason] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editLunchBreak, setEditLunchBreak] = useState(true);
-  const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: ToastType; centered?: boolean } | null>(null);
   const [clockBlockReason, setClockBlockReason] = useState<string | null>(null);
   const [networkChecking, setNetworkChecking] = useState(false);
   const [lunchBreak, setLunchBreak] = useState(true);
@@ -312,7 +312,7 @@ export default function HomePage() {
     const result = await Notification.requestPermission();
     if (result === "granted") {
       await subscribeToPush();
-      setToast({ msg: "알림이 허용되었습니다", type: "success" });
+      setToast({ msg: "알림이 허용되었습니다", type: "success", centered: true });
       setTimeout(() => setToast(null), 2500);
     }
   };
@@ -332,9 +332,9 @@ export default function HomePage() {
       {/* 토스트 */}
       {toast && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${
+          className={`fixed z-50 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${
             toast.type === "error" ? "bg-red-500" : "bg-gray-800"
-          }`}
+          } ${toast.centered ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" : "top-6 left-1/2 -translate-x-1/2"}`}
         >
           {toast.msg}
         </div>
