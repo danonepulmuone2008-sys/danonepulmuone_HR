@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { getMealLimit, getMonthlyBusinessDays } from "@/lib/holidays"
@@ -6,10 +6,10 @@ import { getMealLimit, getMonthlyBusinessDays } from "@/lib/holidays"
 export async function GET(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
-    if (!token) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const now = new Date()
     const year = now.getFullYear()
@@ -37,6 +37,6 @@ export async function GET(req: Request) {
     })
   } catch (err) {
     console.error("[meals/limit GET]", err)
-    return NextResponse.json({ error: "議고쉶???ㅽ뙣?덉뒿?덈떎" }, { status: 500 })
+    return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
   }
 }

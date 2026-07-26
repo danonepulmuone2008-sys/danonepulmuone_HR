@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { getMealLimit } from "@/lib/holidays"
@@ -6,10 +6,10 @@ import { getMealLimit } from "@/lib/holidays"
 export async function GET(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
-    if (!token) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const now = new Date()
     const year = now.getFullYear()
@@ -19,7 +19,6 @@ export async function GET(req: Request) {
       ? `${year + 1}-01-01`
       : `${year}-${String(month + 1).padStart(2, "0")}-01`
 
-    // ?대쾲 ???곸닔利?以?receipts.status = "approved" ??寃껊쭔
     const { data: receiptRows, error: receiptError } = await supabaseAdmin
       .from("receipts")
       .select("id")
@@ -30,7 +29,6 @@ export async function GET(req: Request) {
 
     const receiptIds = (receiptRows ?? []).map((r) => r.id)
 
-    // ?대떦 ?곸닔利앹뿉???섏뿉寃??좊떦????ぉ??price ?⑹궛
     const { data, error } = receiptIds.length > 0
       ? await supabaseAdmin
           .from("receipt_items")
@@ -53,6 +51,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ used, totalLimit })
   } catch (err) {
     console.error("[meals usage]", err)
-    return NextResponse.json({ error: "議고쉶???ㅽ뙣?덉뒿?덈떎" }, { status: 500 })
+    return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
   }
 }

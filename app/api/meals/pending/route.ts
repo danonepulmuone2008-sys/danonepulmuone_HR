@@ -1,14 +1,14 @@
-﻿import { NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { supabaseAdmin } from "@/lib/supabase-server"
 
 export async function GET(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
-    if (!token) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { data: items } = await supabaseAdmin
       .from("receipt_items")
@@ -38,15 +38,15 @@ export async function GET(req: Request) {
         item_name: item.item_name,
         price: item.price,
         receipt_id: item.receipt_id,
-        store_name: receipt?.store_name ?? "媛留뱀젏 誘몄씤??,
+        store_name: receipt?.store_name ?? "알 수 없는 가게",
         paid_at: receipt?.paid_at ?? "",
-        uploader_name: uploader?.name ?? "?????놁쓬",
+        uploader_name: uploader?.name ?? "알 수 없음",
       }
     })
 
     return NextResponse.json(result)
   } catch (err) {
     console.error("[pending]", err)
-    return NextResponse.json({ error: "議고쉶???ㅽ뙣?덉뒿?덈떎" }, { status: 500 })
+    return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
   }
 }

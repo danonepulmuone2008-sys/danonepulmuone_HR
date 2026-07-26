@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { supabaseAdmin } from "@/lib/supabase-server"
 
@@ -35,24 +35,21 @@ interface SaveReceiptPayload {
 export async function GET(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
-    if (!token) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    // ?닿? ?щ┛ ?곸닔利?
     const { data: uploaded } = await supabaseAdmin
       .from("receipts")
       .select("id, store_name, paid_at, total_amount, status")
       .eq("uploader_id", user.id)
 
-    // ?닿? ?대떦?먮줈 吏?뺣맂 receipt_items (price ?⑹궛??
     const { data: myItems } = await supabaseAdmin
       .from("receipt_items")
       .select("receipt_id, price")
       .eq("assigned_user_id", user.id)
 
-    // receipt_id蹂???price ?⑷퀎
     const myAmountMap: Record<string, number> = {}
     for (const item of myItems ?? []) {
       myAmountMap[item.receipt_id] = (myAmountMap[item.receipt_id] ?? 0) + (item.price ?? 0)
@@ -78,26 +75,25 @@ export async function GET(req: Request) {
     return NextResponse.json(all)
   } catch (err) {
     console.error("[receipts list]", err)
-    return NextResponse.json({ error: "議고쉶???ㅽ뙣?덉뒿?덈떎" }, { status: 500 })
+    return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })
   }
 }
 
 export async function POST(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
-    if (!token) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
     const body: SaveReceiptPayload = await req.json()
     const { source, storagePath, storeName, paidAt, totalAmount, ocrRaw, items } = body
 
     if (!items?.length) {
-      return NextResponse.json({ error: "??ぉ???놁뒿?덈떎" }, { status: 400 })
+      return NextResponse.json({ error: "항목이 없습니다" }, { status: 400 })
     }
 
-    // ?대떦?먭? 蹂몄씤 ?몄뿉 ?덉쑝硫?pending, 蹂몄씤留뚯씠硫?諛붾줈 approved
     const allAssigneeIds = items.flatMap((item) =>
       item.assigneeIds.length > 0 ? item.assigneeIds : [user.id]
     )
@@ -119,9 +115,8 @@ export async function POST(req: Request) {
       })
       .select("id")
       .single()
-    if (receiptError) throw new Error(`?곸닔利?????ㅽ뙣: ${receiptError.message}`)
+    if (receiptError) throw new Error(`영수증 저장 실패: ${receiptError.message}`)
 
-    // One receipt_item row per assignee per item
     const now = new Date().toISOString()
     const rows = items.flatMap((item) => {
       const ids = item.assigneeIds.length > 0 ? item.assigneeIds : [user.id]
@@ -139,11 +134,11 @@ export async function POST(req: Request) {
     })
 
     const { error: itemsError } = await supabaseAdmin.from("receipt_items").insert(rows)
-    if (itemsError) throw new Error(`??ぉ ????ㅽ뙣: ${itemsError.message}`)
+    if (itemsError) throw new Error(`항목 저장 실패: ${itemsError.message}`)
 
     return NextResponse.json({ receiptId: receipt.id, needsApproval })
   } catch (err) {
     console.error("[receipts save]", err)
-    return NextResponse.json({ error: "??μ뿉 ?ㅽ뙣?덉뒿?덈떎" }, { status: 500 })
+    return NextResponse.json({ error: "저장에 실패했습니다" }, { status: 500 })
   }
 }
