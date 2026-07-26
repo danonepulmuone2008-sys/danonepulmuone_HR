@@ -284,9 +284,7 @@ export default function HomePage() {
     if (Notification.permission === "default" && !(ios && !pwa)) {
       setShowNotifBanner(true);
     } else if (Notification.permission === "granted" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.ready.then(reg =>
-        reg.pushManager.getSubscription().then(sub => { if (sub) subscribeToPush(); })
-      );
+      if (!localStorage.getItem("push_registered")) subscribeToPush();
     }
   }, [user]);
 
@@ -306,8 +304,9 @@ export default function HomePage() {
         endpoint: subscription.endpoint,
         subscription: subJson,
       }, { onConflict: "user_id" });
+      localStorage.setItem("push_registered", subscription.endpoint);
     } catch (e) {
-      alert("Push 오류: " + String(e));
+      console.warn("Push subscription failed:", e);
     }
   };
 
