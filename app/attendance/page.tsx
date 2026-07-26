@@ -95,7 +95,7 @@ export default function AttendancePage() {
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
   const [showVacDetail, setShowVacDetail] = useState(false);
-  const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage"; appliedAt?: string }[]>([]);
+  const [vacHistory, setVacHistory] = useState<{ date: string; label: string; hours: number; kind: "grant" | "usage"; appliedAt?: string; grantedByName?: string | null }[]>([]);
   const [vacHistoryLoading, setVacHistoryLoading] = useState(false);
   const [missingDays, setMissingDays] = useState<Record<string, { clockIn: string }>>({});
   const [attEditDir, setAttEditDir] = useState<"in" | "out">("out");
@@ -388,13 +388,19 @@ export default function AttendancePage() {
     setVacHistoryLoading(true);
     try {
       const [{ data: grants }, { data: usage }] = await Promise.all([
-        supabase.from("vacation_grants").select("hours, note, created_at").eq("user_id", userId).eq("year", currentYear),
+        supabase.from("vacation_grants").select("hours, note, created_at, granted_by").eq("user_id", userId).eq("year", currentYear),
         supabase.from("vacation_requests").select("type, start_date, hours, created_at").eq("user_id", userId).eq("status", "approved")
           .gte("start_date", `${currentYear}-01-01`).lte("start_date", `${currentYear}-12-31`),
       ]);
+      const granterIds = [...new Set((grants ?? []).map((g: any) => g.granted_by).filter(Boolean))];
+      let granterMap: Record<string, string> = {};
+      if (granterIds.length > 0) {
+        const { data: granters } = await supabase.from("users").select("id, name").in("id", granterIds);
+        granterMap = Object.fromEntries((granters ?? []).map((u: any) => [u.id, u.name]));
+      }
       const history = [
-        ...(grants ?? []).map(g => ({ date: g.created_at, label: g.note || "휴가 부여", hours: g.hours ?? 0, kind: "grant" as const })),
-        ...(usage ?? []).map(u => ({ date: u.start_date, label: u.type, hours: u.hours ?? 0, kind: "usage" as const, appliedAt: u.created_at })),
+        ...(grants ?? []).map((g: any) => ({ date: g.created_at, label: g.note || "휴가 부여", hours: g.hours ?? 0, kind: "grant" as const, grantedByName: g.granted_by ? (granterMap[g.granted_by] ?? null) : null })),
+        ...(usage ?? []).map((u: any) => ({ date: u.start_date, label: u.type, hours: u.hours ?? 0, kind: "usage" as const, appliedAt: u.created_at })),
       ].sort((a, b) => {
         const keyA = a.kind === "usage" && a.appliedAt ? a.appliedAt : a.date;
         const keyB = b.kind === "usage" && b.appliedAt ? b.appliedAt : b.date;
@@ -1068,7 +1074,10 @@ export default function AttendancePage() {
                           <div>
                             <p className="text-sm font-medium text-gray-800">{item.label}</p>
                             {isGrant ? (
-                              <p className="text-xs text-gray-400 mt-0.5">지급일 {fmtDate(item.date)}</p>
+                              <>
+                                <p className="text-xs text-gray-400 mt-0.5">지급일 {fmtDate(item.date)}</p>
+                                {item.grantedByName && <p className="text-xs text-gray-400">지급: {item.grantedByName}</p>}
+                              </>
                             ) : (
                               <>
                                 <p className="text-xs text-gray-400 mt-0.5">{fmtDate(item.date)}</p>

@@ -14,12 +14,23 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
       .from("vacation_grants")
-      .select("id, hours, note, created_at")
+      .select("id, hours, note, created_at, granted_by")
       .eq("user_id", userId)
       .eq("year", Number(year))
       .order("created_at", { ascending: false })
 
     if (error) throw error
+
+    const granterIds = [...new Set((data ?? []).map((g) => g.granted_by).filter(Boolean))]
+    let granterMap: Record<string, string> = {}
+    if (granterIds.length > 0) {
+      const { data: granters } = await supabaseAdmin.from("users").select("id, name").in("id", granterIds)
+      granterMap = Object.fromEntries((granters ?? []).map((u) => [u.id, u.name]))
+    }
+    const grants = (data ?? []).map((g) => ({
+      ...g,
+      granted_by_name: g.granted_by ? (granterMap[g.granted_by] ?? null) : null,
+    }))
 
     const { data: usageData } = await supabaseAdmin
       .from("vacation_requests")
@@ -30,9 +41,9 @@ export async function GET(req: Request) {
       .lte("start_date", `${year}-12-31`)
       .order("start_date", { ascending: false })
 
-    const totalHours = (data ?? []).reduce((sum, g) => sum + (g.hours ?? 0), 0)
+    const totalHours = grants.reduce((sum, g) => sum + (g.hours ?? 0), 0)
     const usedHours = (usageData ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0)
-    return NextResponse.json({ grants: data ?? [], totalHours, usageList: usageData ?? [], usedHours })
+    return NextResponse.json({ grants, totalHours, usageList: usageData ?? [], usedHours })
   } catch (err) {
     console.error("[admin/vacation-grants GET]", err)
     return NextResponse.json({ error: "조회에 실패했습니다" }, { status: 500 })

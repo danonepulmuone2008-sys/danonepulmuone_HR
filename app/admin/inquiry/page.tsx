@@ -17,6 +17,7 @@ type InquiryItem = {
   date: string;
   time: string;
   isRead: boolean;
+  processedByName: string | null;
 };
 
 export default function AdminInquiryPage() {
@@ -39,15 +40,17 @@ export default function AdminInquiryPage() {
     const fetchInquiries = async () => {
       const { data } = await supabase
         .from("inquiries")
-        .select("id, user_id, subject, content, created_at, is_processed, is_read")
+        .select("id, user_id, subject, content, created_at, is_processed, is_read, processed_by")
         .order("created_at", { ascending: false });
 
       if (data) {
         const userIds = [...new Set(data.map((d: any) => d.user_id).filter(Boolean))];
+        const processorIds = [...new Set(data.map((d: any) => d.processed_by).filter(Boolean))];
+        const allIds = [...new Set([...userIds, ...processorIds])];
         const { data: users } = await supabase
           .from("users")
           .select("id, name")
-          .in("id", userIds);
+          .in("id", allIds);
         const userMap: Record<string, string> = {};
         (users ?? []).forEach((u: any) => { userMap[u.id] = u.name; });
 
@@ -61,6 +64,7 @@ export default function AdminInquiryPage() {
           date: (() => { const dt = new Date(d.created_at); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`; })(),
           time: (() => { const dt = new Date(d.created_at); return `${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`; })(),
           isRead: false,
+          processedByName: d.processed_by ? (userMap[d.processed_by] ?? null) : null,
         }));
         setInquiryItems(items);
         setStatuses(items.map((q, i) => ({
@@ -88,12 +92,18 @@ export default function AdminInquiryPage() {
   };
 
   const processInquiry = async (id: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const adminId = session?.user?.id ?? null;
+    const { data: adminProfile } = adminId
+      ? await supabase.from("users").select("name").eq("id", adminId).maybeSingle()
+      : { data: null };
+    setInquiryItems((prev) => prev.map((q) => q.id === id ? { ...q, processedByName: adminProfile?.name ?? null } : q));
     setStatuses((prev) => prev.map((s) => s.id === id ? { ...s, isNew: false, isProcessed: true } : s));
     setSelectedId(null);
     setToast("처리 완료되었습니다.");
     setTimeout(() => setToast(""), 2500);
     window.dispatchEvent(new CustomEvent("inquiryProcessed"));
-    await supabase.from("inquiries").update({ is_processed: true, is_read: true }).eq("id", id);
+    await supabase.from("inquiries").update({ is_processed: true, is_read: true, processed_by: adminId }).eq("id", id);
   };
 
   const deleteInquiry = async (id: string) => {
@@ -175,6 +185,9 @@ export default function AdminInquiryPage() {
                       <span className="text-xs text-gray-500">{q.senderName}</span>
                     </div>
                     <p className="text-xs text-gray-400 line-clamp-1">{q.content}</p>
+                    {q.isProcessed && q.processedByName && (
+                      <p className="text-xs text-blue-400 mt-0.5">처리: {q.processedByName}</p>
+                    )}
                   </div>
                   <div className="flex flex-col items-end flex-shrink-0 gap-1 pt-0.5">
                     <p className="text-[11px] text-gray-400 whitespace-nowrap">
@@ -274,11 +287,8 @@ export default function AdminInquiryPage() {
       <AdminBottomNav />
 
       {toast && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
-          <div className="flex items-center gap-2 bg-white text-gray-800 text-sm px-5 py-3 rounded-2xl shadow-2xl border border-gray-100">
-            <span className="text-green-500 text-base">✓</span>
-            {toast}
-          </div>
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap">
+          {toast}
         </div>
       )}
     </div>

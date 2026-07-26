@@ -61,6 +61,7 @@ type Grant = {
   hours: number;
   note: string | null;
   created_at: string;
+  granted_by_name: string | null;
 };
 
 type VacUsage = {
@@ -1531,6 +1532,7 @@ export default function AdminAttendancePage() {
                           <div>
                             <p className="text-sm font-semibold text-gray-800">+{g.hours}시간</p>
                             <p className="text-xs text-gray-400 mt-0.5">{dateStr}{g.note ? ` · ${g.note}` : ""}</p>
+                            {g.granted_by_name && <p className="text-xs text-gray-400">지급: {g.granted_by_name}</p>}
                           </div>
                           <button
                             onClick={() => handleDeleteGrant(g.id)}

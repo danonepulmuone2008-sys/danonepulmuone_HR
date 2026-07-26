@@ -326,17 +326,28 @@ const [showInquiry, setShowInquiry] = useState(false);
 
   /* 내 문의 내역 */
   const [showInquiries, setShowInquiries] = useState(false);
-  type InquiryItem = { id: string; subject: string; content: string; status: string; created_at: string };
+  type InquiryItem = { id: string; subject: string; content: string; created_at: string; is_processed: boolean; processedByName: string | null };
   const [myInquiries, setMyInquiries] = useState<InquiryItem[]>([]);
   const [inquiriesLoading, setInquiriesLoading] = useState(false);
+  const [confirmDeleteInquiry, setConfirmDeleteInquiry] = useState<string | null>(null);
+  const [inquiryToast, setInquiryToast] = useState("");
 
   const openInquiries = async () => {
     if (!authUser) return;
     setShowInquiries(true);
     setInquiriesLoading(true);
     try {
-      const { data } = await supabase.from("inquiries").select("id, subject, content, status, created_at").eq("user_id", authUser.id).order("created_at", { ascending: false });
-      setMyInquiries(data ?? []);
+      const { data } = await supabase.from("inquiries").select("id, subject, content, created_at, is_processed, processed_by").eq("user_id", authUser.id).order("created_at", { ascending: false });
+      const processorIds = [...new Set((data ?? []).map((d: any) => d.processed_by).filter(Boolean))];
+      let processorMap: Record<string, string> = {};
+      if (processorIds.length > 0) {
+        const { data: processors } = await supabase.from("users").select("id, name").in("id", processorIds);
+        processorMap = Object.fromEntries((processors ?? []).map((u: any) => [u.id, u.name]));
+      }
+      setMyInquiries((data ?? []).map((d: any) => ({
+        ...d,
+        processedByName: d.processed_by ? (processorMap[d.processed_by] ?? null) : null,
+      })));
     } finally {
       setInquiriesLoading(false);
     }
@@ -346,7 +357,17 @@ const [showInquiry, setShowInquiry] = useState(false);
     if (authUser) {
       await supabase.from("inquiries").insert({ user_id: authUser.id, subject: inquiry.subject, content: inquiry.content });
     }
-    setInquirySent(true);
+    closeInquiry();
+    setInquiryToast("문의가 전송되었습니다.");
+    setTimeout(() => setInquiryToast(""), 2500);
+  };
+
+  const deleteMyInquiry = async (id: string) => {
+    await supabase.from("inquiries").delete().eq("id", id);
+    setMyInquiries((prev) => prev.filter((q) => q.id !== id));
+    setConfirmDeleteInquiry(null);
+    setInquiryToast("삭제되었습니다.");
+    setTimeout(() => setInquiryToast(""), 2500);
   };
 
   const closeInquiry = () => {
@@ -745,7 +766,6 @@ const [showInquiry, setShowInquiry] = useState(false);
             {inquirySent ? (
               /* 전송 완료 화면 */
               <div className="flex flex-col items-center py-10 px-5 gap-3">
-                <span className="text-4xl">✅</span>
                 <p className="text-base font-bold text-gray-800">문의가 전송되었습니다</p>
                 <button
                   onClick={closeInquiry}
@@ -819,18 +839,67 @@ const [showInquiry, setShowInquiry] = useState(false);
                     <div key={item.id} className="border border-gray-100 rounded-xl p-4 flex flex-col gap-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-gray-800 truncate flex-1">{item.subject}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${item.status === "resolved" ? "bg-green-50 text-green-600" : "bg-yellow-50 text-yellow-600"}`}>
-                          {item.status === "resolved" ? "처리완료" : "미처리"}
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${item.is_processed ? "bg-green-50 text-green-600" : "bg-yellow-50 text-yellow-600"}`}>
+                          {item.is_processed ? "처리완료" : "미처리"}
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{item.content}</p>
-                      <p className="text-xs text-gray-300">{new Date(item.created_at).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-gray-300">{new Date(item.created_at).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}</p>
+                        {!item.is_processed && (
+                          <button
+                            onClick={() => setConfirmDeleteInquiry(item.id)}
+                            className="text-xs text-red-400 hover:text-red-500 transition-colors"
+                          >
+                            삭제
+                          </button>
+                        )}
+                      </div>
+                      {item.is_processed && item.processedByName && (
+                        <p className="text-xs text-blue-400">처리: {item.processedByName}</p>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 문의 삭제 확인 모달 */}
+      {confirmDeleteInquiry !== null && (
+        <div
+          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 px-6"
+          onClick={() => setConfirmDeleteInquiry(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-xs px-6 py-6 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold text-gray-900 text-center">문의를 삭제하시겠습니까?</p>
+            <p className="text-xs text-gray-400 text-center">삭제된 문의는 복구할 수 없습니다.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => deleteMyInquiry(confirmDeleteInquiry)}
+                className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-semibold"
+              >
+                삭제
+              </button>
+              <button
+                onClick={() => setConfirmDeleteInquiry(null)}
+                className="flex-1 h-10 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inquiryToast && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[200] bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap">
+          {inquiryToast}
         </div>
       )}
 

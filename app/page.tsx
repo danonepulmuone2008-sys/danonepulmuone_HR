@@ -1,7 +1,7 @@
 ﻿"use client";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Camera } from "lucide-react";
@@ -36,6 +36,7 @@ export default function HomePage() {
     loaded: attendanceLoaded,
     fetchAll: fetchAttendanceAll,
     doClockIn, doClockOut, addSession, closeSession, addWeeklyHours,
+    reset: resetAttendance,
   } = useAttendanceStore();
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
@@ -258,10 +259,19 @@ export default function HomePage() {
     setModal(null);
   };
 
-  // 홈 진입 시 근태 + 식대 1회 fetch
+  const prevUserIdRef = useRef<string | null>(null);
+
+  // 홈 진입 시 근태 + 식대 fetch (유저 변경 시 스토어 초기화 후 재fetch)
   useEffect(() => {
     if (!user?.token) return;
-    if (!attendanceLoaded) fetchAttendanceAll(user.token);
+    const isNewUser = prevUserIdRef.current !== user.id;
+    prevUserIdRef.current = user.id;
+    if (isNewUser) {
+      resetAttendance();
+      fetchAttendanceAll(user.token);
+    } else if (!attendanceLoaded) {
+      fetchAttendanceAll(user.token);
+    }
     fetchMealAll(user.token);
   }, [user]);
 
