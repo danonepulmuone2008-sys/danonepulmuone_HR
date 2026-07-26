@@ -296,10 +296,12 @@ export default function HomePage() {
         userVisibleOnly: true,
         applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
       });
+      const subJson = JSON.parse(JSON.stringify(subscription));
       await supabase.from("push_subscriptions").upsert({
         user_id: user.id,
-        subscription: JSON.parse(JSON.stringify(subscription)),
-      }, { onConflict: "user_id" });
+        endpoint: subscription.endpoint,
+        subscription: subJson,
+      }, { onConflict: "user_id,endpoint" });
     } catch (e) {
       console.warn("Push subscription failed:", e);
     }
