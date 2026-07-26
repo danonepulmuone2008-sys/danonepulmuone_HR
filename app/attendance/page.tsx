@@ -80,7 +80,7 @@ export default function AttendancePage() {
     setTimeout(() => setPageToast(null), 3000);
   };
   const [weekOffset, setWeekOffset] = useState(0);
-  const [showTeam, setShowTeam] = useState(false);
+  const [showTeam, setShowTeam] = useState(true);
   const [showFlex, setShowFlex] = useState(true);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [modalMode, setModalMode] = useState<"detail" | "flex-add" | "attendance-edit">("detail");
