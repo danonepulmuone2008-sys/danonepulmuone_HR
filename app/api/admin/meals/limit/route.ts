@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase"
+﻿import { NextResponse } from "next/server"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireAdmin } from "@/lib/auth"
 import { calcBusinessDaysForPolicy } from "@/lib/holidays"
 

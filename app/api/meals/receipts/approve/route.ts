@@ -1,17 +1,18 @@
-import { NextResponse } from "next/server"
-import { supabase, supabaseAdmin } from "@/lib/supabase"
+﻿import { NextResponse } from "next/server"
+import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 export async function PATCH(req: Request) {
   try {
     const token = req.headers.get("Authorization")?.replace("Bearer ", "") ?? ""
-    if (!token) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+    if (!token) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser(token)
-    if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "?몄쬆???꾩슂?⑸땲?? }, { status: 401 })
 
     const { itemId, action } = await req.json() as { itemId: string; action: "approved" | "rejected" }
     if (!itemId || !["approved", "rejected"].includes(action)) {
-      return NextResponse.json({ error: "필수 데이터 누락" }, { status: 400 })
+      return NextResponse.json({ error: "?꾩닔 ?곗씠???꾨씫" }, { status: 400 })
     }
 
     // Update only items assigned to this user
@@ -22,7 +23,7 @@ export async function PATCH(req: Request) {
       .eq("assigned_user_id", user.id)
       .select("receipt_id")
       .single()
-    if (updateError) throw new Error(`업데이트 실패: ${updateError.message}`)
+    if (updateError) throw new Error(`?낅뜲?댄듃 ?ㅽ뙣: ${updateError.message}`)
 
     // Check if all items for this receipt have responded
     const { data: pending } = await supabaseAdmin
@@ -50,6 +51,6 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true, receiptFullyApproved })
   } catch (err) {
     console.error("[receipts approve]", err)
-    return NextResponse.json({ error: "처리에 실패했습니다" }, { status: 500 })
+    return NextResponse.json({ error: "泥섎━???ㅽ뙣?덉뒿?덈떎" }, { status: 500 })
   }
 }

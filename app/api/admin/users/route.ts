@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server"
-import { supabase, supabaseAdmin } from "@/lib/supabase"
+﻿import { NextResponse } from "next/server"
+import { supabase } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-server"
 
 export async function GET(req: Request) {
   try {
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
 
     if (usersError) throw usersError
 
-    // 해당 월 approved 영수증 ID 수집
+    // ?대떦 ??approved ?곸닔利?ID ?섏쭛
     const { data: approvedReceipts, error: receiptsError } = await supabaseAdmin
       .from("receipts")
       .select("id")
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
 
     const approvedIds = (approvedReceipts ?? []).map((r) => r.id)
 
-    // 해당 영수증에서 각 사용자에게 배정된 price 합산
+    // ?대떦 ?곸닔利앹뿉??媛??ъ슜?먯뿉寃?諛곗젙??price ?⑹궛
     const usageMap: Record<string, number> = {}
     if (approvedIds.length > 0) {
       const { data: items, error: itemsError } = await supabaseAdmin
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // 유저별 양도 net 계산
+    // ?좎?蹂??묐룄 net 怨꾩궛
     const [{ data: transfersOut }, { data: transfersIn }] = await Promise.all([
       supabaseAdmin.from("meal_transfers").select("from_user_id, amount").eq("status", "approved").gte("responded_at", startDate).lt("responded_at", endDate),
       supabaseAdmin.from("meal_transfers").select("to_user_id, amount").eq("status", "approved").gte("responded_at", startDate).lt("responded_at", endDate),

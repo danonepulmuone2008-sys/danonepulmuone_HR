@@ -84,7 +84,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       setReady(true);
     }
 
-    async function setAuthState(nextSession: Session) {
+    async function setAuthState(nextSession: Session): Promise<string> {
       // getSession으로 가져온 세션이 실제 Supabase Auth 서버에도 유효한지 검증
       const {
         data: { user: verifiedUser },
@@ -93,7 +93,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
       if (userError || !verifiedUser) {
         await clearAuth();
-        return;
+        return "";
       }
 
       const meta = verifiedUser.user_metadata ?? {};
@@ -104,7 +104,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         .eq("id", verifiedUser.id)
         .maybeSingle();
 
-      if (!mounted) return;
+      if (!mounted) return "";
+
+      const role = profile?.role ?? "";
 
       setSession(nextSession);
       setUser({
@@ -115,11 +117,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         phone: profile?.phone ?? meta.phone ?? "",
         email: verifiedUser.email ?? "",
         token: nextSession.access_token,
-        role: profile?.role ?? "",
+        role,
         approver: profile?.approver ?? false,
       });
 
       setReady(true);
+      return role;
     }
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -131,7 +134,17 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      await setAuthState(session);
+      const role = await setAuthState(session);
+
+      // 기존 세션 복원 시 role에 따라 올바른 페이지로 리다이렉트
+      if (!isPublic && role) {
+        const isAdminRole = role === "manager" || role === "admin";
+        if (isAdminRole && !pathname.startsWith("/admin")) {
+          router.replace("/admin");
+        } else if (!isAdminRole && pathname.startsWith("/admin")) {
+          router.replace("/");
+        }
+      }
     });
 
     const {

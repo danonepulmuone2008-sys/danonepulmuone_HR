@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase-server";
 
 export async function POST(req: NextRequest) {
   const { user_id, date, clock_in, clock_out } = await req.json();

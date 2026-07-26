@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase"
+﻿import { NextResponse } from "next/server"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireUser } from "@/lib/auth"
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays"
 import { kstMinutesOfDay, overlapHours, toWindow, type HourlyVacWindow } from "@/lib/workHours"

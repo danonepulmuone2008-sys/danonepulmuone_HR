@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
+﻿import { NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
-import { supabaseAdmin } from "@/lib/supabase"
+import { supabaseAdmin } from "@/lib/supabase-server"
 import sharp from "sharp"
 
 // 재시도(아래 runGeminiOcr)가 누적돼도 함수가 강제 종료되지 않도록 실행시간 한도를 늘린다.
