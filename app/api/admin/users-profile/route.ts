@@ -56,3 +56,32 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "수정에 실패했습니다" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const auth = await requireAdmin(req);
+    if (!auth.ok) return auth.response;
+
+    if (auth.profile.role !== "admin") {
+      return NextResponse.json({ error: "시스템 관리자만 계정을 삭제할 수 있습니다" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id가 필요합니다" }, { status: 400 });
+
+    if (id === auth.user.id) {
+      return NextResponse.json({ error: "자신의 계정은 삭제할 수 없습니다" }, { status: 400 });
+    }
+
+    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id);
+    if (authError) throw authError;
+
+    await supabaseAdmin.from("users").delete().eq("id", id);
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("[admin/users-profile DELETE]", err);
+    return NextResponse.json({ error: "삭제에 실패했습니다" }, { status: 500 });
+  }
+}

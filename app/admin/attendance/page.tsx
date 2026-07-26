@@ -198,6 +198,7 @@ export default function AdminAttendancePage() {
   const [confirmDelete, setConfirmDelete] = useState<ApprovalRequest | null>(null);
   const [deleteToast, setDeleteToast] = useState(false);
   const [approvalToast, setApprovalToast] = useState<string | null>(null);
+  const [grantToast, setGrantToast] = useState<string | null>(null);
   const APPROVAL_PAGE_SIZE = 5;
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
@@ -343,6 +344,7 @@ export default function AdminAttendancePage() {
         setNewHours("");
         setNewNote("");
         await fetchGrants(grantTarget.id, grantYear);
+        showGrantToast("지급되었습니다");
       }
     } finally {
       setGranting(false);
@@ -359,7 +361,10 @@ export default function AdminAttendancePage() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) await fetchGrants(grantTarget.id, grantYear);
+      if (res.ok) {
+        await fetchGrants(grantTarget.id, grantYear);
+        showGrantToast("삭제되었습니다");
+      }
     } finally {
       setDeletingGrantId(null);
     }
@@ -384,6 +389,7 @@ export default function AdminAttendancePage() {
       setBulkHours("");
       setBulkNote("");
       setBulkSelected(new Set());
+      showGrantToast("지급되었습니다");
     } finally {
       setBulkGranting(false);
     }
@@ -452,6 +458,11 @@ export default function AdminAttendancePage() {
   function showApprovalToast(msg: string) {
     setApprovalToast(msg);
     setTimeout(() => setApprovalToast(null), 1000);
+  }
+
+  function showGrantToast(msg: string) {
+    setGrantToast(msg);
+    setTimeout(() => setGrantToast(null), 2000);
   }
 
   async function handleApproval(req: ApprovalRequest, action: "approved" | "rejected") {
@@ -653,7 +664,7 @@ export default function AdminAttendancePage() {
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
       {deleteToast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none">
-          삭제 되었습니다
+          삭제되었습니다
         </div>
       )}
 
@@ -1338,6 +1349,11 @@ export default function AdminAttendancePage() {
       {/* 일괄 지급 바텀시트 */}
       {bulkOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 pb-8" onClick={() => setBulkOpen(false)}>
+          {grantToast && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-800 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none z-[110] whitespace-nowrap">
+              {grantToast}
+            </div>
+          )}
           <div className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10 flex flex-col" style={{ maxHeight: "85vh" }} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div>
@@ -1426,6 +1442,11 @@ export default function AdminAttendancePage() {
       {/* 휴가 지급 바텀시트 */}
       {grantTarget && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 pb-8" onClick={() => setGrantTarget(null)}>
+          {grantToast && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-800 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none z-[110] whitespace-nowrap">
+              {grantToast}
+            </div>
+          )}
           <div className="bg-white rounded-t-2xl w-full max-w-[390px] pb-10 flex flex-col" style={{ maxHeight: "80vh" }} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div>

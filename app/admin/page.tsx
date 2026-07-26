@@ -48,6 +48,9 @@ export default function AdminHomePage() {
   const [editTarget, setEditTarget] = useState<User | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCurrentUser();
@@ -116,9 +119,36 @@ export default function AdminHomePage() {
         await fetchUsers();
         setEditTarget(null);
         setEditForm(null);
+        setToast("수정되었습니다");
+        setTimeout(() => setToast(null), 2500);
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteUser() {
+    if (!editTarget) return;
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin/users-profile?id=${editTarget.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        await fetchUsers();
+        setEditTarget(null);
+        setEditForm(null);
+        setShowDeleteConfirm(false);
+        setToast("삭제되었습니다");
+        setTimeout(() => setToast(null), 2500);
+      } else {
+        const json = await res.json();
+        alert(json.error ?? "삭제에 실패했습니다");
+      }
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -149,10 +179,10 @@ export default function AdminHomePage() {
           return (
             <div
               key={user.id}
-              className={`bg-white rounded-2xl px-4 py-3 shadow-sm border transition-opacity ${inactive ? "border-gray-100 opacity-50" : "border-gray-100"}`}
+              className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100"
             >
               <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
+                <div className={`flex items-center gap-3 ${inactive ? "opacity-50" : ""}`}>
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white text-base font-bold flex-shrink-0"
                     style={{ backgroundColor: inactive ? "#ccc" : getInternColor(ci) }}
@@ -185,9 +215,17 @@ export default function AdminHomePage() {
                   >
                     수정
                   </button>
+                  {currentUser?.role === "admin" && (
+                    <button
+                      onClick={() => { setEditTarget(user); setShowDeleteConfirm(true); }}
+                      className="text-xs text-red-400 border border-red-200 rounded-lg px-2.5 py-1 hover:bg-red-50 transition-colors"
+                    >
+                      삭제
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="flex flex-col gap-0.5 pl-13">
+              <div className={`flex flex-col gap-0.5 pl-13 ${inactive ? "opacity-50" : ""}`}>
                 {user.phone && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400 w-12">전화</span>
@@ -309,9 +347,50 @@ export default function AdminHomePage() {
                   style={{ backgroundColor: "#8dc63f" }}>
                   {saving ? "저장 중..." : "저장"}
                 </button>
+                {currentUser?.role === "admin" && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full h-12 rounded-xl text-sm font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition-colors"
+                  >
+                    계정 삭제
+                  </button>
+                )}
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 계정 삭제 확인 모달 */}
+      {showDeleteConfirm && editTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-2xl px-6 py-5 mx-6 shadow-xl w-full max-w-xs">
+            <p className="text-base font-semibold text-gray-900 text-center mb-1">계정을 삭제하시겠습니까?</p>
+            <p className="text-sm text-gray-400 text-center mb-5">
+              <span className="font-medium text-gray-700">{editTarget.name}</span>의 계정과 모든 인증 정보가 영구적으로 삭제됩니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={deleteUser}
+                disabled={deleting}
+                className="flex-1 h-11 rounded-xl text-sm text-white font-semibold bg-red-500 disabled:opacity-40"
+              >
+                {deleting ? "삭제 중..." : "삭제"}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-800 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg z-[70] whitespace-nowrap">
+          {toast}
         </div>
       )}
 
