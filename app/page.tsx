@@ -303,7 +303,7 @@ export default function HomePage() {
         subscription: subJson,
       }, { onConflict: "user_id,endpoint" });
     } catch (e) {
-      console.warn("Push subscription failed:", e);
+      alert("Push 오류: " + String(e));
     }
   };
 
