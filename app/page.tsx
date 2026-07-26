@@ -310,7 +310,11 @@ export default function HomePage() {
   const handleRequestNotif = async () => {
     setShowNotifBanner(false);
     const result = await Notification.requestPermission();
-    if (result === "granted") await subscribeToPush();
+    if (result === "granted") {
+      await subscribeToPush();
+      setToast({ msg: "알림이 허용되었습니다", type: "success" });
+      setTimeout(() => setToast(null), 2500);
+    }
   };
 
   const isLoading = !attendanceLoaded || !mealLoaded;
