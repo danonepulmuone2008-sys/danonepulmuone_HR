@@ -283,6 +283,10 @@ export default function HomePage() {
     const pwa = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     if (Notification.permission === "default" && !(ios && !pwa)) {
       setShowNotifBanner(true);
+    } else if (Notification.permission === "granted" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.ready.then(reg =>
+        reg.pushManager.getSubscription().then(sub => { if (sub) subscribeToPush(); })
+      );
     }
   }, [user]);
 
@@ -301,7 +305,7 @@ export default function HomePage() {
         user_id: user.id,
         endpoint: subscription.endpoint,
         subscription: subJson,
-      }, { onConflict: "user_id,endpoint" });
+      }, { onConflict: "user_id" });
     } catch (e) {
       alert("Push 오류: " + String(e));
     }
@@ -312,7 +316,7 @@ export default function HomePage() {
     const result = await Notification.requestPermission();
     if (result === "granted") {
       await subscribeToPush();
-      setToast({ msg: "알림이 허용되었습니다", type: "success", centered: true });
+      setToast({ msg: "알림이 허용되었습니다.", type: "success", centered: true });
       setTimeout(() => setToast(null), 2500);
     }
   };
