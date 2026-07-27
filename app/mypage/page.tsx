@@ -326,6 +326,8 @@ const [showInquiry, setShowInquiry] = useState(false);
 
   /* 내 문의 내역 */
   const [showInquiries, setShowInquiries] = useState(false);
+  const [inquiryPage, setInquiryPage] = useState(1);
+  const INQUIRY_PAGE_SIZE = 5;
   type InquiryItem = { id: string; subject: string; content: string; created_at: string; is_processed: boolean; processedByName: string | null };
   const [myInquiries, setMyInquiries] = useState<InquiryItem[]>([]);
   const [inquiriesLoading, setInquiriesLoading] = useState(false);
@@ -335,6 +337,7 @@ const [showInquiry, setShowInquiry] = useState(false);
   const openInquiries = async () => {
     if (!authUser) return;
     setShowInquiries(true);
+    setInquiryPage(1);
     setInquiriesLoading(true);
     try {
       const { data } = await supabase.from("inquiries").select("id, subject, content, created_at, is_processed, processed_by").eq("user_id", authUser.id).order("created_at", { ascending: false });
@@ -835,7 +838,7 @@ const [showInquiry, setShowInquiry] = useState(false);
                 <p className="text-sm text-gray-400 text-center py-8">문의 내역이 없습니다</p>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {myInquiries.map(item => (
+                  {myInquiries.slice((inquiryPage - 1) * INQUIRY_PAGE_SIZE, inquiryPage * INQUIRY_PAGE_SIZE).map(item => (
                     <div key={item.id} className="border border-gray-100 rounded-xl p-4 flex flex-col gap-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-gray-800 truncate flex-1">{item.subject}</p>
@@ -860,6 +863,25 @@ const [showInquiry, setShowInquiry] = useState(false);
                       )}
                     </div>
                   ))}
+                  {myInquiries.length > INQUIRY_PAGE_SIZE && (
+                    <div className="flex items-center justify-center gap-4 pt-2">
+                      <button
+                        onClick={() => setInquiryPage(p => Math.max(1, p - 1))}
+                        disabled={inquiryPage === 1}
+                        className="text-sm text-gray-400 disabled:opacity-30"
+                      >
+                        ‹ 이전
+                      </button>
+                      <span className="text-xs text-gray-400">{inquiryPage} / {Math.ceil(myInquiries.length / INQUIRY_PAGE_SIZE)}</span>
+                      <button
+                        onClick={() => setInquiryPage(p => Math.min(Math.ceil(myInquiries.length / INQUIRY_PAGE_SIZE), p + 1))}
+                        disabled={inquiryPage === Math.ceil(myInquiries.length / INQUIRY_PAGE_SIZE)}
+                        className="text-sm text-gray-400 disabled:opacity-30"
+                      >
+                        다음 ›
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
