@@ -228,8 +228,8 @@ const AlarmModal = ({
     onDaysChange(days.includes(day) ? days.filter((d) => d !== day) : [...days, day]);
   };
   return (
-    <div className="absolute inset-0 z-50 flex flex-col justify-end">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white rounded-t-3xl shadow-2xl z-10">
         {/* 핸들 */}
         <div className="flex justify-center pt-3 pb-2">
@@ -597,8 +597,8 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 프로필 수정 모달 */}
       {showEdit && (
-        <div className="absolute inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={() => { setForm({ ...saved }); setShowEdit(false); }} />
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 bg-black/40" onClick={() => { setForm({ ...saved }); setShowEdit(false); }} />
           <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
@@ -649,8 +649,8 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 비밀번호 변경 모달 */}
       {showPwChange && (
-        <div className="absolute inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={() => { setPw({ current: "", next: "", confirm: "" }); setShowPwChange(false); }} />
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 bg-black/40" onClick={() => { setPw({ current: "", next: "", confirm: "" }); setShowPwChange(false); }} />
           <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
@@ -721,8 +721,8 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 로그아웃 확인 다이얼로그 */}
       {showLogout && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center px-8">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowLogout(false)} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-8">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowLogout(false)} />
           <div className="relative bg-white rounded-2xl shadow-2xl z-10 w-full overflow-hidden">
             <div className="px-6 pt-6 pb-4 text-center">
               <p className="text-sm text-gray-700">로그아웃 하시겠습니까?</p>
@@ -752,8 +752,8 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 관리자 문의 모달 */}
       {showInquiry && (
-        <div className="absolute inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={closeInquiry} />
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 bg-black/40" onClick={closeInquiry} />
           <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
@@ -818,8 +818,8 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 내 문의 내역 모달 */}
       {showInquiries && (
-        <div className="absolute inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowInquiries(false)} />
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowInquiries(false)} />
           <div className="relative bg-white rounded-t-2xl shadow-xl z-10" style={{ maxHeight: "75vh", display: "flex", flexDirection: "column" }}>
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
@@ -870,7 +870,7 @@ const [showInquiry, setShowInquiry] = useState(false);
       {/* 문의 삭제 확인 모달 */}
       {confirmDeleteInquiry !== null && (
         <div
-          className="absolute inset-0 z-[60] flex items-center justify-center bg-black/40 px-6"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-6"
           onClick={() => setConfirmDeleteInquiry(null)}
         >
           <div
@@ -905,8 +905,8 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 회원 탈퇴 모달 */}
       {showWithdraw && (
-        <div className="absolute inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={closeWithdraw} />
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 bg-black/40" onClick={closeWithdraw} />
           <div className="relative bg-white rounded-t-2xl shadow-2xl z-10">
 
             {/* 핸들 */}
