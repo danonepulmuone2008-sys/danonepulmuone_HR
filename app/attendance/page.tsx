@@ -761,6 +761,11 @@ export default function AttendancePage() {
                 status: "pending",
                 lunch_break: attEditDir === "out" ? attEditLunchBreak : null,
               });
+              fetch("/api/push/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+                body: JSON.stringify({ notifyManagers: true, title: "📋 근태 수정 요청", body: `${user.name}님이 근태 수정을 요청했습니다.`, url: "/admin/attendance" }),
+              }).catch(() => {});
             }
             if (userId) await fetchMonthData(userId);
             goBack();

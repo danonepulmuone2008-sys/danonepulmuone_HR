@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-server"
+import { sendPushToUsers } from "@/lib/push"
 
 function decodeJwtSub(token: string): string | null {
   try {
@@ -32,18 +33,40 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "필수 데이터 누락" }, { status: 400 })
     }
 
+    const actionLabel = action === "approved" ? "승인" : "반려"
+
     if (type === "business_trip") {
+      const { data: req } = await supabaseAdmin
+        .from("business_trip_requests")
+        .select("user_id")
+        .eq("id", id)
+        .single()
       const { error } = await supabaseAdmin
         .from("business_trip_requests")
         .update({ status: action, reviewed_by: userId })
         .eq("id", id)
       if (error) throw new Error(error.message)
+      if (req) sendPushToUsers([req.user_id], {
+        title: `${action === "approved" ? "✅" : "❌"} 출장 신청 ${actionLabel}`,
+        body: `출장 신청이 ${actionLabel}되었습니다.`,
+        url: `/attendance/business-trip/${id}`,
+      }).catch(() => {})
     } else if (type === "vacation") {
+      const { data: req } = await supabaseAdmin
+        .from("vacation_requests")
+        .select("user_id")
+        .eq("id", id)
+        .single()
       const { error } = await supabaseAdmin
         .from("vacation_requests")
         .update({ status: action, reviewed_by: userId })
         .eq("id", id)
       if (error) throw new Error(error.message)
+      if (req) sendPushToUsers([req.user_id], {
+        title: `${action === "approved" ? "✅" : "❌"} 휴가 신청 ${actionLabel}`,
+        body: `휴가 신청이 ${actionLabel}되었습니다.`,
+        url: `/attendance/vacation/${id}`,
+      }).catch(() => {})
     } else if (type === "attendance_edit") {
       const { data: editReq, error: fetchError } = await supabaseAdmin
         .from("attendance_edit_requests")
@@ -71,6 +94,12 @@ export async function PATCH(req: Request) {
           .eq("user_id", editReq.user_id)
           .eq("date", editReq.date)
       }
+
+      sendPushToUsers([editReq.user_id], {
+        title: `${action === "approved" ? "✅" : "❌"} 근태 수정 ${actionLabel}`,
+        body: `근태 수정 요청이 ${actionLabel}되었습니다.`,
+        url: "/attendance",
+      }).catch(() => {})
     }
 
     return NextResponse.json({ ok: true })

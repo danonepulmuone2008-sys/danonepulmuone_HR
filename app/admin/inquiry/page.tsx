@@ -104,6 +104,14 @@ export default function AdminInquiryPage() {
     setTimeout(() => setToast(""), 2500);
     window.dispatchEvent(new CustomEvent("inquiryProcessed"));
     await supabase.from("inquiries").update({ is_processed: true, is_read: true, processed_by: adminId }).eq("id", id);
+    const targetUserId = inquiryItems.find((q) => q.id === id)?.internId;
+    if (targetUserId && session?.access_token) {
+      fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ userIds: [targetUserId], title: "✅ 문의 처리 완료", body: "문의가 처리되었습니다.", url: "/mypage" }),
+      }).catch(() => {});
+    }
   };
 
   const deleteInquiry = async (id: string) => {

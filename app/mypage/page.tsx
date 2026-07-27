@@ -359,6 +359,11 @@ const [showInquiry, setShowInquiry] = useState(false);
   const handleSendInquiry = async () => {
     if (authUser) {
       await supabase.from("inquiries").insert({ user_id: authUser.id, subject: inquiry.subject, content: inquiry.content });
+      fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authUser.token}` },
+        body: JSON.stringify({ notifyManagers: true, title: "📩 새 문의", body: inquiry.subject, url: "/admin/inquiry" }),
+      }).catch(() => {});
     }
     closeInquiry();
     setInquiryToast("문의가 전송되었습니다.");

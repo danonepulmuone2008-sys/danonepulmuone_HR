@@ -61,6 +61,11 @@ export default function BusinessTripPage() {
       if (error) {
         showToast("신청 중 오류가 발생했습니다.", true);
       } else {
+        fetch("/api/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ notifyManagers: true, title: "✈️ 출장 신청", body: "새로운 출장 신청이 접수되었습니다.", url: "/admin/attendance" }),
+        }).catch(() => {});
         sessionStorage.setItem("attendance_toast", "출장 신청이 완료되었습니다");
         router.push("/attendance");
       }

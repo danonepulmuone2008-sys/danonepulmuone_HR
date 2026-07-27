@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireAdmin } from "@/lib/auth"
+import { sendPushToUsers } from "@/lib/push"
 
 export async function GET(req: Request) {
   try {
@@ -65,6 +66,13 @@ export async function POST(req: Request) {
       .insert({ user_id: userId, year, hours, note: note || null, granted_by: auth.user.id })
 
     if (error) throw error
+
+    sendPushToUsers([userId], {
+      title: "🎉 휴가 지급",
+      body: `${hours}시간의 휴가가 지급되었습니다.`,
+      url: "/attendance/vacation",
+    }).catch(() => {})
+
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error("[admin/vacation-grants POST]", err)
