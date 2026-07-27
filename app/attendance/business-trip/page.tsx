@@ -3,9 +3,11 @@ import AppBar from "@/components/AppBar";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function BusinessTripPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [form, setForm] = useState({ startDate: "", endDate: "", destination: "", reason: "", startTime: "", endTime: "", lunchBreak: false });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
@@ -64,7 +66,7 @@ export default function BusinessTripPage() {
         fetch("/api/push/send", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ notifyManagers: true, title: "✈️ 출장 신청", body: "새로운 출장 신청이 접수되었습니다.", url: "/admin/attendance" }),
+          body: JSON.stringify({ notifyManagers: true, body: `✈️ 출장 신청: ${user?.name ?? ""}님이 출장 신청했습니다.`, url: "/admin/attendance" }),
         }).catch(() => {});
         sessionStorage.setItem("attendance_toast", "출장 신청이 완료되었습니다");
         router.push("/attendance");

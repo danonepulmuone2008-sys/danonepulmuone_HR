@@ -362,7 +362,7 @@ const [showInquiry, setShowInquiry] = useState(false);
       fetch("/api/push/send", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${authUser.token}` },
-        body: JSON.stringify({ notifyManagers: true, title: "📩 새 문의", body: inquiry.subject, url: "/admin/inquiry" }),
+        body: JSON.stringify({ notifyManagers: true, body: `📩 새 문의: ${form.name}님이 새로운 문의를 등록했습니다.`, url: "/admin/inquiry" }),
       }).catch(() => {});
     }
     closeInquiry();

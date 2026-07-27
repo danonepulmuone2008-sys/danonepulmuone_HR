@@ -118,7 +118,7 @@ export default function VacationPage() {
         fetch("/api/push/send", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ notifyManagers: true, title: "🌴 휴가 신청", body: `${user?.name ?? ""}님이 휴가를 신청했습니다.`, url: "/admin/attendance" }),
+          body: JSON.stringify({ notifyManagers: true, body: `🌴 휴가 신청: ${user?.name ?? ""}님이 휴가를 신청했습니다.`, url: "/admin/attendance" }),
         }).catch(() => {});
         showToast("휴가 신청이 완료되었습니다.");
         setTimeout(() => router.push("/attendance"), 1500);

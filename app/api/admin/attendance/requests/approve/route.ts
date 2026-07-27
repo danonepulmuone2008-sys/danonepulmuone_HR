@@ -35,6 +35,9 @@ export async function PATCH(req: Request) {
 
     const actionLabel = action === "approved" ? "승인" : "반려"
 
+    const { data: manager } = await supabaseAdmin.from("users").select("name").eq("id", userId).single()
+    const managerName = manager?.name ?? "담당자"
+
     if (type === "business_trip") {
       const { data: req } = await supabaseAdmin
         .from("business_trip_requests")
@@ -47,8 +50,7 @@ export async function PATCH(req: Request) {
         .eq("id", id)
       if (error) throw new Error(error.message)
       if (req) sendPushToUsers([req.user_id], {
-        title: `${action === "approved" ? "✅" : "❌"} 출장 신청 ${actionLabel}`,
-        body: `출장 신청이 ${actionLabel}되었습니다.`,
+        body: `출장 신청 ${actionLabel}: ${managerName}님이 출장 신청을 ${actionLabel}했습니다.`,
         url: `/attendance/business-trip/${id}`,
       }).catch(() => {})
     } else if (type === "vacation") {
@@ -63,8 +65,7 @@ export async function PATCH(req: Request) {
         .eq("id", id)
       if (error) throw new Error(error.message)
       if (req) sendPushToUsers([req.user_id], {
-        title: `${action === "approved" ? "✅" : "❌"} 휴가 신청 ${actionLabel}`,
-        body: `휴가 신청이 ${actionLabel}되었습니다.`,
+        body: `휴가 신청 ${actionLabel}: ${managerName}님이 휴가 신청을 ${actionLabel}했습니다.`,
         url: `/attendance/vacation/${id}`,
       }).catch(() => {})
     } else if (type === "attendance_edit") {
@@ -96,8 +97,7 @@ export async function PATCH(req: Request) {
       }
 
       sendPushToUsers([editReq.user_id], {
-        title: `${action === "approved" ? "✅" : "❌"} 근태 수정 ${actionLabel}`,
-        body: `근태 수정 요청이 ${actionLabel}되었습니다.`,
+        body: `근태 수정 ${actionLabel}: ${managerName}님이 근태 수정 요청을 ${actionLabel}했습니다.`,
         url: "/attendance",
       }).catch(() => {})
     }
