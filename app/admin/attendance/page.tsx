@@ -364,7 +364,7 @@ export default function AdminAttendancePage() {
       });
       if (res.ok) {
         await fetchGrants(grantTarget.id, grantYear);
-        showGrantToast("삭제되었습니다");
+        showGrantToast("삭제되었습니다.");
       }
     } finally {
       setDeletingGrantId(null);
@@ -665,7 +665,7 @@ export default function AdminAttendancePage() {
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
       {deleteToast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none">
-          삭제되었습니다
+          삭제되었습니다.
         </div>
       )}
 

@@ -446,7 +446,7 @@ export default function AttendancePage() {
       setRequests(prev => prev.filter(r => r.id !== req.id));
       if (userId) await fetchMonthData(userId);
       const label = req.type === "vacation" ? "휴가" : req.type === "business_trip" ? "출장" : "수정 요청";
-      showPageToast(`${label} 신청 내역이 삭제되었습니다`);
+      showPageToast(`${label} 신청 내역이 삭제되었습니다.`);
     } finally {
       setDeletingReqId(null);
     }

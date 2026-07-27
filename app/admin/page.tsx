@@ -141,11 +141,11 @@ export default function AdminHomePage() {
         setEditTarget(null);
         setEditForm(null);
         setShowDeleteConfirm(false);
-        setToast("삭제되었습니다");
+        setToast("삭제되었습니다.");
         setTimeout(() => setToast(null), 2500);
       } else {
         const json = await res.json();
-        alert(json.error ?? "삭제에 실패했습니다");
+        alert(json.error ?? "삭제에 실패했습니다.");
       }
     } finally {
       setDeleting(false);
