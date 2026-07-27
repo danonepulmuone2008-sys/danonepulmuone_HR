@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { supabaseAdmin } from "@/lib/supabase-server"
+import { sendPushToUsers } from "@/lib/push"
 
 function checkLunchTime(isoString: string | null): boolean {
   if (!isoString) return false
@@ -135,6 +136,15 @@ export async function POST(req: Request) {
 
     const { error: itemsError } = await supabaseAdmin.from("receipt_items").insert(rows)
     if (itemsError) throw new Error(`항목 저장 실패: ${itemsError.message}`)
+
+    const notifyIds = [...new Set(allAssigneeIds.filter((id) => id !== user.id))]
+    if (notifyIds.length > 0) {
+      sendPushToUsers(notifyIds, {
+        title: "🍽️ 식대 요청",
+        body: `${storeName || "식대"} 영수증 승인 요청이 도착했습니다.`,
+        url: `/meals/receipts/${receipt.id}`,
+      }).catch(() => {})
+    }
 
     return NextResponse.json({ receiptId: receipt.id, needsApproval })
   } catch (err) {

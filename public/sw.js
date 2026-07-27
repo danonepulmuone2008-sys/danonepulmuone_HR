@@ -10,16 +10,18 @@ self.addEventListener('push', function (event) {
   const data = event.data?.json() ?? {};
   const title = data.title || '풀무원다논 HR';
   const options = {
-    body: data.body || '',
+    body: data.title ? `${data.title}: ${data.body || ''}` : (data.body || ''),
     icon: '/pulmuone-logo.png',
     badge: '/pulmuone-logo.png',
     tag: data.tag || 'hr-alarm',
     requireInteraction: true,
+    data: { url: data.url || '/' },
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  event.waitUntil(clients.openWindow('/'));
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(clients.openWindow(url));
 });
