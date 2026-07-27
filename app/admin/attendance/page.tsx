@@ -345,7 +345,7 @@ export default function AdminAttendancePage() {
         setNewHours("");
         setNewNote("");
         await fetchGrants(grantTarget.id, grantYear);
-        showGrantToast("지급되었습니다");
+        showGrantToast("지급되었습니다.");
       }
     } finally {
       setGranting(false);
@@ -390,7 +390,7 @@ export default function AdminAttendancePage() {
       setBulkHours("");
       setBulkNote("");
       setBulkSelected(new Set());
-      showGrantToast("지급되었습니다");
+      showGrantToast("지급되었습니다.");
     } finally {
       setBulkGranting(false);
     }
