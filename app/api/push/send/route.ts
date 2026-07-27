@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser(token)
     if (!user) return NextResponse.json({ error: "인증이 필요합니다" }, { status: 401 })
 
-    const { userIds, notifyManagers, body, url } = await req.json()
+    const { userIds, notifyManagers, title, body, url } = await req.json()
 
     let targetIds: string[] = userIds ?? []
     if (notifyManagers) {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       targetIds = [...new Set([...targetIds, ...managerIds])]
     }
 
-    sendPushToUsers(targetIds, { body, url }).catch(() => {})
+    sendPushToUsers(targetIds, { title, body, url }).catch(() => {})
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error("[push/send]", err)

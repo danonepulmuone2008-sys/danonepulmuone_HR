@@ -66,7 +66,7 @@ export default function BusinessTripPage() {
         fetch("/api/push/send", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ notifyManagers: true, body: `✈️ 출장 신청: ${user?.name ?? ""}님이 출장 신청했습니다.`, url: "/admin/attendance" }),
+          body: JSON.stringify({ notifyManagers: true, title: "✈️ 출장 신청", body: `${user?.name ?? ""}님이 출장 신청했습니다.`, url: "/admin/attendance" }),
         }).catch(() => {});
         sessionStorage.setItem("attendance_toast", "출장 신청이 완료되었습니다");
         router.push("/attendance");

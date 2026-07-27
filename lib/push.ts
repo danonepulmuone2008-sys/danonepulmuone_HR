@@ -16,7 +16,7 @@ export async function getManagerIds(): Promise<string[]> {
 
 export async function sendPushToUsers(
   userIds: string[],
-  payload: { body: string; url?: string },
+  payload: { title?: string; body: string; url?: string },
 ) {
   if (!userIds.length) return
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY || !process.env.VAPID_SUBJECT) {

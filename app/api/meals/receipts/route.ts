@@ -140,7 +140,8 @@ export async function POST(req: Request) {
     const notifyIds = [...new Set(allAssigneeIds.filter((id) => id !== user.id))]
     if (notifyIds.length > 0) {
       sendPushToUsers(notifyIds, {
-        body: `🍽️ 식대 요청: ${storeName || "식대"} 영수증 승인 요청이 도착했습니다.`,
+        title: "🍽️ 식대 요청",
+        body: `${storeName || "식대"} 영수증 승인 요청이 도착했습니다.`,
         url: `/meals/receipts/${receipt.id}`,
       }).catch(() => {})
     }

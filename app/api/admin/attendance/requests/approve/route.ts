@@ -50,7 +50,8 @@ export async function PATCH(req: Request) {
         .eq("id", id)
       if (error) throw new Error(error.message)
       if (req) sendPushToUsers([req.user_id], {
-        body: `출장 신청 ${actionLabel}: ${managerName}님이 출장 신청을 ${actionLabel}했습니다.`,
+        title: `✈️ 출장 신청 ${actionLabel}`,
+        body: `${managerName}님이 출장 신청을 ${actionLabel}했습니다.`,
         url: `/attendance/business-trip/${id}`,
       }).catch(() => {})
     } else if (type === "vacation") {
@@ -65,7 +66,8 @@ export async function PATCH(req: Request) {
         .eq("id", id)
       if (error) throw new Error(error.message)
       if (req) sendPushToUsers([req.user_id], {
-        body: `휴가 신청 ${actionLabel}: ${managerName}님이 휴가 신청을 ${actionLabel}했습니다.`,
+        title: `🌴 휴가 신청 ${actionLabel}`,
+        body: `${managerName}님이 휴가 신청을 ${actionLabel}했습니다.`,
         url: `/attendance/vacation/${id}`,
       }).catch(() => {})
     } else if (type === "attendance_edit") {
@@ -97,7 +99,8 @@ export async function PATCH(req: Request) {
       }
 
       sendPushToUsers([editReq.user_id], {
-        body: `근태 수정 ${actionLabel}: ${managerName}님이 근태 수정 요청을 ${actionLabel}했습니다.`,
+        title: `📋 근태 수정 ${actionLabel}`,
+        body: `${managerName}님이 근태 수정 요청을 ${actionLabel}했습니다.`,
         url: "/attendance",
       }).catch(() => {})
     }

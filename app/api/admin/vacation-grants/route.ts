@@ -68,7 +68,8 @@ export async function POST(req: Request) {
     if (error) throw error
 
     sendPushToUsers([userId], {
-      body: `🎉 휴가 지급: ${hours}시간의 휴가가 지급되었습니다.`,
+      title: "🎉 휴가 지급",
+      body: `${hours}시간의 휴가가 지급되었습니다.`,
       url: "/attendance/vacation",
     }).catch(() => {})
 
