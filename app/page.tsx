@@ -284,7 +284,12 @@ export default function HomePage() {
     if (Notification.permission === "default" && !(ios && !pwa)) {
       setShowNotifBanner(true);
     } else if (Notification.permission === "granted" && "serviceWorker" in navigator) {
-      if (!localStorage.getItem("push_registered")) subscribeToPush();
+      navigator.serviceWorker.ready.then(async (reg) => {
+        const existing = await reg.pushManager.getSubscription();
+        if (!existing || existing.endpoint !== localStorage.getItem("push_registered")) {
+          subscribeToPush();
+        }
+      });
     }
   }, [user]);
 
@@ -299,15 +304,16 @@ export default function HomePage() {
         applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
       });
       const subJson = JSON.parse(JSON.stringify(subscription));
-      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-      const pwa = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-      const deviceType = ios ? "ios" : pwa ? "android" : "web";
+      const ua = navigator.userAgent;
+      const ios = /iphone|ipad|ipod/i.test(ua);
+      const android = /android/i.test(ua);
+      const deviceType = ios ? "ios" : android ? "android" : "desktop";
       const { error: upsertError } = await supabase.from("push_subscriptions").upsert({
         user_id: user.id,
         device_type: deviceType,
         endpoint: subscription.endpoint,
         subscription: subJson,
-      }, { onConflict: "user_id,device_type" });
+      }, { onConflict: "user_id,endpoint" });
       if (upsertError) throw new Error(upsertError.message);
       localStorage.setItem("push_registered", subscription.endpoint);
     } catch (e) {

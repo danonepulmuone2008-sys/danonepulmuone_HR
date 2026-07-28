@@ -48,7 +48,18 @@ export async function sendPushToUsers(
       webpush.sendNotification(subscription, JSON.stringify(payload))
     )
   )
+  const expiredEndpoints: string[] = []
   results.forEach((r, i) => {
-    if (r.status === "rejected") console.error(`[push] 전송 실패 [${i}]:`, r.reason)
+    if (r.status === "rejected") {
+      const status = (r.reason as { statusCode?: number })?.statusCode
+      if (status === 410 || status === 404) {
+        expiredEndpoints.push(subs[i].subscription.endpoint)
+      } else {
+        console.error(`[push] 전송 실패 [${i}]:`, r.reason)
+      }
+    }
   })
+  if (expiredEndpoints.length > 0) {
+    await supabaseAdmin.from("push_subscriptions").delete().in("endpoint", expiredEndpoints)
+  }
 }
