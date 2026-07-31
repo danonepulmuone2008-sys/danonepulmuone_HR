@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import AppBar from "@/components/AppBar";
+import { useMealStore } from "@/store/mealStore";
+import { Check, X } from "lucide-react";
 
 const BRAND = "#72BF44";
 
@@ -15,6 +17,7 @@ type ReceiptItem = {
   status: string;
   responded_at: string | null;
   assignee_name: string;
+  assigned_user_id: string;
 };
 
 type ReceiptDetail = {
@@ -44,8 +47,16 @@ function fmt(iso: string) {
 export default function ReceiptDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { remaining, adjustRemaining, adjustTotalUsed } = useMealStore();
   const [receipt, setReceipt] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actioning, setActioning] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
+
+  const showToast = (msg: string, isError = false) => {
+    setToast({ msg, isError });
+    setTimeout(() => setToast(null), 2500);
+  };
 
   useEffect(() => {
     if (!user || !id) return;
@@ -61,6 +72,41 @@ export default function ReceiptDetailPage() {
       })
       .catch(() => setLoading(false));
   }, [user, id]);
+
+  const handleAction = async (itemId: string, action: "approved" | "rejected") => {
+    if (!user) return;
+    setActioning(true);
+    try {
+      const res = await fetch("/api/meals/receipts/approve", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ itemId, action }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+
+      const item = receipt?.items.find((i) => i.id === itemId);
+      setReceipt((prev) => prev ? {
+        ...prev,
+        items: prev.items.map((it) =>
+          it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it
+        ),
+      } : null);
+
+      if (action === "approved" && item && data.receiptFullyApproved) {
+        adjustRemaining(-item.price);
+        adjustTotalUsed(item.price);
+      }
+      showToast(action === "approved" ? "승인되었습니다." : "반려되었습니다.");
+    } catch {
+      showToast("처리 중 오류가 발생했습니다.", true);
+    } finally {
+      setActioning(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -89,6 +135,12 @@ export default function ReceiptDetailPage() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <AppBar title="영수증 상세" />
+
+      {toast && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${toast.isError ? "bg-red-500" : "bg-gray-800"}`}>
+          {toast.msg}
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 px-4 pt-4 pb-10">
         {/* 영수증 이미지 (OCR인 경우) */}
@@ -147,6 +199,8 @@ export default function ReceiptDetailPage() {
           </div>
           {receipt.items.map((item) => {
             const itemStatus = STATUS_LABEL[item.status] ?? { label: item.status, className: "bg-gray-100 text-gray-500" };
+            const isMyPending = item.status === "pending" && item.assigned_user_id === user?.id;
+            const overBudget = item.price > remaining;
             return (
               <div
                 key={item.id}
@@ -164,6 +218,31 @@ export default function ReceiptDetailPage() {
                 </div>
                 {item.responded_at && (
                   <p className="text-xs text-gray-300 mt-1">{fmt(item.responded_at)} 응답</p>
+                )}
+                {isMyPending && (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleAction(item.id, "approved")}
+                        disabled={actioning || overBudget}
+                        className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-50 active:scale-95 transition-all"
+                      >
+                        <Check size={13} />승인
+                      </button>
+                      <button
+                        onClick={() => handleAction(item.id, "rejected")}
+                        disabled={actioning}
+                        className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-xs font-semibold flex items-center justify-center gap-1 disabled:opacity-50 active:scale-95 transition-all"
+                      >
+                        <X size={13} />반려
+                      </button>
+                    </div>
+                    {overBudget && (
+                      <p className="text-xs text-red-400">
+                        식대 금액이 잔여 한도({remaining.toLocaleString()}원)를 초과합니다
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             );
