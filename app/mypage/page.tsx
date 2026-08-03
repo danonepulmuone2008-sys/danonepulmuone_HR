@@ -729,30 +729,23 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 로그아웃 확인 다이얼로그 */}
       {showLogout && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-8">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setShowLogout(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl z-10 w-full overflow-hidden">
-            <div className="px-6 pt-6 pb-4 text-center">
-              <p className="text-sm text-gray-700">로그아웃 하시겠습니까?</p>
-            </div>
-            <div className="flex border-t border-gray-100">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl px-6 py-5 mx-6 shadow-xl w-full max-w-xs">
+            <p className="text-base text-gray-900 text-center mb-5">로그아웃하시겠습니까?</p>
+            <div className="flex gap-3">
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();
                   setShowLogout(false);
                   window.location.href = "/login";
                 }}
-                className="flex-1 py-3.5 text-sm font-semibold active:bg-red-50 transition-colors border-r border-gray-100"
-                style={{ color: "#EF4444" }}
-              >
-                확인
-              </button>
+                className="flex-1 h-11 rounded-xl text-sm text-white font-semibold"
+                style={{ backgroundColor: "#8dc63f" }}
+              >확인</button>
               <button
                 onClick={() => setShowLogout(false)}
-                className="flex-1 py-3.5 text-sm font-medium text-gray-500 active:bg-gray-50 transition-colors"
-              >
-                취소
-              </button>
+                className="flex-1 h-11 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium"
+              >취소</button>
             </div>
           </div>
         </div>
