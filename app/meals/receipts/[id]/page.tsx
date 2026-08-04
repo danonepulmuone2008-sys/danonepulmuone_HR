@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import AppBar from "@/components/AppBar";
 import { useMealStore } from "@/store/mealStore";
@@ -47,7 +47,8 @@ function fmt(iso: string) {
 export default function ReceiptDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { remaining, adjustRemaining, adjustTotalUsed } = useMealStore();
+  const router = useRouter();
+  const { remaining, loaded: storeLoaded, fetchAll, adjustRemaining, adjustTotalUsed } = useMealStore();
   const [receipt, setReceipt] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState(false);
@@ -57,6 +58,11 @@ export default function ReceiptDetailPage() {
     setToast({ msg, isError });
     setTimeout(() => setToast(null), 2500);
   };
+
+  useEffect(() => {
+    if (!user) return;
+    if (!storeLoaded) fetchAll(user.token);
+  }, [user, storeLoaded, fetchAll]);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -111,7 +117,7 @@ export default function ReceiptDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col min-h-screen bg-gray-50">
-        <AppBar title="영수증 상세" />
+        <AppBar title="영수증 상세" onBack={() => router.push("/meals")} />
         <div className="flex-1 flex items-center justify-center">
           <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: BRAND, borderTopColor: "transparent" }} />
         </div>
@@ -122,7 +128,7 @@ export default function ReceiptDetailPage() {
   if (!receipt) {
     return (
       <div className="flex flex-col min-h-screen bg-gray-50">
-        <AppBar title="영수증 상세" />
+        <AppBar title="영수증 상세" onBack={() => router.push("/meals")} />
         <div className="flex-1 flex items-center justify-center text-sm text-gray-400">
           영수증을 찾을 수 없습니다
         </div>
@@ -134,7 +140,7 @@ export default function ReceiptDetailPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      <AppBar title="영수증 상세" />
+      <AppBar title="영수증 상세" onBack={() => router.push("/meals")} />
 
       {toast && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${toast.isError ? "bg-red-500" : "bg-gray-800"}`}>
