@@ -234,6 +234,7 @@ export default function AdminAttendancePage() {
 
   // 초과근무 상태
   const [overtimeSettings, setOvertimeSettings] = useState<OvertimeSettings | null>(null);
+  const [overtimeSettingsLoading, setOvertimeSettingsLoading] = useState(false);
   const [editOvertimeSettings, setEditOvertimeSettings] = useState<OvertimeSettings>({ daily_work_hours: 8, start_date: "", end_date: "" });
   const [overtimeSettingsSaving, setOvertimeSettingsSaving] = useState(false);
   const [overtimeAllUsers, setOvertimeAllUsers] = useState<OvertimeUser[]>([]);
@@ -439,6 +440,7 @@ export default function AdminAttendancePage() {
   async function fetchOvertimeSettings() {
     const token = user?.token;
     if (!token) return;
+    setOvertimeSettingsLoading(true);
     try {
       const res = await fetch("/api/admin/overtime-settings", { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
@@ -447,6 +449,7 @@ export default function AdminAttendancePage() {
       setEditOvertimeSettings(data);
       setDailyHoursInput(String(data.daily_work_hours));
     } catch { /* silent */ }
+    finally { setOvertimeSettingsLoading(false); }
   }
 
   async function fetchOvertimeAll() {
@@ -1182,40 +1185,47 @@ export default function AdminAttendancePage() {
                 </div>
 
                 {/* 직원별 표 */}
-                {!overtimeSettings?.start_date || !overtimeSettings?.end_date ? (
+                {(overtimeSettingsLoading || overtimeAllLoading) && overtimeAllUsers.length === 0 ? (
+                  <div className="py-8 flex items-center justify-center">
+                    <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-blue-500 animate-spin" />
+                  </div>
+                ) : !overtimeSettings?.start_date || !overtimeSettings?.end_date ? (
                   <div className="py-8 flex items-center justify-center">
                     <p className="text-sm text-gray-400">
                       {user?.role === "admin" ? "아래에서 초과근무 기간을 설정해주세요" : "초과근무 기간이 설정되지 않았습니다"}
                     </p>
-                  </div>
-                ) : overtimeAllLoading ? (
-                  <div className="py-8 flex items-center justify-center">
-                    <p className="text-sm text-gray-400">불러오는 중...</p>
                   </div>
                 ) : overtimeAllUsers.length === 0 ? (
                   <div className="py-8 flex items-center justify-center">
                     <p className="text-sm text-gray-400">데이터 없음</p>
                   </div>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-2 bg-white border-b border-gray-100">
-                      <span className="text-xs text-gray-500 font-semibold">이름</span>
-                      <span className="text-xs text-gray-500 font-semibold text-right">실근무</span>
-                      <span className="text-xs text-gray-500 font-semibold text-right">기준</span>
-                      <span className="text-xs text-gray-500 font-semibold text-right">초과/미달</span>
-                    </div>
-                    {overtimeAllUsers.map((u) => (
-                      <div key={u.id} className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-3 border-b border-gray-100 items-center">
-                        <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
-                        <span className="text-xs text-gray-600 text-right">{u.actualHours}h</span>
-                        <span className="text-xs text-gray-400 text-right">{u.expectedHours}h</span>
-                        <span className={`text-xs font-bold text-right ${u.overtimeHours > 0 ? "text-blue-600" : u.overtimeHours < 0 ? "text-orange-500" : "text-gray-400"}`}>
-                          {u.overtimeHours > 0 ? `+${u.overtimeHours}h` : u.overtimeHours < 0 ? `${u.overtimeHours}h` : "−"}
-                        </span>
+                  <div className="relative">
+                    <div className={`transition-opacity duration-150 ${overtimeSettingsLoading || overtimeAllLoading ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+                      <div className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-2 bg-white border-b border-gray-100">
+                        <span className="text-xs text-gray-500 font-semibold">이름</span>
+                        <span className="text-xs text-gray-500 font-semibold text-right">실근무</span>
+                        <span className="text-xs text-gray-500 font-semibold text-right">기준</span>
+                        <span className="text-xs text-gray-500 font-semibold text-right">초과/미달</span>
                       </div>
-                    ))}
-                    <div className="border-t border-gray-200" />
-                  </>
+                      {overtimeAllUsers.map((u) => (
+                        <div key={u.id} className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-3 border-b border-gray-100 items-center">
+                          <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
+                          <span className="text-xs text-gray-600 text-right">{u.actualHours}h</span>
+                          <span className="text-xs text-gray-400 text-right">{u.expectedHours}h</span>
+                          <span className={`text-xs font-bold text-right ${u.overtimeHours > 0 ? "text-blue-600" : u.overtimeHours < 0 ? "text-orange-500" : "text-gray-400"}`}>
+                            {u.overtimeHours > 0 ? `+${u.overtimeHours}h` : u.overtimeHours < 0 ? `${u.overtimeHours}h` : "−"}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="border-t border-gray-200" />
+                    </div>
+                    {(overtimeSettingsLoading || overtimeAllLoading) && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* 설정 (admin only) */}
