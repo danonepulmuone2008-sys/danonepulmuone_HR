@@ -36,7 +36,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ configured: false })
     }
 
-    const today = fmtDate(new Date())
+    const nowKST = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
+    const today = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, "0")}-${String(nowKST.getUTCDate()).padStart(2, "0")}`
     const effectiveEnd = endDate < today ? endDate : today
 
     if (startDate > effectiveEnd) {
