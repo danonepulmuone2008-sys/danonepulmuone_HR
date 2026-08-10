@@ -40,6 +40,7 @@ async function getToken(): Promise<string> {
 export default function AdminHomePage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [todayStatusMap, setTodayStatusMap] = useState<Record<string, "출근" | "퇴근">>({});
   const [showLogout, setShowLogout] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; role: string } | null>(null);
@@ -66,12 +67,16 @@ export default function AdminHomePage() {
   }
 
   async function fetchUsers() {
-    const token = await getToken();
-    const res = await fetch("/api/admin/users-profile", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json();
-    if (json.interns) setUsers(json.interns);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/admin/users-profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.interns) setUsers(json.interns);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function fetchTodayAttendance() {
@@ -172,7 +177,11 @@ export default function AdminHomePage() {
       </header>
 
       <div className="flex flex-col gap-2 px-4 pt-3">
-        {users.map((user) => {
+        {loading ? (
+          <div className="fixed inset-0 flex items-center justify-center bg-white">
+            <div className="w-8 h-8 rounded-full animate-spin border-2 border-blue-100 border-t-blue-500" />
+          </div>
+        ) : users.map((user) => {
           const status = getAttendanceStatus(user.id);
           const ci = colorMap.get(user.id) ?? 0;
           const inactive = !user.is_active;
