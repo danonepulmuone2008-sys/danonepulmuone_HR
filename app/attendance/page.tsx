@@ -109,11 +109,10 @@ export default function AttendancePage() {
   const [tripVacPage, setTripVacPage] = useState(1);
   const [editReqPage, setEditReqPage] = useState(1);
   const [attEditDetailReq, setAttEditDetailReq] = useState<AttEditReq | null>(null);
-  const [overtimeData, setOvertimeData] = useState<{ configured: boolean; overtimeHours?: number; actualHours?: number; expectedHours?: number; startDate?: string; endDate?: string } | null>(null);
   const PAGE_SIZE = 5;
   const router = useRouter();
   const { user } = useAuth();
-  const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining } = useAttendanceStore();
+  const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining, overtimeData, overtimeLoaded } = useAttendanceStore();
   const useSessionTracking = attProfile.use_session_tracking;
   const userId = user?.id ?? null;
 
@@ -391,12 +390,9 @@ export default function AttendancePage() {
   }, [userId, fetchVacRemaining]);
 
   useEffect(() => {
-    if (!userId || !user?.token) return;
-    fetch("/api/overtime", { headers: { Authorization: `Bearer ${user.token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setOvertimeData(data); })
-      .catch(() => {});
-  }, [userId, user?.token]);
+    if (!user?.token || overtimeLoaded) return;
+    useAttendanceStore.getState().fetchOvertime(user.token);
+  }, [user?.token, overtimeLoaded]);
 
   const handleOpenVacDetail = async () => {
     if (!userId) return;

@@ -9,6 +9,15 @@ export interface AttendanceProfile {
   use_session_tracking: boolean
 }
 
+export interface OvertimeData {
+  configured: boolean
+  overtimeHours?: number
+  actualHours?: number
+  expectedHours?: number
+  startDate?: string
+  endDate?: string
+}
+
 interface AttendanceState {
   profile: AttendanceProfile
   clockIn: string | null
@@ -18,11 +27,14 @@ interface AttendanceState {
   weeklyHours: number
   weeklyGoal: number
   vacRemaining: number | null
+  overtimeData: OvertimeData | null
+  overtimeLoaded: boolean
   loaded: boolean
   loading: boolean
 
   fetchAll: (token: string) => Promise<void>
   fetchVacRemaining: (userId: string) => Promise<void>
+  fetchOvertime: (token: string) => Promise<void>
   doClockIn: (time: string, sessionId?: string | null) => void
   doClockOut: (time: string) => void
   addSession: (start: string, sessionId: string, date?: string) => void
@@ -44,6 +56,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   weeklyHours: 0,
   weeklyGoal: 0,
   vacRemaining: null,
+  overtimeData: null,
+  overtimeLoaded: false,
   loaded: false,
   loading: false,
 
@@ -57,6 +71,23 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     const granted = (grants ?? []).reduce((sum, g) => sum + (g.hours ?? 0), 0)
     const used = (usage ?? []).reduce((sum, v) => sum + (v.hours ?? 0), 0)
     set({ vacRemaining: Math.max(0, granted - used) })
+  },
+
+  fetchOvertime: async (token: string) => {
+    if (get().overtimeLoaded) return
+    try {
+      const res = await fetch("/api/overtime", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        set({ overtimeLoaded: true })
+        return
+      }
+      const data = await res.json()
+      set({ overtimeData: data, overtimeLoaded: true })
+    } catch {
+      set({ overtimeLoaded: true })
+    }
   },
 
   fetchAll: async (token: string) => {
@@ -137,6 +168,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       openSessionId: null, todaySessions: [],
       weeklyHours: 0, weeklyGoal: 0,
       vacRemaining: null,
+      overtimeData: null, overtimeLoaded: false,
       loaded: false, loading: false,
     })
   },

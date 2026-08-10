@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Session } from "@supabase/supabase-js";
+import { useAttendanceStore } from "@/store/attendanceStore";
 
 export type AuthUser = {
   id: string;
@@ -122,6 +123,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       });
 
       setReady(true);
+
+      if (role && role !== "manager" && role !== "admin") {
+        useAttendanceStore.getState().fetchOvertime(nextSession.access_token);
+      }
+
       return role;
     }
 
