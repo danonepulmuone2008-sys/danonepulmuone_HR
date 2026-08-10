@@ -1,5 +1,6 @@
 "use client";
 import AppBar from "@/components/AppBar";
+import DatePicker from "@/components/DatePicker";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -230,24 +231,13 @@ export default function VacationPage() {
 
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">{isHourly ? "날짜" : "시작일"} <span className="text-red-500">*</span></label>
-            <input
-              type="date"
-              value={form.startDate}
-              onChange={e => update("startDate", e.target.value)}
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-            />
+            <DatePicker value={form.startDate} onChange={v => update("startDate", v)} />
           </div>
 
           {!isHourly && (
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일 <span className="text-red-500">*</span></label>
-              <input
-                type="date"
-                value={form.endDate}
-                min={form.startDate || undefined}
-                onChange={e => update("endDate", e.target.value)}
-                className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-              />
+              <DatePicker value={form.endDate} onChange={v => update("endDate", v)} min={form.startDate || undefined} />
             </div>
           )}
 

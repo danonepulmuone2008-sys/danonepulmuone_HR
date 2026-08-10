@@ -231,7 +231,7 @@ const AlarmModal = ({
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-t-3xl shadow-2xl z-10">
+      <div className="relative bg-white rounded-t-3xl shadow-2xl z-10 w-full max-w-[390px]">
         {/* 핸들 */}
         <div className="flex justify-center pt-3 pb-2">
           <div className="w-10 h-1 rounded-full bg-gray-200" />
@@ -607,9 +607,9 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 프로필 수정 모달 */}
       {showEdit && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="fixed inset-0 bg-black/40" onClick={() => { setForm({ ...saved }); setShowEdit(false); }} />
-          <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full max-w-[390px]">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
@@ -659,9 +659,9 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 비밀번호 변경 모달 */}
       {showPwChange && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="fixed inset-0 bg-black/40" onClick={() => { setPw({ current: "", next: "", confirm: "" }); setShowPwChange(false); }} />
-          <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full max-w-[390px]">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
@@ -755,9 +755,9 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 관리자 문의 모달 */}
       {showInquiry && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="fixed inset-0 bg-black/40" onClick={closeInquiry} />
-          <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full max-w-[390px]">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
@@ -821,9 +821,9 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 내 문의 내역 모달 */}
       {showInquiries && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="fixed inset-0 bg-black/40" onClick={() => setShowInquiries(false)} />
-          <div className="relative bg-white rounded-t-2xl shadow-xl z-10" style={{ maxHeight: "75vh", display: "flex", flexDirection: "column" }}>
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full max-w-[390px]" style={{ maxHeight: "75vh", display: "flex", flexDirection: "column" }}>
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
@@ -923,9 +923,9 @@ const [showInquiry, setShowInquiry] = useState(false);
 
       {/* 회원 탈퇴 모달 */}
       {showWithdraw && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="fixed inset-0 bg-black/40" onClick={closeWithdraw} />
-          <div className="relative bg-white rounded-t-2xl shadow-2xl z-10">
+          <div className="relative bg-white rounded-t-2xl shadow-2xl z-10 w-full max-w-[390px]">
 
             {/* 핸들 */}
             <div className="flex justify-center pt-3 pb-1">

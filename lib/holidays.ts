@@ -139,3 +139,22 @@ export function getWorkingDaysInWeek(monday: Date): number {
   }
   return count;
 }
+
+// 두 날짜 사이의 영업일 수 반환 — 주말·공휴일 제외
+export function countWorkingDays(startDate: string, endDate: string): number {
+  const start = new Date(startDate + "T00:00:00");
+  const end = new Date(endDate + "T00:00:00");
+  const yearSet = new Map<number, Set<string>>();
+  let count = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) {
+      const yr = d.getFullYear();
+      if (!yearSet.has(yr)) yearSet.set(yr, getHolidaySet(yr));
+      if (!yearSet.get(yr)!.has(fmtDate(d))) count++;
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}

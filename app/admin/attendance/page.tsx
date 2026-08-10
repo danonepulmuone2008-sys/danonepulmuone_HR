@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AdminBottomNav from "@/components/AdminBottomNav";
+import DatePicker from "@/components/DatePicker";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors"
@@ -75,6 +76,8 @@ type VacUsage = {
 
 type RecordsUser = { id: string; name: string; use_session_tracking?: boolean }
 type EditSession = { id?: string; start: string; end: string; lunch_break: boolean }
+type OvertimeSettings = { daily_work_hours: number; start_date: string; end_date: string }
+type OvertimeUser = { id: string; name: string; actualHours: number; expectedHours: number; overtimeHours: number }
 type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
@@ -201,6 +204,7 @@ export default function AdminAttendancePage() {
   const [deleteToast, setDeleteToast] = useState(false);
   const [approvalToast, setApprovalToast] = useState<string | null>(null);
   const [grantToast, setGrantToast] = useState<string | null>(null);
+  const [overtimeToast, setOvertimeToast] = useState<string | null>(null);
   const APPROVAL_PAGE_SIZE = 5;
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
@@ -227,6 +231,14 @@ export default function AdminAttendancePage() {
   const [bulkNote, setBulkNote] = useState("");
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkGranting, setBulkGranting] = useState(false);
+
+  // 초과근무 상태
+  const [overtimeSettings, setOvertimeSettings] = useState<OvertimeSettings | null>(null);
+  const [editOvertimeSettings, setEditOvertimeSettings] = useState<OvertimeSettings>({ daily_work_hours: 8, start_date: "", end_date: "" });
+  const [overtimeSettingsSaving, setOvertimeSettingsSaving] = useState(false);
+  const [overtimeAllUsers, setOvertimeAllUsers] = useState<OvertimeUser[]>([]);
+  const [overtimeAllLoading, setOvertimeAllLoading] = useState(false);
+  const [dailyHoursInput, setDailyHoursInput] = useState("8");
 
   // 근무 기록 수정 상태
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -276,6 +288,13 @@ export default function AdminAttendancePage() {
     fetchRecords();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, weekOffset]);
+
+  useEffect(() => {
+    if (activeTab !== "records") return;
+    fetchOvertimeSettings();
+    fetchOvertimeAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "vacation") return;
@@ -414,6 +433,62 @@ export default function AdminAttendancePage() {
       setRecordsError(String(e));
     } finally {
       setRecordsLoading(false);
+    }
+  }
+
+  async function fetchOvertimeSettings() {
+    const token = user?.token;
+    if (!token) return;
+    try {
+      const res = await fetch("/api/admin/overtime-settings", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data: OvertimeSettings = await res.json();
+      setOvertimeSettings(data);
+      setEditOvertimeSettings(data);
+      setDailyHoursInput(String(data.daily_work_hours));
+    } catch { /* silent */ }
+  }
+
+  async function fetchOvertimeAll() {
+    const token = user?.token;
+    if (!token) return;
+    setOvertimeAllLoading(true);
+    try {
+      const res = await fetch("/api/admin/overtime", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.configured) setOvertimeAllUsers(data.users ?? []);
+      else setOvertimeAllUsers([]);
+    } catch { /* silent */ }
+    finally { setOvertimeAllLoading(false); }
+  }
+
+  async function saveOvertimeSettings() {
+    const parsed = parseInt(dailyHoursInput, 10);
+    if (!dailyHoursInput.trim() || isNaN(parsed) || parsed <= 0) {
+      setOvertimeToast("숫자를 입력해주세요.");
+      setTimeout(() => setOvertimeToast(null), 3000);
+      return;
+    }
+    const token = user?.token;
+    if (!token) return;
+    setOvertimeSettingsSaving(true);
+    try {
+      const payload = { ...editOvertimeSettings, daily_work_hours: parsed };
+      const res = await fetch("/api/admin/overtime-settings", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setOvertimeSettings(payload);
+        setEditOvertimeSettings(payload);
+        fetchOvertimeAll();
+        setOvertimeToast("저장되었습니다.");
+        setTimeout(() => setOvertimeToast(null), 2000);
+      }
+    } finally {
+      setOvertimeSettingsSaving(false);
     }
   }
 
@@ -667,6 +742,14 @@ export default function AdminAttendancePage() {
       {deleteToast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none">
           삭제되었습니다.
+        </div>
+      )}
+
+      {overtimeToast && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none">
+          <div className="bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg whitespace-nowrap">
+            {overtimeToast}
+          </div>
         </div>
       )}
 
@@ -974,99 +1057,221 @@ export default function AdminAttendancePage() {
           const todayStr = toDateStr(new Date());
 
           return (
-            <div className="flex flex-col gap-3 px-4 pt-3">
-              {/* 주 네비게이션 */}
-              <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100 flex items-center justify-between">
-                <button
-                  onClick={() => setWeekOffset((o) => o - 1)}
-                  className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
-                >‹</button>
-                <div className="flex flex-col items-center">
-                  <span className="text-sm font-semibold text-gray-700">{getWeekLabel(weekOffset)}</span>
-                  <span className="text-xs text-gray-400 mt-0.5">기준 {requiredHours}시간</span>
+            <div className="flex flex-col gap-6 px-4 pt-3">
+              {/* 근무 기록 카드 */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                {/* 주 네비게이션 */}
+                <div className="px-4 py-3 flex items-center justify-between border-b border-gray-200">
+                  <button
+                    onClick={() => setWeekOffset((o) => o - 1)}
+                    className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
+                  >‹</button>
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm font-semibold text-gray-700">{getWeekLabel(weekOffset)}</span>
+                    <span className="text-xs text-gray-400 mt-0.5">
+                      {recordsLoading ? "불러오는 중..." : `기준 ${requiredHours}시간`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setWeekOffset((o) => Math.min(o + 1, 8))}
+                    className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
+                  >›</button>
                 </div>
-                <button
-                  onClick={() => setWeekOffset((o) => Math.min(o + 1, 8))}
-                  className="w-8 h-8 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-xl leading-none"
-                >›</button>
+
+                {/* 데이터 없는 초기 로딩 */}
+                {recordsLoading && !recordsData ? (
+                  <div className="px-4 py-10 flex items-center justify-center">
+                    <p className="text-sm text-gray-400">불러오는 중...</p>
+                  </div>
+                ) : !recordsData && recordsError ? (
+                  <div className="px-4 py-6 flex flex-col items-center gap-3">
+                    <p className="text-xs text-red-500 text-center">{recordsError}</p>
+                    <button onClick={fetchRecords} className="text-xs text-blue-500 underline">다시 시도</button>
+                  </div>
+                ) : recordsData && recordsData.users.length > 0 ? (
+                  /* 데이터 있을 때: 로딩 중에도 기존 데이터 유지 */
+                  <div className="relative">
+                    <div className={`transition-opacity duration-150 ${recordsLoading ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+                    {/* 헤더 */}
+                    <div className="grid grid-cols-[68px_1fr_1fr_1fr_1fr_1fr_40px] px-3 py-2.5 bg-white border-b border-gray-100">
+                      <span className="text-xs text-gray-500 font-semibold">이름</span>
+                      {DAY_LABELS.map((d, i) => (
+                        <div key={d} className="flex flex-col items-center gap-px">
+                          <span className={`text-xs font-semibold ${dayIsHoliday[i] ? "text-red-500" : "text-gray-600"}`}>{d}</span>
+                          <span className={`text-[10px] font-medium ${dayIsHoliday[i] ? "text-red-400" : "text-gray-400"}`}>
+                            {currentWeekDates[i].slice(5).replace("-", "/")}
+                          </span>
+                        </div>
+                      ))}
+                      <span className="text-xs text-gray-500 font-semibold text-right">계</span>
+                    </div>
+                    {/* 직원 행 */}
+                    <div>
+                    {recordsData.users.map((u) => {
+                      const dayCells = recordsData.weekDates.map((date) => recordsData.records[`${u.id}__${date}`] ?? null);
+                      const totalHours = dayCells.reduce((sum, rec) => sum + (rec?.hours ?? 0), 0);
+                      const totalRounded = Math.round(totalHours * 10) / 10;
+                      const metGoal = totalRounded >= requiredHours;
+                      return (
+                        <div
+                          key={u.id}
+                          className="grid grid-cols-[68px_1fr_1fr_1fr_1fr_1fr_40px] px-3 py-3 border-b border-gray-100 last:border-b-0 items-center"
+                        >
+                          <span className="text-xs font-bold text-gray-800 truncate">{u.name}</span>
+                          {dayCells.map((rec, di) => {
+                            const date = currentWeekDates[di];
+                            if (dayIsHoliday[di]) {
+                              return <span key={di} className="text-xs text-center text-gray-300">−</span>;
+                            }
+                            const vacType = recordsData.vacations[`${u.id}__${date}`];
+                            const vacLabel = vacType === "business_trip" ? "출장" : vacType === "vacation" ? "휴가" : null;
+                            if (vacLabel) {
+                              const hasHours = rec?.hours !== null && rec?.hours !== undefined;
+                              const isCheckedIn = rec?.checkedIn && date === todayStr;
+                              const sub = hasHours ? `${rec!.hours}h` : isCheckedIn ? "출근" : null;
+                              return (
+                                <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="flex flex-col items-center justify-center w-full hover:bg-green-50 rounded transition-colors leading-none">
+                                  <span className="text-[9px] font-semibold text-green-500">{vacLabel}</span>
+                                  {sub && <span className={`text-[8px] font-medium ${isCheckedIn && !hasHours ? "text-orange-400" : "text-gray-400"}`}>{sub}</span>}
+                                </button>
+                              );
+                            }
+                            if (rec?.checkedIn && date === todayStr) {
+                              return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-[10px] text-center font-semibold text-orange-400 w-full hover:bg-orange-50 rounded transition-colors">출근</button>;
+                            }
+                            if (rec?.hours !== null && rec?.hours !== undefined) {
+                              return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center font-semibold text-gray-700 w-full hover:bg-gray-50 rounded transition-colors">{rec.hours}</button>;
+                            }
+                            return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center text-gray-400 w-full hover:bg-gray-50 rounded transition-colors">−</button>;
+                          })}
+                          <span className={`text-xs font-bold text-right ${totalRounded === 0 ? "text-gray-400" : metGoal ? "text-[#8dc63f]" : "text-gray-700"}`}>
+                            {totalRounded > 0 ? `${totalRounded}h` : "−"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <p className="text-xs text-gray-400 text-center py-2.5">단위: 시간 · −는 미출근 또는 공휴일</p>
+                    </div>
+                    {recordsLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                ) : recordsData && recordsData.users.length === 0 ? (
+                  <div className="px-4 py-10 flex items-center justify-center">
+                    <p className="text-sm text-gray-400">등록된 직원이 없습니다</p>
+                  </div>
+                ) : null}
               </div>
 
-              {recordsLoading ? (
-                <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
-                  <p className="text-sm text-gray-400">불러오는 중...</p>
+              {/* 초과근무 섹션 */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                {/* 헤더 */}
+                <div className="px-4 py-3 border-b border-gray-200">
+                  <p className="text-sm font-semibold text-gray-800">초과근무</p>
+                  {overtimeSettings?.start_date && overtimeSettings?.end_date ? (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {overtimeSettings.start_date.replace(/-/g, ".")} ~ {overtimeSettings.end_date.replace(/-/g, ".")} · 하루 {overtimeSettings.daily_work_hours}시간 기준 · 금주 기준
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-0.5">기간 미설정</p>
+                  )}
                 </div>
-              ) : recordsError ? (
-                <div className="bg-white rounded-2xl px-4 py-6 shadow-sm border border-red-100 flex flex-col items-center gap-3">
-                  <p className="text-xs text-red-500 text-center">{recordsError}</p>
-                  <button onClick={fetchRecords} className="text-xs text-blue-500 underline">다시 시도</button>
-                </div>
-              ) : recordsData && recordsData.users.length > 0 ? (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  {/* 헤더 */}
-                  <div className="grid grid-cols-[68px_1fr_1fr_1fr_1fr_1fr_40px] px-3 py-2.5 bg-gray-50 border-b border-gray-200">
-                    <span className="text-xs text-gray-500 font-semibold">이름</span>
-                    {DAY_LABELS.map((d, i) => (
-                      <div key={d} className="flex flex-col items-center gap-px">
-                        <span className={`text-xs font-semibold ${dayIsHoliday[i] ? "text-red-500" : "text-gray-600"}`}>{d}</span>
-                        <span className={`text-[10px] font-medium ${dayIsHoliday[i] ? "text-red-400" : "text-gray-400"}`}>
-                          {currentWeekDates[i].slice(5).replace("-", "/")}
+
+                {/* 직원별 표 */}
+                {!overtimeSettings?.start_date || !overtimeSettings?.end_date ? (
+                  <div className="py-8 flex items-center justify-center">
+                    <p className="text-sm text-gray-400">
+                      {user?.role === "admin" ? "아래에서 초과근무 기간을 설정해주세요" : "초과근무 기간이 설정되지 않았습니다"}
+                    </p>
+                  </div>
+                ) : overtimeAllLoading ? (
+                  <div className="py-8 flex items-center justify-center">
+                    <p className="text-sm text-gray-400">불러오는 중...</p>
+                  </div>
+                ) : overtimeAllUsers.length === 0 ? (
+                  <div className="py-8 flex items-center justify-center">
+                    <p className="text-sm text-gray-400">데이터 없음</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-2 bg-white border-b border-gray-100">
+                      <span className="text-xs text-gray-500 font-semibold">이름</span>
+                      <span className="text-xs text-gray-500 font-semibold text-right">실근무</span>
+                      <span className="text-xs text-gray-500 font-semibold text-right">기준</span>
+                      <span className="text-xs text-gray-500 font-semibold text-right">초과/미달</span>
+                    </div>
+                    {overtimeAllUsers.map((u) => (
+                      <div key={u.id} className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-3 border-b border-gray-100 items-center">
+                        <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
+                        <span className="text-xs text-gray-600 text-right">{u.actualHours}h</span>
+                        <span className="text-xs text-gray-400 text-right">{u.expectedHours}h</span>
+                        <span className={`text-xs font-bold text-right ${u.overtimeHours > 0 ? "text-blue-600" : u.overtimeHours < 0 ? "text-orange-500" : "text-gray-400"}`}>
+                          {u.overtimeHours > 0 ? `+${u.overtimeHours}h` : u.overtimeHours < 0 ? `${u.overtimeHours}h` : "−"}
                         </span>
                       </div>
                     ))}
-                    <span className="text-xs text-gray-500 font-semibold text-right">계</span>
-                  </div>
-                  {/* 직원 행 */}
-                  {recordsData.users.map((u) => {
-                    const dayCells = recordsData.weekDates.map((date) => recordsData.records[`${u.id}__${date}`] ?? null);
-                    const totalHours = dayCells.reduce((sum, rec) => sum + (rec?.hours ?? 0), 0);
-                    const totalRounded = Math.round(totalHours * 10) / 10;
-                    const metGoal = totalRounded >= requiredHours;
-                    return (
-                      <div
-                        key={u.id}
-                        className="grid grid-cols-[68px_1fr_1fr_1fr_1fr_1fr_40px] px-3 py-3 border-b border-gray-100 last:border-b-0 items-center"
-                      >
-                        <span className="text-xs font-bold text-gray-800 truncate">{u.name}</span>
-                        {dayCells.map((rec, di) => {
-                          const date = currentWeekDates[di];
-                          if (dayIsHoliday[di]) {
-                            return <span key={di} className="text-xs text-center text-gray-300">−</span>;
-                          }
-                          const vacType = recordsData.vacations[`${u.id}__${date}`];
-                          const vacLabel = vacType === "business_trip" ? "출장" : vacType === "vacation" ? "휴가" : null;
-                          if (vacLabel) {
-                            const hasHours = rec?.hours !== null && rec?.hours !== undefined;
-                            const isCheckedIn = rec?.checkedIn && date === todayStr;
-                            const sub = hasHours ? `${rec!.hours}h` : isCheckedIn ? "출근" : null;
-                            return (
-                              <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="flex flex-col items-center justify-center w-full hover:bg-green-50 rounded transition-colors leading-none">
-                                <span className="text-[9px] font-semibold text-green-500">{vacLabel}</span>
-                                {sub && <span className={`text-[8px] font-medium ${isCheckedIn && !hasHours ? "text-orange-400" : "text-gray-400"}`}>{sub}</span>}
-                              </button>
-                            );
-                          }
-                          if (rec?.checkedIn && date === todayStr) {
-                            return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-[10px] text-center font-semibold text-orange-400 w-full hover:bg-orange-50 rounded transition-colors">출근</button>;
-                          }
-                          if (rec?.hours !== null && rec?.hours !== undefined) {
-                            return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center font-semibold text-gray-700 w-full hover:bg-gray-50 rounded transition-colors">{rec.hours}</button>;
-                          }
-                          return <button key={di} onClick={() => openEditForRecord(u.id, u.name, date)} className="text-xs text-center text-gray-400 w-full hover:bg-gray-50 rounded transition-colors">−</button>;
-                        })}
-                        <span className={`text-xs font-bold text-right ${totalRounded === 0 ? "text-gray-400" : metGoal ? "text-[#8dc63f]" : "text-gray-700"}`}>
-                          {totalRounded > 0 ? `${totalRounded}h` : "−"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : recordsData && recordsData.users.length === 0 ? (
-                <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
-                  <p className="text-sm text-gray-400">등록된 직원이 없습니다</p>
-                </div>
-              ) : null}
+                    <div className="border-t border-gray-200" />
+                  </>
+                )}
 
-              <p className="text-xs text-gray-400 text-center px-4">단위: 시간 · −는 미출근 또는 공휴일</p>
+                {/* 설정 (admin only) */}
+                {user?.role === "admin" && (
+                  <div className="px-4 py-4 flex flex-col gap-3">
+                    <p className="text-xs font-semibold text-gray-500">세부 설정</p>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1.5 block">하루 기본 근무시간</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={dailyHoursInput}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            const filtered = raw.replace(/[^0-9]/g, "");
+                            if (filtered !== raw) {
+                              setOvertimeToast("숫자를 입력해주세요.");
+                              setTimeout(() => setOvertimeToast(null), 3000);
+                            }
+                            setDailyHoursInput(filtered);
+                          }}
+                          className="w-20 h-9 px-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                        />
+                        <span className="text-sm text-gray-500">시간</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1.5 block">산정 기간</label>
+                      <div className="flex items-center gap-2">
+                        <DatePicker
+                          value={editOvertimeSettings.start_date}
+                          onChange={v => setEditOvertimeSettings(prev => ({ ...prev, start_date: v }))}
+                          className="flex-1"
+                          triggerClass="h-9 px-3"
+                        />
+                        <span className="text-xs text-gray-400">~</span>
+                        <DatePicker
+                          value={editOvertimeSettings.end_date}
+                          onChange={v => setEditOvertimeSettings(prev => ({ ...prev, end_date: v }))}
+                          min={editOvertimeSettings.start_date || undefined}
+                          className="flex-1"
+                          triggerClass="h-9 px-3"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={saveOvertimeSettings}
+                      disabled={overtimeSettingsSaving}
+                      className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl disabled:opacity-60 transition-opacity"
+                    >
+                      {overtimeSettingsSaving ? "저장 중..." : "저장"}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })()
@@ -1663,12 +1868,7 @@ export default function AdminAttendancePage() {
             <div className="px-5 pt-4 overflow-y-auto flex-1 pb-10">
               <div className="mb-4">
                 <label className="text-xs text-gray-500 mb-1.5 block">날짜</label>
-                <input
-                  type="date"
-                  value={editDate}
-                  onChange={(e) => handleEditDateChange(e.target.value)}
-                  className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-                />
+                <DatePicker value={editDate} onChange={handleEditDateChange} />
               </div>
 
               {editIsSession ? (

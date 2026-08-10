@@ -339,7 +339,7 @@ export default function MealsPage() {
       {approvingItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => !actioning && setApprovingItem(null)} />
-          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full flex flex-col" style={{ maxHeight: "80vh" }}>
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full max-w-[390px] flex flex-col" style={{ maxHeight: "80vh" }}>
             <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>

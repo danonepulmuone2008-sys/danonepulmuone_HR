@@ -1,3 +1,12 @@
+@import "react-day-picker/style.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.dp-sheet .rdp-root {
+  --rdp-accent-color: #72bf44;
+  --rdp-accent-background-color: #f1f9e8;
+  --rdp-today-color: #72bf44;
+  --rdp-selected-border: 2px solid #72bf44;
+}

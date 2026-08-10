@@ -109,6 +109,7 @@ export default function AttendancePage() {
   const [tripVacPage, setTripVacPage] = useState(1);
   const [editReqPage, setEditReqPage] = useState(1);
   const [attEditDetailReq, setAttEditDetailReq] = useState<AttEditReq | null>(null);
+  const [overtimeData, setOvertimeData] = useState<{ configured: boolean; overtimeHours?: number; actualHours?: number; expectedHours?: number; startDate?: string; endDate?: string } | null>(null);
   const PAGE_SIZE = 5;
   const router = useRouter();
   const { user } = useAuth();
@@ -389,6 +390,14 @@ export default function AttendancePage() {
     fetchVacRemaining(userId);
   }, [userId, fetchVacRemaining]);
 
+  useEffect(() => {
+    if (!userId || !user?.token) return;
+    fetch("/api/overtime", { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setOvertimeData(data); })
+      .catch(() => {});
+  }, [userId, user?.token]);
+
   const handleOpenVacDetail = async () => {
     if (!userId) return;
     setShowVacDetail(true);
@@ -519,6 +528,26 @@ export default function AttendancePage() {
               </div>
             ))}
           </div>
+          {overtimeData?.configured && overtimeData.startDate && overtimeData.endDate && (
+            <div className="border-t border-gray-100 mt-4 pt-3.5 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-400">초과근무 현황</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {overtimeData.startDate.replace(/-/g, ".")} ~ {overtimeData.endDate.replace(/-/g, ".")}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-gray-400">오늘 기준</p>
+                <p className={`text-sm font-semibold ${(overtimeData.overtimeHours ?? 0) > 0 ? "text-blue-600" : (overtimeData.overtimeHours ?? 0) < 0 ? "text-orange-500" : "text-gray-500"}`}>
+                  {(overtimeData.overtimeHours ?? 0) === 0
+                    ? "초과근무 없음"
+                    : (overtimeData.overtimeHours ?? 0) > 0
+                      ? `${overtimeData.overtimeHours}시간 초과근무`
+                      : `${Math.abs(overtimeData.overtimeHours ?? 0)}시간 근무 필요`}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 휴가 잔여 시간 카드 */}

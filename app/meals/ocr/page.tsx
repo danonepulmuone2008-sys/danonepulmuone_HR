@@ -1,5 +1,6 @@
 "use client"
 import AppBar from "@/components/AppBar"
+import DatePicker from "@/components/DatePicker"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/AuthProvider"
@@ -478,10 +479,10 @@ export default function OcrPage() {
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="text-xs font-medium text-gray-500 mb-1 block">날짜 <span className="text-red-400">*</span></label>
-                <input
-                  type="date" value={manual.date}
-                  onChange={(e) => setManual({ ...manual, date: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none bg-gray-50 focus:border-green-400"
+                <DatePicker
+                  value={manual.date}
+                  onChange={v => setManual({ ...manual, date: v })}
+                  triggerClass="py-3 px-4"
                 />
               </div>
               <div className="flex-1">
@@ -582,9 +583,9 @@ export default function OcrPage() {
 
       {/* 수기 입력 담당자 바텀시트 (다중 선택) */}
       {manualAssigneeIdx !== null && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setManualAssigneeIdx(null)} />
-          <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
+          <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full max-w-[390px]">
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-gray-200" />
             </div>
@@ -632,9 +633,9 @@ export default function OcrPage() {
         const n = item.assigneeIds.length
         const perPerson = n > 1 ? Math.round(item.total / n) : null
         return (
-          <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setSelectingItemIdx(null)} />
-            <div className="relative bg-white rounded-t-2xl shadow-xl z-10">
+            <div className="relative bg-white rounded-t-2xl shadow-xl z-10 w-full max-w-[390px]">
               <div className="flex justify-center pt-3 pb-1">
                 <div className="w-10 h-1 rounded-full bg-gray-200" />
               </div>

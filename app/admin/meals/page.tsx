@@ -105,12 +105,14 @@ export default function AdminMealsPage() {
       });
       if (!res.ok) return;
       setReceipts((prev) =>
-        prev.map((r) =>
-          r.id !== receiptId ? r : {
-            ...r,
-            items: r.items.map((i) => i.id === itemId ? { ...i, status: itemStatus } : i),
-          }
-        )
+        prev.map((r) => {
+          if (r.id !== receiptId) return r;
+          const updatedItems = r.items.map((i) => i.id === itemId ? { ...i, status: itemStatus } : i);
+          const allApproved = updatedItems.every((i) => i.status === "approved");
+          const anyRejected = updatedItems.some((i) => i.status === "rejected");
+          const newReceiptStatus = allApproved ? "approved" : anyRejected ? "rejected" : "pending";
+          return { ...r, items: updatedItems, status: newReceiptStatus };
+        })
       );
       // 스토어 업데이트
       if (itemStatus === "approved" || itemStatus === "rejected") {

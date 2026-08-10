@@ -160,24 +160,18 @@ export default function VacationDetailPage() {
           {/* 시작일 */}
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">{isHourly ? "날짜" : "시작일"}</label>
-            <input
-              type="date"
-              value={data.start_date}
-              readOnly
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50 text-gray-700 outline-none pointer-events-none"
-            />
+            <div className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50 flex items-center text-gray-700">
+              {data.start_date.replace(/-/g, ". ")}
+            </div>
           </div>
 
           {/* 종료일 (시간 휴가 아닌 경우) */}
           {!isHourly && (
             <div>
               <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
-              <input
-                type="date"
-                value={data.end_date}
-                readOnly
-                className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50 text-gray-700 outline-none pointer-events-none"
-              />
+              <div className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50 flex items-center text-gray-700">
+                {data.end_date.replace(/-/g, ". ")}
+              </div>
             </div>
           )}
 

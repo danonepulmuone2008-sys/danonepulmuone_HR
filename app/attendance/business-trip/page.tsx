@@ -1,5 +1,6 @@
 "use client";
 import AppBar from "@/components/AppBar";
+import DatePicker from "@/components/DatePicker";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -92,21 +93,11 @@ export default function BusinessTripPage() {
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 시작일 <span className="text-red-500">*</span></label>
-            <input
-              type="date"
-              value={form.startDate}
-              onChange={e => update("startDate", e.target.value)}
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-            />
+            <DatePicker value={form.startDate} onChange={v => update("startDate", v)} />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 종료일 <span className="text-red-500">*</span></label>
-            <input
-              type="date"
-              value={form.endDate}
-              onChange={e => update("endDate", e.target.value)}
-              className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
-            />
+            <DatePicker value={form.endDate} onChange={v => update("endDate", v)} min={form.startDate || undefined} />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">목적지 <span className="text-red-500">*</span></label>

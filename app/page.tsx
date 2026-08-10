@@ -1,6 +1,7 @@
 ﻿"use client";
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import DatePicker from "@/components/DatePicker";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
@@ -655,9 +656,12 @@ export default function HomePage() {
               ))}
             </div>
             <p className="text-xs font-medium text-gray-500 mb-1.5">수정 일자</p>
-            <input type="date" value={sessionEdit.date}
-              onChange={e => setSessionEdit(s => s ? { ...s, date: e.target.value } : s)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50 mb-3" />
+            <DatePicker
+              value={sessionEdit.date}
+              onChange={v => setSessionEdit(s => s ? { ...s, date: v } : s)}
+              className="mb-3"
+              triggerClass="py-2.5 px-3"
+            />
             <p className="text-xs font-medium text-gray-500 mb-1.5">수정 시간</p>
             <input type="time" value={sessionEdit.time}
               onChange={e => setSessionEdit(s => s ? { ...s, time: e.target.value } : s)}
