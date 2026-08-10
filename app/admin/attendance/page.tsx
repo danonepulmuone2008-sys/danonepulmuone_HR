@@ -1084,7 +1084,7 @@ export default function AdminAttendancePage() {
                 {/* 데이터 없는 초기 로딩 */}
                 {recordsLoading && !recordsData ? (
                   <div className="px-4 py-10 flex items-center justify-center">
-                    <p className="text-sm text-gray-400">불러오는 중...</p>
+                    <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
                   </div>
                 ) : !recordsData && recordsError ? (
                   <div className="px-4 py-6 flex flex-col items-center gap-3">
