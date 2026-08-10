@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 import { useAttendanceStore } from "@/store/attendanceStore";
+import Pagination from "@/components/Pagination";
 
 const CALENDAR_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const MAX_DAY_HOURS = 10;
@@ -646,15 +647,9 @@ export default function AttendancePage() {
                   </div>
                 ))}
               </div>
-              {tripVacTotal > 1 && (
-                <div className="flex items-center justify-center gap-2 mb-4">
-                  <button onClick={() => setTripVacPage(p => Math.max(1, p - 1))} disabled={tripVacPage === 1} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">‹</button>
-                  {Array.from({ length: tripVacTotal }, (_, i) => i + 1).map(p => (
-                    <button key={p} onClick={() => setTripVacPage(p)} className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-medium transition-colors ${p === tripVacPage ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}>{p}</button>
-                  ))}
-                  <button onClick={() => setTripVacPage(p => Math.min(tripVacTotal, p + 1))} disabled={tripVacPage === tripVacTotal} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">›</button>
-                </div>
-              )}
+              <div className="mb-4">
+                <Pagination current={tripVacPage} total={tripVacTotal} onChange={setTripVacPage} activeClass="bg-blue-600 text-white" size="sm" />
+              </div>
               <div className="flex gap-3">
                 <Link href="/attendance/business-trip" className="flex-1">
                   <button className="w-full py-4 rounded-2xl bg-blue-600 text-white text-sm font-semibold active:scale-95 transition-all shadow-sm">출장 신청</button>
@@ -704,15 +699,7 @@ export default function AttendancePage() {
                   );
                 })}
               </div>
-              {editTotal > 1 && (
-                <div className="flex items-center justify-center gap-2">
-                  <button onClick={() => setEditReqPage(p => Math.max(1, p - 1))} disabled={editReqPage === 1} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">‹</button>
-                  {Array.from({ length: editTotal }, (_, i) => i + 1).map(p => (
-                    <button key={p} onClick={() => setEditReqPage(p)} className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-medium transition-colors ${p === editReqPage ? "bg-orange-500 text-white" : "text-gray-500 hover:bg-gray-100"}`}>{p}</button>
-                  ))}
-                  <button onClick={() => setEditReqPage(p => Math.min(editTotal, p + 1))} disabled={editReqPage === editTotal} className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-base">›</button>
-                </div>
-              )}
+              <Pagination current={editReqPage} total={editTotal} onChange={setEditReqPage} activeClass="bg-orange-500 text-white" size="sm" />
             </div>
           );
         })()}

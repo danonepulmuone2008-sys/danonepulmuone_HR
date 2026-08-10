@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import BottomNav from "@/components/BottomNav";
+import Pagination from "@/components/Pagination";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import type { LucideIcon } from "lucide-react";
@@ -861,34 +862,14 @@ const [showInquiry, setShowInquiry] = useState(false);
                       )}
                     </div>
                   ))}
-                  {myInquiries.length > INQUIRY_PAGE_SIZE && (() => {
-                    const totalPages = Math.ceil(myInquiries.length / INQUIRY_PAGE_SIZE);
-                    return (
-                      <div className="flex items-center justify-center gap-1.5 pt-2">
-                        <button
-                          onClick={() => setInquiryPage(p => Math.max(1, p - 1))}
-                          disabled={inquiryPage === 1}
-                          className="w-8 h-8 flex items-center justify-center text-gray-400 disabled:opacity-30 text-lg"
-                        >‹</button>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                          <button
-                            key={page}
-                            onClick={() => setInquiryPage(page)}
-                            className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-medium transition-colors ${
-                              page === inquiryPage
-                                ? "bg-orange-400 text-white"
-                                : "text-gray-400 hover:bg-gray-100"
-                            }`}
-                          >{page}</button>
-                        ))}
-                        <button
-                          onClick={() => setInquiryPage(p => Math.min(totalPages, p + 1))}
-                          disabled={inquiryPage === totalPages}
-                          className="w-8 h-8 flex items-center justify-center text-gray-400 disabled:opacity-30 text-lg"
-                        >›</button>
-                      </div>
-                    );
-                  })()}
+                  <div className="pt-2">
+                    <Pagination
+                      current={inquiryPage}
+                      total={Math.ceil(myInquiries.length / INQUIRY_PAGE_SIZE)}
+                      onChange={setInquiryPage}
+                      activeClass="bg-orange-400 text-white"
+                    />
+                  </div>
                 </div>
               )}
             </div>

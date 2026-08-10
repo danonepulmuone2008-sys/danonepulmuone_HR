@@ -7,6 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays";
 import { getInternColor, getInternBgRgba, buildColorMap } from "@/lib/internColors"
 import { useAttendanceStore } from "@/store/attendanceStore"
+import Pagination from "@/components/Pagination"
 
 function toTimestamptz(date: string, time: string): string {
   return `${date}T${time}:00+09:00`
@@ -1134,29 +1135,9 @@ export default function AdminAttendancePage() {
             </div>
           ) : null}
 
-          {!approvalLoading && totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-1">
-              <button
-                onClick={() => setApprovalPage((p) => Math.max(1, p - 1))}
-                disabled={approvalPage === 1}
-                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-xl leading-none"
-              >‹</button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setApprovalPage(p)}
-                  className={`w-8 h-8 rounded-full text-xs font-semibold transition-colors ${
-                    p === approvalPage ? "bg-[#8dc63f] text-white" : "text-gray-500 hover:bg-gray-100"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                onClick={() => setApprovalPage((p) => Math.min(totalPages, p + 1))}
-                disabled={approvalPage === totalPages}
-                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 disabled:opacity-30 text-xl leading-none"
-              >›</button>
+          {!approvalLoading && (
+            <div className="py-1">
+              <Pagination current={approvalPage} total={totalPages} onChange={setApprovalPage} activeClass="bg-[#8dc63f] text-white" />
             </div>
           )}
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/AuthProvider"
 import AdminBottomNav from "@/components/AdminBottomNav"
+import Pagination from "@/components/Pagination"
 
 const STATUS_LABEL: Record<string, string> = {
   approved: "승인완료",
@@ -122,35 +123,9 @@ export default function AdminReceiptsArchivePage() {
         )}
       </div>
 
-      {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 py-4">
-          <button
-            onClick={() => setPage((p) => p - 1)}
-            disabled={page === 0}
-            className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 text-gray-500 disabled:opacity-30 text-lg leading-none"
-          >
-            ‹
-          </button>
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setPage(i)}
-              className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${
-                i === page ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page === totalPages - 1}
-            className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 text-gray-500 disabled:opacity-30 text-lg leading-none"
-          >
-            ›
-          </button>
-        </div>
-      )}
+      <div className="py-4">
+        <Pagination current={page + 1} total={totalPages} onChange={(p) => setPage(p - 1)} activeClass="bg-blue-600 text-white" />
+      </div>
 
       <AdminBottomNav />
     </div>
