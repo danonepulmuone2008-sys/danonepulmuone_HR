@@ -103,7 +103,7 @@ export default function AdminInquiryPage() {
     setToast("처리 완료되었습니다.");
     setTimeout(() => setToast(""), 2500);
     window.dispatchEvent(new CustomEvent("inquiryProcessed"));
-    await supabase.from("inquiries").update({ is_processed: true, is_read: true, processed_by: adminId }).eq("id", id);
+    await supabase.from("inquiries").update({ is_processed: true, is_read: true, processed_by: adminId, processed_at: new Date().toISOString() }).eq("id", id);
     const targetUserId = inquiryItems.find((q) => q.id === id)?.internId;
     if (targetUserId && session?.access_token) {
       fetch("/api/push/send", {

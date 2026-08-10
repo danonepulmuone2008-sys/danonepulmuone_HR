@@ -133,8 +133,10 @@ export default function VacationPage() {
       <AppBar title="휴가 신청" />
 
       {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${toast.isError ? "bg-red-500" : "bg-gray-800"}`}>
-          {toast.msg}
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className={`text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${toast.isError ? "bg-red-500" : "bg-gray-800"}`}>
+            {toast.msg}
+          </div>
         </div>
       )}
 
@@ -180,7 +182,7 @@ export default function VacationPage() {
             const invalid = !!form.startTime && !!form.endTime && computed === null;
             return (
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">휴가 시간</label>
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">휴가 시간 <span className="text-red-500">*</span></label>
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="text-[11px] text-gray-400 mb-1 block">시작</label>
@@ -227,7 +229,7 @@ export default function VacationPage() {
           })()}
 
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">{isHourly ? "날짜" : "시작일"}</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">{isHourly ? "날짜" : "시작일"} <span className="text-red-500">*</span></label>
             <input
               type="date"
               value={form.startDate}
@@ -238,7 +240,7 @@ export default function VacationPage() {
 
           {!isHourly && (
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일</label>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">종료일 <span className="text-red-500">*</span></label>
               <input
                 type="date"
                 value={form.endDate}
@@ -250,7 +252,7 @@ export default function VacationPage() {
           )}
 
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">사유</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">사유 <span className="text-red-500">*</span></label>
             <textarea
               value={form.reason}
               onChange={e => update("reason", e.target.value)}
@@ -289,15 +291,23 @@ export default function VacationPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading || (isHourly && !!form.startTime && !!form.endTime && calcHours() === null)}
-          className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm disabled:opacity-60 flex items-center justify-center"
+        {(() => {
+          const isDisabled = loading || !form.startDate || !form.reason.trim() ||
+            (!isHourly && !form.endDate) ||
+            (isHourly && (!form.startTime || !form.endTime)) ||
+            (isHourly && calcHours() === null);
+          return (
+          <button
+            onClick={handleSubmit}
+            disabled={isDisabled}
+            className={`w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60 flex items-center justify-center ${isDisabled ? "" : "active:scale-95"}`}
         >
-          {loading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : "신청하기"}
-        </button>
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : "신청하기"}
+          </button>
+          );
+        })()}
       </div>
     </div>
   );

@@ -329,7 +329,7 @@ const [showInquiry, setShowInquiry] = useState(false);
   const [showInquiries, setShowInquiries] = useState(false);
   const [inquiryPage, setInquiryPage] = useState(1);
   const INQUIRY_PAGE_SIZE = 5;
-  type InquiryItem = { id: string; subject: string; content: string; created_at: string; is_processed: boolean; processedByName: string | null };
+  type InquiryItem = { id: string; subject: string; content: string; created_at: string; is_processed: boolean; processedByName: string | null; processed_at: string | null };
   const [myInquiries, setMyInquiries] = useState<InquiryItem[]>([]);
   const [inquiriesLoading, setInquiriesLoading] = useState(false);
   const [confirmDeleteInquiry, setConfirmDeleteInquiry] = useState<string | null>(null);
@@ -341,7 +341,7 @@ const [showInquiry, setShowInquiry] = useState(false);
     setInquiryPage(1);
     setInquiriesLoading(true);
     try {
-      const { data } = await supabase.from("inquiries").select("id, subject, content, created_at, is_processed, processed_by").eq("user_id", authUser.id).order("created_at", { ascending: false });
+      const { data } = await supabase.from("inquiries").select("id, subject, content, created_at, is_processed, processed_by, processed_at").eq("user_id", authUser.id).order("created_at", { ascending: false });
       const processorIds = [...new Set((data ?? []).map((d: any) => d.processed_by).filter(Boolean))];
       let processorMap: Record<string, string> = {};
       if (processorIds.length > 0) {
@@ -351,6 +351,7 @@ const [showInquiry, setShowInquiry] = useState(false);
       setMyInquiries((data ?? []).map((d: any) => ({
         ...d,
         processedByName: d.processed_by ? (processorMap[d.processed_by] ?? null) : null,
+        processed_at: d.processed_at ?? null,
       })));
     } finally {
       setInquiriesLoading(false);
@@ -847,7 +848,7 @@ const [showInquiry, setShowInquiry] = useState(false);
                       </div>
                       <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{item.content}</p>
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs text-gray-300">{new Date(item.created_at).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}</p>
+                        <p className="text-xs text-gray-300">{(() => { const d = new Date(item.created_at); return `${d.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })} ${d.getHours()}시 ${String(d.getMinutes()).padStart(2, "0")}분`; })()}</p>
                         {!item.is_processed && (
                           <button
                             onClick={() => setConfirmDeleteInquiry(item.id)}
@@ -857,8 +858,15 @@ const [showInquiry, setShowInquiry] = useState(false);
                           </button>
                         )}
                       </div>
-                      {item.is_processed && item.processedByName && (
-                        <p className="text-xs text-blue-400">처리: {item.processedByName}</p>
+                      {item.is_processed && (
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          {item.processedByName && (
+                            <p className="text-xs text-blue-400">처리: {item.processedByName}</p>
+                          )}
+                          {item.processed_at && (
+                            <p className="text-xs text-blue-400">날짜: {new Date(item.processed_at).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}</p>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}

@@ -14,8 +14,8 @@ const MAX_DAY_HOURS = 10;
 const DAY_LABELS = ["월", "화", "수", "목", "금"];
 
 type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: string; startTime?: number | null; endTime?: number | null; lunchBreak?: boolean | null; hours?: number | null; tripStartTime?: string | null; tripEndTime?: string | null };
-type RequestItem = { id: string; type: "vacation" | "business_trip" | "attendance_edit"; label: string; date: string; status: string; reviewedBy?: string | null };
-type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null; reviewedAt: string | null; reason: string };
+type RequestItem = { id: string; type: "vacation" | "business_trip" | "attendance_edit"; label: string; date: string; status: string; reviewedBy?: string | null; createdAt: string };
+type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null; reviewedAt: string | null; requestedAt: string | null; reason: string };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
 type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string; startTime?: string | null; endTime?: string | null };
@@ -231,10 +231,10 @@ export default function AttendancePage() {
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
       supabase.from("users").select("id, name").eq("is_active", true),
-      supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
-      supabase.from("business_trip_requests").select("id, destination, start_date, status, reviewed_by").eq("user_id", uid).order("start_date", { ascending: false }),
+      supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by, created_at").eq("user_id", uid).order("created_at", { ascending: false }),
+      supabase.from("business_trip_requests").select("id, destination, start_date, status, reviewed_by, created_at").eq("user_id", uid).order("created_at", { ascending: false }),
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
-      supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by, reviewed_at, reason")
+      supabase.from("attendance_edit_requests").select("id, date, direction, requested_time, status, lunch_break, reviewed_by, reviewed_at, reason, requested_at")
         .eq("user_id", uid).order("requested_at", { ascending: false }),
     ]);
 
@@ -338,10 +338,15 @@ export default function AttendancePage() {
     setFlexMap(newFlexMap);
 
     const reqList: RequestItem[] = [
-      ...(reqVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status), reviewedBy: v.reviewed_by ? (nameMap[v.reviewed_by] ?? null) : null })),
-      ...(reqTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status), reviewedBy: t.reviewed_by ? (nameMap[t.reviewed_by] ?? null) : null })),
-      ...(attEditReqRes.data ?? []).map(r => ({ id: r.id, type: "attendance_edit" as const, label: `${r.direction === "in" ? "출근" : "퇴근"} ${r.requested_time}`, date: r.date, status: statusKo(r.status), reviewedBy: r.reviewed_by ? (nameMap[r.reviewed_by] ?? null) : null })),
-    ].sort((a, b) => b.date.localeCompare(a.date));
+      ...(reqVacRes.data ?? []).map(v => ({ id: v.id, type: "vacation" as const, label: v.type, date: v.start_date, status: statusKo(v.status), reviewedBy: v.reviewed_by ? (nameMap[v.reviewed_by] ?? null) : null, createdAt: v.created_at ?? "" })),
+      ...(reqTripRes.data ?? []).map(t => ({ id: t.id, type: "business_trip" as const, label: t.destination, date: t.start_date, status: statusKo(t.status), reviewedBy: t.reviewed_by ? (nameMap[t.reviewed_by] ?? null) : null, createdAt: t.created_at ?? "" })),
+      ...(attEditReqRes.data ?? []).map(r => ({ id: r.id, type: "attendance_edit" as const, label: `${r.direction === "in" ? "출근" : "퇴근"} ${r.requested_time}`, date: r.date, status: statusKo(r.status), reviewedBy: r.reviewed_by ? (nameMap[r.reviewed_by] ?? null) : null, createdAt: r.requested_at ?? "" })),
+    ].sort((a, b) => {
+      const pa = a.status === "승인대기" ? 0 : 1;
+      const pb = b.status === "승인대기" ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
     setRequests(reqList);
     setTripVacPage(1);
     setEditReqPage(1);
@@ -357,6 +362,7 @@ export default function AttendancePage() {
         lunchBreak: r.lunch_break,
         reviewedBy: r.reviewed_by ? (nameMap[r.reviewed_by] ?? null) : null,
         reviewedAt: r.reviewed_at ?? null,
+        requestedAt: r.requested_at ?? null,
         reason: r.reason ?? "",
       });
     });
@@ -756,6 +762,7 @@ export default function AttendancePage() {
             }
             if (userId) await fetchMonthData(userId);
             goBack();
+            showPageToast("수정 요청이 완료되었습니다");
           } finally {
             setAttEditSubmitting(false);
           }
@@ -1118,6 +1125,12 @@ export default function AttendancePage() {
                     {statusLabel}
                   </span>
                 </div>
+                {req.requestedAt && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">신청일</span>
+                    <span className="text-sm text-gray-700">{new Date(req.requestedAt).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-400">구분</span>
                   <span className="text-sm text-gray-700">{req.direction === "in" ? "출근" : "퇴근"} 수정</span>

@@ -312,6 +312,9 @@ export default function MealsPage() {
           <div className="flex justify-end mt-2">
             <p className="text-xs text-gray-400">{mealPercent}% 사용</p>
           </div>
+          <div className="flex justify-end mt-3">
+            <p className="text-xs text-blue-500 font-medium">양도 <span className="text-base">›</span></p>
+          </div>
         </div>
         </Link>
 

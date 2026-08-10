@@ -46,7 +46,7 @@ export async function PATCH(req: Request) {
         .single()
       const { error } = await supabaseAdmin
         .from("business_trip_requests")
-        .update({ status: action, reviewed_by: userId })
+        .update({ status: action, reviewed_by: userId, reviewed_at: new Date().toISOString() })
         .eq("id", id)
       if (error) throw new Error(error.message)
       if (req) sendPushToUsers([req.user_id], {
@@ -62,7 +62,7 @@ export async function PATCH(req: Request) {
         .single()
       const { error } = await supabaseAdmin
         .from("vacation_requests")
-        .update({ status: action, reviewed_by: userId })
+        .update({ status: action, reviewed_by: userId, reviewed_at: new Date().toISOString() })
         .eq("id", id)
       if (error) throw new Error(error.message)
       if (req) sendPushToUsers([req.user_id], {
@@ -80,7 +80,7 @@ export async function PATCH(req: Request) {
 
       const { error: updateError } = await supabaseAdmin
         .from("attendance_edit_requests")
-        .update({ status: action, reviewed_by: userId })
+        .update({ status: action, reviewed_by: userId, reviewed_at: new Date().toISOString() })
         .eq("id", id)
       if (updateError) throw new Error(updateError.message)
 

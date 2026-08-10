@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { href: "/",           label: "홈",  Icon: Home },
   { href: "/attendance", label: "근태", Icon: ClipboardList },
   { href: "/meals",      label: "식대", Icon: UtensilsCrossed },
-  { href: "/mypage",     label: "마이", Icon: User },
+  { href: "/mypage",     label: "내정보", Icon: User },
 ];
 
 export default function BottomNav() {

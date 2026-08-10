@@ -81,15 +81,17 @@ export default function BusinessTripPage() {
       <AppBar title="출장 신청" />
 
       {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${toast.isError ? "bg-red-500" : "bg-gray-800"}`}>
-          {toast.msg}
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className={`text-white text-sm px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap ${toast.isError ? "bg-red-500" : "bg-gray-800"}`}>
+            {toast.msg}
+          </div>
         </div>
       )}
 
       <div className="flex flex-col gap-4 px-4 pt-5 pb-8">
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 시작일</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 시작일 <span className="text-red-500">*</span></label>
             <input
               type="date"
               value={form.startDate}
@@ -98,7 +100,7 @@ export default function BusinessTripPage() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 종료일</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 종료일 <span className="text-red-500">*</span></label>
             <input
               type="date"
               value={form.endDate}
@@ -107,7 +109,7 @@ export default function BusinessTripPage() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">목적지</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">목적지 <span className="text-red-500">*</span></label>
             <input
               type="text"
               value={form.destination}
@@ -118,7 +120,7 @@ export default function BusinessTripPage() {
           </div>
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 시작 시간</label>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 시작 시간 <span className="text-red-500">*</span></label>
               <input
                 type="time"
                 value={form.startTime}
@@ -127,7 +129,7 @@ export default function BusinessTripPage() {
               />
             </div>
             <div className="flex-1">
-              <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 종료 시간</label>
+              <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 종료 시간 <span className="text-red-500">*</span></label>
               <input
                 type="time"
                 value={form.endTime}
@@ -147,7 +149,7 @@ export default function BusinessTripPage() {
             <span className="text-sm text-gray-700">점심 식사 포함 (-1시간)</span>
           </label>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 사유</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">출장 사유 <span className="text-red-500">*</span></label>
             <textarea
               value={form.reason}
               onChange={e => update("reason", e.target.value)}
@@ -158,15 +160,22 @@ export default function BusinessTripPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all shadow-sm disabled:opacity-60 flex items-center justify-center"
-        >
-          {loading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : "신청하기"}
-        </button>
+        {(() => {
+          const isDisabled = loading || !form.startDate || !form.endDate ||
+            !form.destination.trim() || !form.startTime || !form.endTime ||
+            form.startTime >= form.endTime || !form.reason.trim();
+          return (
+            <button
+              onClick={handleSubmit}
+              disabled={isDisabled}
+              className={`w-full py-4 bg-blue-600 text-white rounded-2xl text-sm font-semibold transition-all shadow-sm disabled:opacity-60 flex items-center justify-center ${isDisabled ? "" : "active:scale-95"}`}
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : "신청하기"}
+            </button>
+          );
+        })()}
       </div>
     </div>
   );

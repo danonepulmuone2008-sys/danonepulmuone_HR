@@ -70,11 +70,9 @@ export default function WeeklyReceiptList({ receipts }: { receipts: Receipt[] })
         <p className="text-sm font-semibold text-gray-800">영수증 세부 내역</p>
         <div className="flex items-center gap-1 text-xs text-gray-500">
           <button
-            className="px-2 py-1 rounded active:bg-gray-100 transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 active:bg-gray-100 transition-colors text-base leading-none"
             onClick={() => handleMonthChange(-1)}
-          >
-            &lt;
-          </button>
+          >‹</button>
           <button
             onClick={openPicker}
             className="text-center font-semibold text-gray-700 px-1 py-1 rounded hover:bg-gray-100 active:bg-gray-100 transition-colors"
@@ -82,11 +80,9 @@ export default function WeeklyReceiptList({ receipts }: { receipts: Receipt[] })
             {year}년 {month}월
           </button>
           <button
-            className="px-2 py-1 rounded active:bg-gray-100 transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 active:bg-gray-100 transition-colors text-base leading-none"
             onClick={() => handleMonthChange(1)}
-          >
-            &gt;
-          </button>
+          >›</button>
         </div>
       </div>
 

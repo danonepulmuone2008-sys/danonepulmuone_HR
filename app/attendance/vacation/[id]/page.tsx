@@ -19,7 +19,9 @@ type VacDetail = {
   hours: number | null;
   attachment_url: string | null;
   reviewed_by: string | null;
+  reviewed_at: string | null;
   reviewer_name?: string | null;
+  created_at: string;
 };
 
 function statusKo(s: string) {
@@ -37,7 +39,7 @@ export default function VacationDetailPage() {
     (async () => {
       const { data: vac } = await supabase
         .from("vacation_requests")
-        .select("id, type, start_date, end_date, reason, status, start_time, end_time, lunch_break, hours, attachment_url, reviewed_by")
+        .select("id, type, start_date, end_date, reason, status, start_time, end_time, lunch_break, hours, attachment_url, reviewed_by, reviewed_at, created_at")
         .eq("id", id)
         .single();
       if (!vac) { setLoading(false); return; }
@@ -47,7 +49,7 @@ export default function VacationDetailPage() {
         const { data: u } = await supabase.from("users").select("name").eq("id", vac.reviewed_by).single();
         reviewer_name = u?.name ?? null;
       }
-      setData({ ...vac, reviewer_name });
+      setData({ ...vac, reviewed_at: vac.reviewed_at ?? null, created_at: vac.created_at, reviewer_name });
       setLoading(false);
     })();
   }, [id]);
@@ -84,7 +86,12 @@ export default function VacationDetailPage() {
           <span className="text-sm font-semibold text-gray-700">신청 상태</span>
           <div className="flex items-center gap-2">
             {data.reviewer_name && (
-              <span className="text-xs text-gray-400">{data.status === "approved" ? "승인" : "처리"}: {data.reviewer_name}</span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="text-xs text-gray-400">{data.status === "approved" ? "승인" : "처리"}: {data.reviewer_name}</span>
+                {data.reviewed_at && (
+                  <span className="text-xs text-gray-400">{new Date(data.reviewed_at).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}</span>
+                )}
+              </div>
             )}
             <span className={`text-xs font-semibold px-3 py-1 rounded-full ${data.status === "approved" ? "bg-green-100 text-green-700" : data.status === "rejected" ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-700"}`}>
               {statusKo(data.status)}
@@ -94,6 +101,13 @@ export default function VacationDetailPage() {
 
         {/* 폼 카드 (읽기 전용) */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4">
+          {/* 신청일 */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block">신청일</label>
+            <div className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm bg-gray-50 flex items-center text-gray-700">
+              {new Date(data.created_at).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })}
+            </div>
+          </div>
           {/* 휴가 종류 */}
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1.5 block">휴가 종류</label>
