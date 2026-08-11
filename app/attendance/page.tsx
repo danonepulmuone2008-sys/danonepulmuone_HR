@@ -531,8 +531,8 @@ export default function AttendancePage() {
           </div>
           {overtimeData?.configured && overtimeData.startDate && overtimeData.endDate && (
             <div className="border-t border-gray-100 mt-4 pt-3.5">
-              <p className="text-xs font-bold text-gray-400 mb-3 text-center">
-                초과근무 현황 <span className="font-bold">(기간: {overtimeData.startDate.replace(/-/g, ".")} ~ {overtimeData.endDate.replace(/-/g, ".")})</span>
+              <p className="text-xs text-gray-400 mb-3 text-center">
+                초과근무 현황 <span className="font-normal">(기간: {overtimeData.startDate.replace(/-/g, ".")} ~ {overtimeData.endDate.replace(/-/g, ".")})</span>
               </p>
               <div className="flex divide-x divide-gray-100">
                 {[
