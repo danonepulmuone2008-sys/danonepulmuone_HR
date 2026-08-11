@@ -36,7 +36,7 @@ export default function HomePage() {
     weeklyHours, weeklyGoal,
     loaded: attendanceLoaded,
     fetchAll: fetchAttendanceAll,
-    doClockIn, doClockOut, addSession, closeSession, addWeeklyHours,
+    doClockIn, doClockOut, addSession, closeSession, addWeeklyHours, addOvertimeActualHours,
   } = useAttendanceStore();
   const weeklyPercent = Math.round((weeklyHours / weeklyGoal) * 100);
 
@@ -199,7 +199,9 @@ export default function HomePage() {
           // 주간 시간 업데이트
           if (clockIn) {
             const h = (parseInt(modal.time.split(":")[0]) * 60 + parseInt(modal.time.split(":")[1]) - parseInt(clockIn.split(":")[0]) * 60 - parseInt(clockIn.split(":")[1])) / 60;
-            addWeeklyHours(lunchBreak && h >= 1 ? h - 1 : h);
+            const net = lunchBreak && h >= 1 ? h - 1 : h;
+            addWeeklyHours(net);
+            addOvertimeActualHours(net);
           }
         }
       } else {
@@ -221,7 +223,9 @@ export default function HomePage() {
           // 주간 시간 업데이트
           if (clockIn) {
             const h = diffMin / 60;
-            addWeeklyHours((lunchBreak && diffMin >= 60) ? h - 1 : h);
+            const net = (lunchBreak && diffMin >= 60) ? h - 1 : h;
+            addWeeklyHours(net);
+            addOvertimeActualHours(net);
           }
         }
       }

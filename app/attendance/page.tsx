@@ -112,7 +112,7 @@ export default function AttendancePage() {
   const PAGE_SIZE = 5;
   const router = useRouter();
   const { user } = useAuth();
-  const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining, overtimeData, overtimeLoaded } = useAttendanceStore();
+  const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining, overtimeData, overtimeLoaded, overtimeWeekData, overtimeWeekLoaded, fetchOvertimeWeek } = useAttendanceStore();
   const useSessionTracking = attProfile.use_session_tracking;
   const userId = user?.id ?? null;
 
@@ -394,6 +394,11 @@ export default function AttendancePage() {
     useAttendanceStore.getState().fetchOvertime(user.token);
   }, [user?.token, overtimeLoaded]);
 
+  useEffect(() => {
+    if (!user?.token || overtimeWeekLoaded) return;
+    fetchOvertimeWeek(user.token);
+  }, [user?.token, overtimeWeekLoaded, fetchOvertimeWeek]);
+
   const handleOpenVacDetail = async () => {
     if (!userId) return;
     setShowVacDetail(true);
@@ -525,22 +530,29 @@ export default function AttendancePage() {
             ))}
           </div>
           {overtimeData?.configured && overtimeData.startDate && overtimeData.endDate && (
-            <div className="border-t border-gray-100 mt-4 pt-3.5 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-400">초과근무 현황</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">
-                  {overtimeData.startDate.replace(/-/g, ".")} ~ {overtimeData.endDate.replace(/-/g, ".")}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-bold text-gray-400">오늘 기준</p>
-                <p className={`text-sm font-semibold ${(overtimeData.overtimeHours ?? 0) > 0 ? "text-blue-600" : (overtimeData.overtimeHours ?? 0) < 0 ? "text-orange-500" : "text-gray-500"}`}>
-                  {(overtimeData.overtimeHours ?? 0) === 0
-                    ? "초과근무 없음"
-                    : (overtimeData.overtimeHours ?? 0) > 0
-                      ? `${overtimeData.overtimeHours}시간 초과근무`
-                      : `${Math.abs(overtimeData.overtimeHours ?? 0)}시간 근무 필요`}
-                </p>
+            <div className="border-t border-gray-100 mt-4 pt-3.5">
+              <p className="text-xs font-medium text-gray-400 mb-3">
+                초과근무 현황 <span className="font-normal">(기간: {overtimeData.startDate.replace(/-/g, ".")} ~ {overtimeData.endDate.replace(/-/g, ".")})</span>
+              </p>
+              <div className="flex divide-x divide-gray-100">
+                {[
+                  { label: "오늘 기준", data: overtimeData, loaded: overtimeLoaded },
+                  { label: "이번 주 기준", data: overtimeWeekData, loaded: overtimeWeekLoaded },
+                ].map(({ label, data, loaded }) => {
+                  const h = data?.overtimeHours ?? 0;
+                  return (
+                    <div key={label} className="flex-1 flex flex-col items-center gap-1">
+                      <p className="text-[11px] text-gray-400">{label}</p>
+                      {!loaded ? (
+                        <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                      ) : (
+                        <p className={`text-sm font-semibold ${h > 0 ? "text-blue-600" : h < 0 ? "text-orange-500" : "text-gray-500"}`}>
+                          {h === 0 ? "초과근무 없음" : h > 0 ? `${h}시간 초과근무` : `${Math.abs(h)}시간 근무 필요`}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

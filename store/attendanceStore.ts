@@ -29,17 +29,21 @@ interface AttendanceState {
   vacRemaining: number | null
   overtimeData: OvertimeData | null
   overtimeLoaded: boolean
+  overtimeWeekData: OvertimeData | null
+  overtimeWeekLoaded: boolean
   loaded: boolean
   loading: boolean
 
   fetchAll: (token: string) => Promise<void>
   fetchVacRemaining: (userId: string) => Promise<void>
   fetchOvertime: (token: string) => Promise<void>
+  fetchOvertimeWeek: (token: string) => Promise<void>
   doClockIn: (time: string, sessionId?: string | null) => void
   doClockOut: (time: string) => void
   addSession: (start: string, sessionId: string, date?: string) => void
   closeSession: (endTime: string) => void
   addWeeklyHours: (delta: number) => void
+  addOvertimeActualHours: (delta: number) => void
   reset: () => void
 }
 
@@ -58,6 +62,8 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   vacRemaining: null,
   overtimeData: null,
   overtimeLoaded: false,
+  overtimeWeekData: null,
+  overtimeWeekLoaded: false,
   loaded: false,
   loading: false,
 
@@ -79,14 +85,25 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       const res = await fetch("/api/overtime", {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (!res.ok) {
-        set({ overtimeLoaded: true })
-        return
-      }
+      if (!res.ok) { set({ overtimeLoaded: true }); return }
       const data = await res.json()
       set({ overtimeData: data, overtimeLoaded: true })
     } catch {
       set({ overtimeLoaded: true })
+    }
+  },
+
+  fetchOvertimeWeek: async (token: string) => {
+    if (get().overtimeWeekLoaded) return
+    try {
+      const res = await fetch("/api/overtime?basis=week", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) { set({ overtimeWeekLoaded: true }); return }
+      const data = await res.json()
+      set({ overtimeWeekData: data, overtimeWeekLoaded: true })
+    } catch {
+      set({ overtimeWeekLoaded: true })
     }
   },
 
@@ -161,6 +178,21 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     set((s) => ({ weeklyHours: s.weeklyHours + delta }))
   },
 
+  addOvertimeActualHours: (delta) => {
+    set((s) => {
+      if (!s.overtimeData?.configured) return {}
+      const actual = (s.overtimeData.actualHours ?? 0) + delta
+      const expected = s.overtimeData.expectedHours ?? 0
+      return {
+        overtimeData: {
+          ...s.overtimeData,
+          actualHours: Math.round(actual * 10) / 10,
+          overtimeHours: Math.round((actual - expected) * 10) / 10,
+        },
+      }
+    })
+  },
+
   reset: () => {
     set({
       profile: DEFAULT_PROFILE,
@@ -169,6 +201,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       weeklyHours: 0, weeklyGoal: 0,
       vacRemaining: null,
       overtimeData: null, overtimeLoaded: false,
+      overtimeWeekData: null, overtimeWeekLoaded: false,
       loaded: false, loading: false,
     })
   },

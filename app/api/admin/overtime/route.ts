@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireAdmin } from "@/lib/auth"
-import { countWorkingDays, fmtDate } from "@/lib/holidays"
+import { countWorkingDays } from "@/lib/holidays"
 
 function calcRecordHours(clockIn: string | null, clockOut: string | null, lunchBreak: boolean | null): number {
   if (!clockIn || !clockOut) return 0
@@ -27,26 +27,56 @@ export async function GET(req: Request) {
 
     const settings = Object.fromEntries((settingsRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
     const dailyWorkHours = Number(settings.daily_work_hours ?? 8)
-    const startDate: string = settings.start_date ?? ""
-    const endDate: string = settings.end_date ?? ""
+    const mode: "monthly" | "custom" = (settings.mode ?? "monthly") as "monthly" | "custom"
 
-    if (!startDate || !endDate) {
-      return NextResponse.json({ configured: false })
+    let startDate: string
+    let endDate: string
+
+    if (mode === "monthly") {
+      const nowKST = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
+      const y = nowKST.getUTCFullYear()
+      const m = nowKST.getUTCMonth()
+      const mm = String(m + 1).padStart(2, "0")
+      startDate = `${y}-${mm}-01`
+      endDate = `${y}-${mm}-${String(new Date(Date.UTC(y, m + 1, 0)).getUTCDate()).padStart(2, "0")}`
+    } else {
+      startDate = settings.start_date ?? ""
+      endDate = settings.end_date ?? ""
+      if (!startDate || !endDate) return NextResponse.json({ configured: false })
     }
 
-    const now = new Date()
-    const dayOfWeek = now.getDay() // 0=Sun, 1=Mon, ..., 6=Sat
-    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
-    const endOfWeek = new Date(now)
-    endOfWeek.setDate(now.getDate() + daysUntilSunday)
-    const endOfWeekStr = fmtDate(endOfWeek)
-    const effectiveEnd = endDate < endOfWeekStr ? endDate : endOfWeekStr
+    const nowKST = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
+    const kstDateStr = (d: Date) =>
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
+    const todayStr = kstDateStr(nowKST)
 
-    if (startDate > effectiveEnd) {
-      return NextResponse.json({ configured: true, users: [], startDate, endDate, dailyWorkHours, expectedHours: 0 })
+    // 기준(expected): 월단위는 월 전체, 직접설정은 금주까지
+    // 실근무(actual): 항상 오늘까지만 집계
+    let expectedEnd: string
+    let actualEnd: string
+
+    if (mode === "monthly") {
+      expectedEnd = endDate  // 월 말일 기준으로 전체 영업일 산정
+      actualEnd = endDate < todayStr ? endDate : todayStr
+    } else {
+      const dayOfWeek = nowKST.getUTCDay()
+      const endOfWeekKST = new Date(nowKST)
+      endOfWeekKST.setUTCDate(nowKST.getUTCDate() + (dayOfWeek === 0 ? 0 : 7 - dayOfWeek))
+      const endOfWeekStr = kstDateStr(endOfWeekKST)
+      expectedEnd = endDate < endOfWeekStr ? endDate : endOfWeekStr
+      actualEnd = expectedEnd
     }
 
-    const expectedHours = countWorkingDays(startDate, effectiveEnd) * dailyWorkHours
+    // 총근무일 기준: 설정 기간 전체(startDate ~ endDate)의 공휴일 제외 근로일수 × 하루 기본 근무시간
+    const totalExpectedHours = startDate > endDate
+      ? 0
+      : Math.round(countWorkingDays(startDate, endDate) * dailyWorkHours * 10) / 10
+
+    if (startDate > expectedEnd) {
+      return NextResponse.json({ configured: true, users: [], startDate, endDate, dailyWorkHours, expectedHours: 0, totalExpectedHours })
+    }
+
+    const expectedHours = countWorkingDays(startDate, expectedEnd) * dailyWorkHours
 
     const { data: users } = await supabaseAdmin
       .from("users")
@@ -71,7 +101,7 @@ export async function GET(req: Request) {
         .select("user_id, clock_in, clock_out, lunch_break")
         .in("user_id", normalUserIds)
         .gte("date", startDate)
-        .lte("date", effectiveEnd)
+        .lte("date", actualEnd)
 
       for (const r of records ?? []) {
         attendanceMap[r.user_id] = (attendanceMap[r.user_id] ?? 0) + calcRecordHours(r.clock_in, r.clock_out, r.lunch_break)
@@ -84,7 +114,7 @@ export async function GET(req: Request) {
         .select("user_id, start_time, end_time, lunch_break")
         .in("user_id", sessionUserIds)
         .gte("date", startDate)
-        .lte("date", effectiveEnd)
+        .lte("date", actualEnd)
         .not("end_time", "is", null)
 
       for (const s of sessions ?? []) {
@@ -97,7 +127,7 @@ export async function GET(req: Request) {
       .select("user_id, type, start_date, end_date, hours")
       .in("user_id", userIds)
       .eq("status", "approved")
-      .lte("start_date", effectiveEnd)
+      .lte("start_date", actualEnd)
       .gte("end_date", startDate)
 
     const CREDIT_TYPES = ["면접", "병가", "경조사"]
@@ -108,7 +138,7 @@ export async function GET(req: Request) {
         vacCreditMap[vac.user_id] = (vacCreditMap[vac.user_id] ?? 0) + (vac.hours ?? 0)
       } else if (CREDIT_TYPES.includes(vac.type)) {
         const vacStart = vac.start_date > startDate ? vac.start_date : startDate
-        const vacEnd = vac.end_date < effectiveEnd ? vac.end_date : effectiveEnd
+        const vacEnd = vac.end_date < actualEnd ? vac.end_date : actualEnd
         if (vacStart <= vacEnd) {
           vacCreditMap[vac.user_id] = (vacCreditMap[vac.user_id] ?? 0) + countWorkingDays(vacStart, vacEnd) * dailyWorkHours
         }
@@ -134,6 +164,8 @@ export async function GET(req: Request) {
       endDate,
       dailyWorkHours,
       expectedHours: Math.round(expectedHours * 10) / 10,
+      totalExpectedHours,
+      mode,
     })
   } catch (err) {
     console.error("[admin/overtime GET]", err)

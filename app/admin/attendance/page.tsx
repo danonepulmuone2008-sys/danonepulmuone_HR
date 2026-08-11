@@ -76,7 +76,7 @@ type VacUsage = {
 
 type RecordsUser = { id: string; name: string; use_session_tracking?: boolean }
 type EditSession = { id?: string; start: string; end: string; lunch_break: boolean }
-type OvertimeSettings = { daily_work_hours: number; start_date: string; end_date: string }
+type OvertimeSettings = { daily_work_hours: number; start_date: string; end_date: string; mode: "monthly" | "custom" }
 type OvertimeUser = { id: string; name: string; actualHours: number; expectedHours: number; overtimeHours: number }
 type RecordsData = {
   users: RecordsUser[]
@@ -235,9 +235,13 @@ export default function AdminAttendancePage() {
   // 초과근무 상태
   const [overtimeSettings, setOvertimeSettings] = useState<OvertimeSettings | null>(null);
   const [overtimeSettingsLoading, setOvertimeSettingsLoading] = useState(false);
-  const [editOvertimeSettings, setEditOvertimeSettings] = useState<OvertimeSettings>({ daily_work_hours: 8, start_date: "", end_date: "" });
+  const [editOvertimeSettings, setEditOvertimeSettings] = useState<OvertimeSettings>({ daily_work_hours: 8, start_date: "", end_date: "", mode: "monthly" });
   const [overtimeSettingsSaving, setOvertimeSettingsSaving] = useState(false);
   const [overtimeAllUsers, setOvertimeAllUsers] = useState<OvertimeUser[]>([]);
+  const [overtimeMode, setOvertimeMode] = useState<"monthly" | "custom">("monthly");
+  const [overtimePeriodExpected, setOvertimePeriodExpected] = useState<number>(0);
+  const [overtimeTotalExpected, setOvertimeTotalExpected] = useState<number>(0);
+  const [overtimeView, setOvertimeView] = useState<"period" | "total">("period");
   const [overtimeAllLoading, setOvertimeAllLoading] = useState(false);
   const [dailyHoursInput, setDailyHoursInput] = useState("8");
 
@@ -460,8 +464,14 @@ export default function AdminAttendancePage() {
       const res = await fetch("/api/admin/overtime", { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
       const data = await res.json();
-      if (data.configured) setOvertimeAllUsers(data.users ?? []);
-      else setOvertimeAllUsers([]);
+      if (data.configured) {
+        setOvertimeAllUsers(data.users ?? []);
+        setOvertimeMode(data.mode ?? "monthly");
+        setOvertimePeriodExpected(data.expectedHours ?? 0);
+        setOvertimeTotalExpected(data.totalExpectedHours ?? 0);
+      } else {
+        setOvertimeAllUsers([]);
+      }
     } catch { /* silent */ }
     finally { setOvertimeAllLoading(false); }
   }
@@ -1175,9 +1185,11 @@ export default function AdminAttendancePage() {
                 {/* 헤더 */}
                 <div className="px-4 py-3 border-b border-gray-200">
                   <p className="text-sm font-semibold text-gray-800">초과근무</p>
-                  {overtimeSettings?.start_date && overtimeSettings?.end_date ? (
+                  {overtimeSettings && (overtimeSettings.mode === "monthly" || (overtimeSettings.start_date && overtimeSettings.end_date)) ? (
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {overtimeSettings.start_date.replace(/-/g, ".")} ~ {overtimeSettings.end_date.replace(/-/g, ".")} · 하루 {overtimeSettings.daily_work_hours}시간 기준 · 금주 기준
+                      {overtimeSettings.mode === "monthly"
+                        ? `${new Date().getFullYear()}년 ${new Date().getMonth() + 1}월 · 하루 ${overtimeSettings.daily_work_hours}시간 기준 · 이번 달 기준`
+                        : `${overtimeSettings.start_date.replace(/-/g, ".")} ~ ${overtimeSettings.end_date.replace(/-/g, ".")} · 하루 ${overtimeSettings.daily_work_hours}시간 기준 · 금주 기준`}
                     </p>
                   ) : (
                     <p className="text-xs text-gray-400 mt-0.5">기간 미설정</p>
@@ -1189,7 +1201,7 @@ export default function AdminAttendancePage() {
                   <div className="py-8 flex items-center justify-center">
                     <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-blue-500 animate-spin" />
                   </div>
-                ) : !overtimeSettings?.start_date || !overtimeSettings?.end_date ? (
+                ) : (overtimeMode === "custom" && (!overtimeSettings?.start_date || !overtimeSettings?.end_date)) ? (
                   <div className="py-8 flex items-center justify-center">
                     <p className="text-sm text-gray-400">
                       {user?.role === "admin" ? "아래에서 초과근무 기간을 설정해주세요" : "초과근무 기간이 설정되지 않았습니다"}
@@ -1202,22 +1214,47 @@ export default function AdminAttendancePage() {
                 ) : (
                   <div className="relative">
                     <div className={`transition-opacity duration-150 ${overtimeSettingsLoading || overtimeAllLoading ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+                      {/* 기준 토글 (직접 설정 시에만) */}
+                      {overtimeMode === "custom" && (
+                        <div className="px-4 pt-3 pb-2">
+                          <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium">
+                            {([
+                              { key: "period", label: "이번 주 기준" },
+                              { key: "total",  label: "총근무일 기준" },
+                            ] as const).map(({ key, label }, i) => (
+                              <button
+                                key={key}
+                                onClick={() => setOvertimeView(key)}
+                                className={`flex-1 py-2 transition-colors ${i > 0 ? "border-l border-gray-200" : ""} ${overtimeView === key ? "bg-blue-500 text-white" : "bg-white text-gray-400"}`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-2 bg-white border-b border-gray-100">
                         <span className="text-xs text-gray-500 font-semibold">이름</span>
                         <span className="text-xs text-gray-500 font-semibold text-right">실근무</span>
                         <span className="text-xs text-gray-500 font-semibold text-right">기준</span>
                         <span className="text-xs text-gray-500 font-semibold text-right">초과/미달</span>
                       </div>
-                      {overtimeAllUsers.map((u) => (
-                        <div key={u.id} className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-3 border-b border-gray-100 items-center">
-                          <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
-                          <span className="text-xs text-gray-600 text-right">{u.actualHours}h</span>
-                          <span className="text-xs text-gray-400 text-right">{u.expectedHours}h</span>
-                          <span className={`text-xs font-bold text-right ${u.overtimeHours > 0 ? "text-blue-600" : u.overtimeHours < 0 ? "text-orange-500" : "text-gray-400"}`}>
-                            {u.overtimeHours > 0 ? `+${u.overtimeHours}h` : u.overtimeHours < 0 ? `${u.overtimeHours}h` : "−"}
-                          </span>
-                        </div>
-                      ))}
+                      {overtimeAllUsers.map((u) => {
+                        const expected = overtimeMode === "monthly" || overtimeView === "period"
+                          ? overtimePeriodExpected
+                          : overtimeTotalExpected;
+                        const ot = Math.round((u.actualHours - expected) * 10) / 10;
+                        return (
+                          <div key={u.id} className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-3 border-b border-gray-100 items-center">
+                            <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
+                            <span className="text-xs text-gray-600 text-right">{u.actualHours}h</span>
+                            <span className="text-xs text-gray-400 text-right">{expected}h</span>
+                            <span className={`text-xs font-bold text-right ${ot > 0 ? "text-blue-600" : ot < 0 ? "text-orange-500" : "text-gray-400"}`}>
+                              {ot > 0 ? `+${ot}h` : ot < 0 ? `${ot}h` : "−"}
+                            </span>
+                          </div>
+                        );
+                      })}
                       <div className="border-t border-gray-200" />
                     </div>
                     {(overtimeSettingsLoading || overtimeAllLoading) && (
@@ -1255,22 +1292,35 @@ export default function AdminAttendancePage() {
                     </div>
                     <div>
                       <label className="text-xs text-gray-500 mb-1.5 block">산정 기간</label>
-                      <div className="flex items-center gap-2">
-                        <DatePicker
-                          value={editOvertimeSettings.start_date}
-                          onChange={v => setEditOvertimeSettings(prev => ({ ...prev, start_date: v }))}
-                          className="flex-1"
-                          triggerClass="h-9 px-3"
-                        />
-                        <span className="text-xs text-gray-400">~</span>
-                        <DatePicker
-                          value={editOvertimeSettings.end_date}
-                          onChange={v => setEditOvertimeSettings(prev => ({ ...prev, end_date: v }))}
-                          min={editOvertimeSettings.start_date || undefined}
-                          className="flex-1"
-                          triggerClass="h-9 px-3"
-                        />
+                      <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium mb-2">
+                        {(["monthly", "custom"] as const).map((m, i) => (
+                          <button
+                            key={m}
+                            onClick={() => setEditOvertimeSettings(prev => ({ ...prev, mode: m }))}
+                            className={`flex-1 py-2 transition-colors ${i > 0 ? "border-l border-gray-200" : ""} ${editOvertimeSettings.mode === m ? "bg-blue-500 text-white" : "bg-white text-gray-400"}`}
+                          >
+                            {m === "monthly" ? "월단위" : "직접 설정"}
+                          </button>
+                        ))}
                       </div>
+                      {editOvertimeSettings.mode === "custom" && (
+                        <div className="flex items-center gap-2">
+                          <DatePicker
+                            value={editOvertimeSettings.start_date}
+                            onChange={v => setEditOvertimeSettings(prev => ({ ...prev, start_date: v }))}
+                            className="flex-1"
+                            triggerClass="h-9 px-3"
+                          />
+                          <span className="text-xs text-gray-400">~</span>
+                          <DatePicker
+                            value={editOvertimeSettings.end_date}
+                            onChange={v => setEditOvertimeSettings(prev => ({ ...prev, end_date: v }))}
+                            min={editOvertimeSettings.start_date || undefined}
+                            className="flex-1"
+                            triggerClass="h-9 px-3"
+                          />
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={saveOvertimeSettings}

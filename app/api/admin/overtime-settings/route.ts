@@ -19,6 +19,7 @@ export async function GET(req: Request) {
       daily_work_hours: Number(map.daily_work_hours ?? 8),
       start_date: map.start_date ?? "",
       end_date: map.end_date ?? "",
+      mode: (map.mode ?? "monthly") as "monthly" | "custom",
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
@@ -35,12 +36,13 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json()
-    const { daily_work_hours, start_date, end_date } = body
+    const { daily_work_hours, start_date, end_date, mode } = body
 
     const updates: { key: string; value: string }[] = []
     if (daily_work_hours !== undefined) updates.push({ key: "daily_work_hours", value: String(daily_work_hours) })
     if (start_date !== undefined) updates.push({ key: "start_date", value: start_date })
     if (end_date !== undefined) updates.push({ key: "end_date", value: end_date })
+    if (mode !== undefined) updates.push({ key: "mode", value: mode })
 
     for (const u of updates) {
       const { error } = await supabaseAdmin

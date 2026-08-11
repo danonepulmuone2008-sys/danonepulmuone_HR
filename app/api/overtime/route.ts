@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireUser } from "@/lib/auth"
-import { countWorkingDays, fmtDate } from "@/lib/holidays"
+import { countWorkingDays } from "@/lib/holidays"
 
 function calcRecordHours(clockIn: string | null, clockOut: string | null, lunchBreak: boolean | null): number {
   if (!clockIn || !clockOut) return 0
@@ -29,16 +29,41 @@ export async function GET(req: Request) {
 
     const settings = Object.fromEntries((settingsRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
     const dailyWorkHours = Number(settings.daily_work_hours ?? 8)
-    const startDate: string = settings.start_date ?? ""
-    const endDate: string = settings.end_date ?? ""
+    const mode: "monthly" | "custom" = (settings.mode ?? "monthly") as "monthly" | "custom"
 
-    if (!startDate || !endDate) {
-      return NextResponse.json({ configured: false })
+    let startDate: string
+    let endDate: string
+
+    if (mode === "monthly") {
+      const nowKST = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
+      const y = nowKST.getUTCFullYear()
+      const m = nowKST.getUTCMonth()
+      const mm = String(m + 1).padStart(2, "0")
+      startDate = `${y}-${mm}-01`
+      endDate = `${y}-${mm}-${String(new Date(Date.UTC(y, m + 1, 0)).getUTCDate()).padStart(2, "0")}`
+    } else {
+      startDate = settings.start_date ?? ""
+      endDate = settings.end_date ?? ""
+      if (!startDate || !endDate) return NextResponse.json({ configured: false })
     }
 
+    const url = new URL(req.url)
+    const basis = url.searchParams.get("basis") ?? "today"
+
     const nowKST = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
-    const today = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, "0")}-${String(nowKST.getUTCDate()).padStart(2, "0")}`
-    const effectiveEnd = endDate < today ? endDate : today
+    const kstDateStr = (d: Date) =>
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
+
+    let effectiveEnd: string
+    if (basis === "week") {
+      const dow = nowKST.getUTCDay()
+      const endOfWeekKST = new Date(nowKST)
+      endOfWeekKST.setUTCDate(nowKST.getUTCDate() + (dow === 0 ? 0 : 7 - dow))
+      effectiveEnd = endDate < kstDateStr(endOfWeekKST) ? endDate : kstDateStr(endOfWeekKST)
+    } else {
+      const today = kstDateStr(nowKST)
+      effectiveEnd = endDate < today ? endDate : today
+    }
 
     if (startDate > effectiveEnd) {
       return NextResponse.json({ configured: true, overtimeHours: 0, expectedHours: 0, actualHours: 0, startDate, endDate, dailyWorkHours })
