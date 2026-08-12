@@ -180,16 +180,26 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
   addOvertimeActualHours: (delta) => {
     set((s) => {
-      if (!s.overtimeData?.configured) return {}
-      const actual = (s.overtimeData.actualHours ?? 0) + delta
-      const expected = s.overtimeData.expectedHours ?? 0
-      return {
-        overtimeData: {
+      const next: Partial<AttendanceState> = {}
+      if (s.overtimeData?.configured) {
+        const actual = (s.overtimeData.actualHours ?? 0) + delta
+        const expected = s.overtimeData.expectedHours ?? 0
+        next.overtimeData = {
           ...s.overtimeData,
           actualHours: Math.round(actual * 10) / 10,
           overtimeHours: Math.round((actual - expected) * 10) / 10,
-        },
+        }
       }
+      if (s.overtimeWeekData?.configured) {
+        const actual = (s.overtimeWeekData.actualHours ?? 0) + delta
+        const expected = s.overtimeWeekData.expectedHours ?? 0
+        next.overtimeWeekData = {
+          ...s.overtimeWeekData,
+          actualHours: Math.round(actual * 10) / 10,
+          overtimeHours: Math.round((actual - expected) * 10) / 10,
+        }
+      }
+      return next
     })
   },
 
