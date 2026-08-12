@@ -126,6 +126,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
       if (role && role !== "manager" && role !== "admin") {
         useAttendanceStore.getState().fetchOvertime(nextSession.access_token);
+        useAttendanceStore.getState().fetchOvertimeWeek(nextSession.access_token);
       }
 
       return role;

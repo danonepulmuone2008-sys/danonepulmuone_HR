@@ -1189,7 +1189,7 @@ export default function AdminAttendancePage() {
                     <p className="text-xs text-gray-400 mt-0.5">
                       {overtimeSettings.mode === "monthly"
                         ? `${new Date().getFullYear()}년 ${new Date().getMonth() + 1}월 · 하루 ${overtimeSettings.daily_work_hours}시간 기준 · 이번 달 기준`
-                        : `${overtimeSettings.start_date.replace(/-/g, ".")} ~ ${overtimeSettings.end_date.replace(/-/g, ".")} · 하루 ${overtimeSettings.daily_work_hours}시간 기준 · 금주 기준`}
+                        : `${overtimeSettings.start_date.replace(/-/g, ".")} ~ ${overtimeSettings.end_date.replace(/-/g, ".")} · 하루 ${overtimeSettings.daily_work_hours}시간 기준`}
                     </p>
                   ) : (
                     <p className="text-xs text-gray-400 mt-0.5">기간 미설정</p>
@@ -1220,7 +1220,7 @@ export default function AdminAttendancePage() {
                           <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium">
                             {([
                               { key: "period", label: "이번 주 기준" },
-                              { key: "total",  label: "총근무일 기준" },
+                              { key: "total",  label: "총 근무일 기준" },
                             ] as const).map(({ key, label }, i) => (
                               <button
                                 key={key}
