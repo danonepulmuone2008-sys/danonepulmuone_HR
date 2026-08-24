@@ -85,6 +85,33 @@ export default function MealsPage() {
   const [actioning, setActioning] = useState(false);
   const [transferActioning, setTransferActioning] = useState(false);
 
+  const loadReceipts = useCallback(async () => {
+    const { data: myReceiptItems } = await supabase
+      .from("receipt_items")
+      .select("receipt_id, price");
+    const myAmountMap: Record<string, number> = {};
+    for (const item of myReceiptItems ?? []) {
+      myAmountMap[String(item.receipt_id)] = (myAmountMap[String(item.receipt_id)] ?? 0) + (item.price ?? 0);
+    }
+    const { data: rows } = await supabase
+      .from("receipts")
+      .select("id, store_name, paid_at, total_amount, status")
+      .order("paid_at", { ascending: false });
+    if (!Array.isArray(rows)) return;
+    setReceipts(rows.map((r) => {
+      const dt = new Date(r.paid_at);
+      return {
+        id: String(r.id),
+        date: dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'),
+        time: String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0'),
+        store: r.store_name ?? "가맹점 미인식",
+        menu: "",
+        amount: myAmountMap[String(r.id)] ?? r.total_amount ?? 0,
+        status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
+      };
+    }));
+  }, []);
+
   const mealTotal = totalLimit + mealTransferredIn - mealTransferredOut;
   const hasTransfer = mealTransferredIn > 0 || mealTransferredOut > 0;
   const mealPercent = totalLimit > 0 ? Math.round(((totalLimit - remaining) / totalLimit) * 100) : 0;
@@ -114,38 +141,11 @@ export default function MealsPage() {
 
   useEffect(() => {
     if (!user) return;
-    // 스토어 미로드 상태면 fetch (홈에서 이미 했다면 스킵)
     if (!useMealStore.getState().loaded && user.token) {
       fetchMealAll(user.token);
     }
-    // 영수증 목록은 로컬 상태로 유지
-    (async () => {
-      const { data: myReceiptItems } = await supabase
-        .from("receipt_items")
-        .select("receipt_id, price");
-      const myAmountMap: Record<string, number> = {};
-      for (const item of myReceiptItems ?? []) {
-        myAmountMap[String(item.receipt_id)] = (myAmountMap[String(item.receipt_id)] ?? 0) + (item.price ?? 0);
-      }
-      const { data: rows } = await supabase
-        .from("receipts")
-        .select("id, store_name, paid_at, total_amount, status")
-        .order("paid_at", { ascending: false });
-      if (!Array.isArray(rows)) return;
-      setReceipts(rows.map((r) => {
-        const dt = new Date(r.paid_at);
-        return {
-          id: String(r.id),
-          date: dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'),
-          time: String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0'),
-          store: r.store_name ?? "가맹점 미인식",
-          menu: "",
-          amount: myAmountMap[String(r.id)] ?? r.total_amount ?? 0,
-          status: r.status === "approved" ? "승인완료" : r.status === "rejected" ? "반려" : "승인대기",
-        };
-      }));
-    })().catch(() => {});
-  }, [user]);
+    loadReceipts().catch(() => {});
+  }, [user, loadReceipts]);
 
   useEffect(() => {
     if (!approvingItem || !user) { setReceiptDetail(null); return; }
@@ -174,13 +174,26 @@ export default function MealsPage() {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setReceiptDetail((prev) =>
-        prev ? { ...prev, items: prev.items.map((it) => it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it) } : null
+        prev ? {
+          ...prev,
+          status: data.receiptFullyApproved ? action : prev.status,
+          items: prev.items.map((it) => it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it),
+        } : null
       );
       const item = pendingItems.find((i) => i.id === itemId);
       removePendingItem(itemId);
       if (action === "approved" && item && data.receiptFullyApproved) {
         adjustRemaining(-item.price);
         adjustTotalUsed(item.price);
+      }
+      loadReceipts().catch(() => {});
+      if (approvingItem) {
+        fetch(`/api/meals/receipts/${approvingItem.receipt_id}`, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        })
+          .then((r) => r.json())
+          .then((d) => { if (!d.error) setReceiptDetail(d); })
+          .catch(() => {});
       }
     } catch {
       alert("처리 중 오류가 발생했습니다.");
