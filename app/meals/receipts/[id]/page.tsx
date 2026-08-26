@@ -48,7 +48,7 @@ export default function ReceiptDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const router = useRouter();
-  const { remaining, loaded: storeLoaded, fetchAll, adjustRemaining, adjustTotalUsed } = useMealStore();
+  const { remaining, loaded: storeLoaded, fetchAll, adjustRemaining, adjustTotalUsed, removePendingItem } = useMealStore();
   const [receipt, setReceipt] = useState<ReceiptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState(false);
@@ -95,17 +95,30 @@ export default function ReceiptDetailPage() {
       const data = await res.json();
 
       const item = receipt?.items.find((i) => i.id === itemId);
-      setReceipt((prev) => prev ? {
-        ...prev,
-        items: prev.items.map((it) =>
+      // 39: 상단 영수증 상태 배지도 즉시 갱신
+      setReceipt((prev) => {
+        if (!prev) return null;
+        const updatedItems = prev.items.map((it) =>
           it.id === itemId ? { ...it, status: action, responded_at: new Date().toISOString() } : it
-        ),
-      } : null);
+        );
+        return {
+          ...prev,
+          status: data.receiptFullyApproved ? action : prev.status,
+          items: updatedItems,
+        };
+      });
+
+      // 40: 승인 대기 건수 즉시 반영
+      removePendingItem(itemId);
 
       if (action === "approved" && item && data.receiptFullyApproved) {
         adjustRemaining(-item.price);
         adjustTotalUsed(item.price);
       }
+
+      // 40: 사용금액/잔액 서버 기준으로 리패치
+      fetchAll(user.token);
+
       showToast(action === "approved" ? "승인되었습니다." : "반려되었습니다.");
     } catch {
       showToast("처리 중 오류가 발생했습니다.", true);
