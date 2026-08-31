@@ -74,10 +74,52 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "자신의 계정은 삭제할 수 없습니다" }, { status: 400 });
     }
 
+    // receipt_items는 receipts보다 먼저 삭제 (FK 제약)
+    await supabaseAdmin.from("receipt_items").delete().eq("assigned_user_id", id);
+
+    // 이 유저가 올린 영수증의 항목도 삭제
+    const { data: uploaderReceipts } = await supabaseAdmin
+      .from("receipts")
+      .select("id")
+      .eq("uploader_id", id);
+    if (uploaderReceipts && uploaderReceipts.length > 0) {
+      await supabaseAdmin
+        .from("receipt_items")
+        .delete()
+        .in("receipt_id", uploaderReceipts.map((r: { id: string }) => r.id));
+    }
+
+    // vacation_grants.granted_by는 다른 직원 기록이므로 삭제 대신 NULL 처리
+    await supabaseAdmin.from("vacation_grants").update({ granted_by: null }).eq("granted_by", id);
+
+    // 나머지 user 관련 테이블 일괄 삭제
+    await Promise.all([
+      supabaseAdmin.from("receipts").delete().eq("uploader_id", id),
+      supabaseAdmin.from("meal_transfers").delete().eq("from_user_id", id),
+      supabaseAdmin.from("meal_transfers").delete().eq("to_user_id", id),
+      supabaseAdmin.from("attendance_records").delete().eq("user_id", id),
+      supabaseAdmin.from("work_sessions").delete().eq("user_id", id),
+      supabaseAdmin.from("vacation_requests").delete().eq("user_id", id),
+      supabaseAdmin.from("vacation_grants").delete().eq("user_id", id),
+      supabaseAdmin.from("business_trip_requests").delete().eq("user_id", id),
+      supabaseAdmin.from("attendance_edit_requests").delete().eq("user_id", id),
+      supabaseAdmin.from("flex_schedules").delete().eq("user_id", id),
+    ]);
+
+    // public.users 삭제
+    await supabaseAdmin.from("users").delete().eq("id", id);
+
+    // storage.objects.owner → auth.users(id) FK 제약 해소를 위해 스토리지 파일 삭제
+    const { data: storageFiles } = await supabaseAdmin.storage
+      .from("receipts")
+      .list(id);
+    if (storageFiles && storageFiles.length > 0) {
+      const paths = storageFiles.map((f: { name: string }) => `${id}/${f.name}`);
+      await supabaseAdmin.storage.from("receipts").remove(paths);
+    }
+
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id);
     if (authError) throw authError;
-
-    await supabaseAdmin.from("users").delete().eq("id", id);
 
     return NextResponse.json({ success: true });
   } catch (err) {

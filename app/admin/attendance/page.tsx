@@ -56,6 +56,7 @@ type RealIntern = {
   name: string;
   email: string;
   phone: string;
+  is_active?: boolean;
 };
 
 type Grant = {
@@ -258,6 +259,7 @@ export default function AdminAttendancePage() {
   const [sessionResetIds, setSessionResetIds] = useState<string[]>([]);
 
   const scheduleInterns = realInterns;
+  const todayScheduleInterns = realInterns.filter((i) => i.is_active !== false);
   const colorMap = buildColorMap(scheduleInterns);
   const canApprove = user?.role === "admin" || user?.approver === true;
 
@@ -924,7 +926,7 @@ export default function AdminAttendancePage() {
           <div className="bg-white rounded-2xl px-4 pt-3 pb-2 shadow-sm border border-gray-100">
             <p className="text-base font-bold mb-2" style={{ color: "#8dc63f" }}>오늘의 근무일정</p>
             <div className="flex flex-col gap-1.5">
-              {scheduleInterns.map((intern: RealIntern, i: number) => {
+              {todayScheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, TODAY);
                 return (
                   <div key={intern.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>

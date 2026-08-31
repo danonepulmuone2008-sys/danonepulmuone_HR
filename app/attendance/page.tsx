@@ -230,7 +230,7 @@ export default function AttendancePage() {
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
         .gte("date", startDate).lte("date", endDate),
-      supabase.from("users").select("id, name").eq("is_active", true),
+      supabase.from("users").select("id, name"),
       supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by, created_at").eq("user_id", uid).order("created_at", { ascending: false }),
       supabase.from("business_trip_requests").select("id, destination, start_date, status, reviewed_by, created_at").eq("user_id", uid).order("created_at", { ascending: false }),
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),

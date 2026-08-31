@@ -5,9 +5,8 @@ export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
       .from("users")
-      .select("id, name, email, phone")
+      .select("id, name, email, phone, is_active")
       .eq("role", "employee")
-      .eq("is_active", true)
       .order("name", { ascending: true });
 
     if (error) throw new Error(error.message);
@@ -17,6 +16,7 @@ export async function GET() {
       name: u.name ?? "",
       email: u.email ?? "",
       phone: u.phone ?? "",
+      is_active: u.is_active ?? true,
     }));
 
     return NextResponse.json({ interns });
