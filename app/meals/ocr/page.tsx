@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/AuthProvider"
 import { supabase } from "@/lib/supabase"
 import { PenLine, ChevronDown, Check } from "lucide-react"
+import { useMealStore } from "@/store/mealStore"
 
 const BRAND = "#72BF44"
 
@@ -46,6 +47,7 @@ export default function OcrPage() {
   const currentUser: CurrentUser | null = user
     ? { id: user.id, name: user.name, department: user.department, token: user.token }
     : null
+  const { fetchAll } = useMealStore()
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   useEffect(() => {
@@ -290,7 +292,11 @@ export default function OcrPage() {
       }
 
       const data = await res.json()
-      setSavedNeedsApproval(data.needsApproval ?? false)
+      const needsApproval = data.needsApproval ?? false
+      setSavedNeedsApproval(needsApproval)
+      if (!needsApproval && currentUser?.token) {
+        fetchAll(currentUser.token).catch(() => {})
+      }
       setSubmitSuccess(true)
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "저장 실패")
