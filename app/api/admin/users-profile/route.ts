@@ -43,9 +43,21 @@ export async function PATCH(req: Request) {
     const { id, name, department, position, phone, email, role, is_active, is_remote, use_session_tracking } = await req.json();
     if (!id) return NextResponse.json({ error: "id가 필요합니다" }, { status: 400 });
 
+    // 비활성화 시점 자동 기록
+    let deactivated_at: string | null | undefined = undefined;
+    if (is_active === false) {
+      const { data: existing } = await supabaseAdmin.from("users").select("is_active, deactivated_at").eq("id", id).single();
+      if (existing?.is_active !== false) deactivated_at = new Date().toISOString();
+    } else if (is_active === true) {
+      deactivated_at = null;
+    }
+
+    const updatePayload: Record<string, unknown> = { name, department, position, phone, email, role, is_active, is_remote, use_session_tracking, updated_at: new Date().toISOString() };
+    if (deactivated_at !== undefined) updatePayload.deactivated_at = deactivated_at;
+
     const { error } = await supabaseAdmin
       .from("users")
-      .update({ name, department, position, phone, email, role, is_active, is_remote, use_session_tracking, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", id);
 
     if (error) throw error;

@@ -58,6 +58,7 @@ type RealIntern = {
   email: string;
   phone: string;
   is_active?: boolean;
+  deactivated_at?: string | null;
 };
 
 type Grant = {
@@ -740,12 +741,19 @@ export default function AdminAttendancePage() {
   // 특정 인턴+날짜의 일정 조회
   const getSchedule = (internId: string, day: number) => {
     const dateKey = `${calMonthStr}-${String(day).padStart(2, "0")}`;
+    const intern = scheduleInterns.find((i: RealIntern) => i.id === internId);
+
+    // 비활성화 이후 날짜는 아무것도 표시 안 함
+    if (intern?.deactivated_at) {
+      const deactivatedDate = intern.deactivated_at.slice(0, 10);
+      if (dateKey >= deactivatedDate) return { type: "hidden" as const };
+    }
+
     const approved = approvedEvents.find((e) => e.user_id === internId && e.date === dateKey);
     if (approved) return {
       type: "event" as const,
       event: { type: approved.type, label: approved.label, destination: approved.destination },
     };
-    const intern = scheduleInterns.find((i: RealIntern) => i.id === internId);
     const flex = intern
       ? flexSchedules.find((f) => f.user_name === intern.name && f.date === dateKey)
       : undefined;
@@ -1022,7 +1030,7 @@ export default function AdminAttendancePage() {
                         <div className="h-4 flex gap-px mt-0.5 justify-center items-center max-w-full px-0.5">
                           {(() => {
                             const dots = scheduleInterns
-                              .map((intern: RealIntern, i: number) => specials.has(intern.id) ? { intern, i } : null)
+                              .map((intern: RealIntern, i: number) => (specials.has(intern.id) && getSchedule(intern.id, day!).type !== "hidden") ? { intern, i } : null)
                               .filter(Boolean) as { intern: RealIntern; i: number }[];
                             if (dots.length >= 3) {
                               return <span className="text-[8px] font-bold text-gray-400 leading-none">+{dots.length}</span>;
@@ -1044,6 +1052,7 @@ export default function AdminAttendancePage() {
                               {scheduleInterns.map((intern: RealIntern, i: number) => {
                                 if (!specials.has(intern.id)) return null;
                                 const sched = getSchedule(intern.id, day!);
+                                if (sched.type === "hidden") return null;
                                 return (
                                   <div key={intern.id} className="flex items-center gap-1.5">
                                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }} />
@@ -1857,6 +1866,7 @@ export default function AdminAttendancePage() {
             <div className="px-5 pt-4 pb-6 flex flex-col gap-2 overflow-y-auto">
               {scheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, selectedDay);
+                if (sched.type === "hidden") return null;
                 return (
                   <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>
                     <div className="flex items-center gap-3">
