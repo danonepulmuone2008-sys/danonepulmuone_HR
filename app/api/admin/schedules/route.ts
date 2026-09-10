@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const [flexResult, vacResult, tripResult] = await Promise.all([
       supabaseAdmin
         .from("flex_schedules")
-        .select("user_id, user_name, date, start_time, end_time")
+        .select("user_id, user_name, date, start_time, end_time, is_day_off")
         .gte("date", startDate)
         .lt("date", nextMonth)
         .order("date"),

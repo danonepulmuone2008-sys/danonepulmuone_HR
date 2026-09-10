@@ -41,6 +41,7 @@ type RealFlexSchedule = {
   date: string;
   start_time: string;
   end_time: string;
+  is_day_off?: boolean;
 };
 
 type RealApprovedEvent = {
@@ -748,7 +749,7 @@ export default function AdminAttendancePage() {
     const flex = intern
       ? flexSchedules.find((f) => f.user_name === intern.name && f.date === dateKey)
       : undefined;
-    if (flex) return { type: "flex" as const, flex: { startTime: flex.start_time, endTime: flex.end_time } };
+    if (flex) return { type: "flex" as const, flex: { startTime: flex.start_time, endTime: flex.end_time, isDayOff: flex.is_day_off ?? false } };
     return { type: "default" as const };
   };
 
@@ -957,8 +958,14 @@ export default function AdminAttendancePage() {
                         </div>
                       ) : sched.type === "flex" ? (
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">{sched.flex.startTime} ~ {sched.flex.endTime}</p>
-                          <p className="text-xs text-purple-500 mt-0.5">유연근무</p>
+                          {sched.flex.isDayOff ? (
+                            <p className="text-sm font-semibold text-gray-400">휴무</p>
+                          ) : (
+                            <>
+                              <p className="text-sm font-semibold text-gray-900">{sched.flex.startTime} ~ {sched.flex.endTime}</p>
+                              <p className="text-xs text-purple-500 mt-0.5">유연근무</p>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <div>
@@ -1045,7 +1052,7 @@ export default function AdminAttendancePage() {
                                       {sched.type === "event"
                                         ? sched.event.label
                                         : sched.type === "flex"
-                                        ? `${sched.flex.startTime}~${sched.flex.endTime}`
+                                        ? (sched.flex.isDayOff ? "휴무" : `${sched.flex.startTime}~${sched.flex.endTime}`)
                                         : ""}
                                     </span>
                                   </div>
@@ -1881,7 +1888,7 @@ export default function AdminAttendancePage() {
                         </div>
                       ) : sched.type === "flex" ? (
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">{sched.flex.startTime} ~ {sched.flex.endTime}</p>
+                          <p className="text-sm font-semibold text-gray-900">{sched.flex.isDayOff ? "휴무" : `${sched.flex.startTime} ~ ${sched.flex.endTime}`}</p>
                           <p className="text-xs text-purple-500 mt-0.5">유연근무</p>
                         </div>
                       ) : (

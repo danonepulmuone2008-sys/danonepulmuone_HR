@@ -17,7 +17,7 @@ type CalEvent = { type: "vacation" | "business_trip"; label: string; status?: st
 type RequestItem = { id: string; type: "vacation" | "business_trip" | "attendance_edit"; label: string; date: string; status: string; reviewedBy?: string | null; createdAt: string };
 type AttEditReq = { id: string; date: string; direction: "in" | "out"; requestedTime: string; status: string; lunchBreak: boolean | null; reviewedBy: string | null; reviewedAt: string | null; requestedAt: string | null; reason: string };
 type DayData = { day: string; hours: number; clockIn?: string; clockOut?: string; hasVacation?: boolean; sessions?: { start: string; end: string }[] };
-type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string };
+type FlexEntry = { id: string; userId: string; userName: string; startTime: string; endTime: string; isDayOff: boolean };
 type TeamCalEntry = { userId: string; userName: string; type: "vacation" | "business_trip"; label: string; startTime?: string | null; endTime?: string | null };
 
 function getMondayOfWeek(date: Date): Date {
@@ -85,7 +85,7 @@ export default function AttendancePage() {
   const [showFlex, setShowFlex] = useState(true);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [modalMode, setModalMode] = useState<"detail" | "flex-add" | "attendance-edit">("detail");
-  const [flexInput, setFlexInput] = useState({ startTime: "", endTime: "" });
+  const [flexInput, setFlexInput] = useState({ startTime: "", endTime: "", isDayOff: false });
   const [weekDays, setWeekDays] = useState<DayData[]>(DAY_LABELS.map(day => ({ day, hours: 0 })));
   const [eventMap, setEventMap] = useState<Record<number, CalEvent[]>>({});
   const [flexMap, setFlexMap] = useState<Record<number, FlexEntry[]>>({});
@@ -228,7 +228,7 @@ export default function AttendancePage() {
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("business_trip_requests").select("id, user_id, destination, start_date, end_date, status, start_time, end_time")
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
-      supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time")
+      supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time, is_day_off")
         .gte("date", startDate).lte("date", endDate),
       supabase.from("users").select("id, name"),
       supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by, created_at").eq("user_id", uid).order("created_at", { ascending: false }),
@@ -331,7 +331,7 @@ export default function AttendancePage() {
     flexRes.data?.filter(f => activeIds.has(f.user_id)).forEach(f => {
       const day = parseInt(f.date.split("-")[2]);
       if (!newFlexMap[day]) newFlexMap[day] = [];
-      newFlexMap[day].push({ id: f.id, userId: f.user_id, userName: f.user_name, startTime: f.start_time, endTime: f.end_time });
+      newFlexMap[day].push({ id: f.id, userId: f.user_id, userName: f.user_name, startTime: f.start_time, endTime: f.end_time, isDayOff: f.is_day_off ?? false });
     });
     // 유연근무 목록을 이름순으로 정렬
     Object.values(newFlexMap).forEach(list => list.sort((a, b) => a.userName.localeCompare(b.userName, "ko")));
@@ -442,17 +442,26 @@ export default function AttendancePage() {
   const isGoalMet = totalHours >= goalHours;
 
   const handleFlexSubmit = async () => {
-    if (!selectedDay || !flexInput.startTime || !flexInput.endTime || !userId || !user) return;
-    if (flexInput.startTime >= flexInput.endTime) return;
+    if (!selectedDay || !userId || !user) return;
+    if (!flexInput.isDayOff && (!flexInput.startTime || !flexInput.endTime)) return;
+    if (!flexInput.isDayOff && flexInput.startTime >= flexInput.endTime) return;
     const dateStr = `${calYear}-${calMm}-${String(selectedDay).padStart(2, "0")}`;
     if (new Date(calYear, calMonth, selectedDay) < new Date(currentYear, currentMonth, todayDate)) return;
-    await supabase.from("flex_schedules").upsert(
-      { user_id: userId, user_name: user.name, date: dateStr, start_time: flexInput.startTime, end_time: flexInput.endTime },
+    const { error: upsertError } = await supabase.from("flex_schedules").upsert(
+      {
+        user_id: userId,
+        user_name: user.name,
+        date: dateStr,
+        start_time: flexInput.isDayOff ? "00:00" : flexInput.startTime,
+        end_time: flexInput.isDayOff ? "00:00" : flexInput.endTime,
+        is_day_off: flexInput.isDayOff,
+      },
       { onConflict: "user_id,date" }
     );
+    if (upsertError) { console.error("[flex upsert]", upsertError); alert("등록 실패: " + upsertError.message); return; }
     await fetchMonthData(userId);
     setModalMode("detail");
-    setFlexInput({ startTime: "", endTime: "" });
+    setFlexInput({ startTime: "", endTime: "", isDayOff: false });
   };
 
   const handleDeleteReq = async (req: RequestItem) => {
@@ -634,8 +643,16 @@ export default function AttendancePage() {
                           {flexEntries.length === 1 ? (
                             <div className="w-full text-center leading-none">
                               <span className="block text-[10px] font-semibold truncate text-purple-600">{flexEntries[0].userName}</span>
-                              <span className="block text-[9px] text-gray-400">{flexEntries[0].startTime}~</span>
-                              <span className="block text-[9px] text-gray-400">{flexEntries[0].endTime}</span>
+                              {flexEntries[0].isDayOff ? (
+                                <div className="flex items-center justify-center" style={{ height: "26px" }}>
+                                  <span className="text-[9px] text-gray-400">휴무</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="block text-[9px] text-gray-400">{flexEntries[0].startTime}~</span>
+                                  <span className="block text-[9px] text-gray-400">{flexEntries[0].endTime}</span>
+                                </>
+                              )}
                             </div>
                           ) : <span className="text-[11px] font-bold text-purple-500">+{flexEntries.length}</span>}
                         </div>
@@ -760,12 +777,12 @@ export default function AttendancePage() {
         const closeModal = () => {
           setSelectedDay(null);
           setModalMode("detail");
-          setFlexInput({ startTime: "", endTime: "" });
+          setFlexInput({ startTime: "", endTime: "", isDayOff: false });
           setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true); setEditingAttReqId(null);
         };
         const goBack = () => {
           setModalMode("detail");
-          setFlexInput({ startTime: "", endTime: "" });
+          setFlexInput({ startTime: "", endTime: "", isDayOff: false });
           setAttEditDir("out"); setAttEditTime(""); setAttEditReason(""); setAttEditLunchBreak(true); setEditingAttReqId(null);
         };
         const handleAttEditSubmit = async () => {
@@ -836,7 +853,10 @@ export default function AttendancePage() {
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
                               <span className="text-sm font-semibold text-gray-800">{fe.userId === userId ? "나" : fe.userName}</span>
-                              <span className="text-sm text-purple-600 font-medium">{fe.startTime} ~ {fe.endTime}</span>
+                              {fe.isDayOff
+                                ? <span className="text-sm text-purple-600 font-medium">휴무</span>
+                                : <span className="text-sm text-purple-600 font-medium">{fe.startTime} ~ {fe.endTime}</span>
+                              }
                             </div>
                             {fe.userId === userId && !isSelectedDayPast && (
                               <button onClick={() => handleFlexDelete(fe.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded-lg hover:bg-red-50 transition-colors">삭제</button>
@@ -980,7 +1000,7 @@ export default function AttendancePage() {
                       </>
                     ) : (
                       <button
-                        onClick={() => { if (myFlexForDay) setFlexInput({ startTime: myFlexForDay.startTime, endTime: myFlexForDay.endTime }); setModalMode("flex-add"); }}
+                        onClick={() => { if (myFlexForDay) setFlexInput({ startTime: myFlexForDay.isDayOff ? "" : myFlexForDay.startTime, endTime: myFlexForDay.isDayOff ? "" : myFlexForDay.endTime, isDayOff: myFlexForDay.isDayOff }); setModalMode("flex-add"); }}
                         className="w-full py-3.5 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all"
                       >
                         {myFlexForDay ? "유연근무 수정" : "유연근무 등록"}
@@ -991,10 +1011,26 @@ export default function AttendancePage() {
               )}
 
               {modalMode === "flex-add" && (() => {
-                const flexTimeInvalid = !!flexInput.startTime && !!flexInput.endTime && flexInput.endTime <= flexInput.startTime;
+                const flexTimeInvalid = !flexInput.isDayOff && !!flexInput.startTime && !!flexInput.endTime && flexInput.endTime <= flexInput.startTime;
+                const canSubmit = flexInput.isDayOff || (!flexTimeInvalid && !!flexInput.startTime && !!flexInput.endTime);
                 return (
                   <div className="px-5 pt-4 overflow-y-auto flex-1 pb-8">
-                    <div className="flex gap-3 mb-1">
+                    {/* 휴무 체크박스 */}
+                    <button
+                      type="button"
+                      onClick={() => setFlexInput(p => ({ ...p, isDayOff: !p.isDayOff }))}
+                      className="flex items-center gap-2.5 mb-4 w-full"
+                    >
+                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${flexInput.isDayOff ? "bg-purple-600 border-purple-600" : "border-gray-300 bg-white"}`}>
+                        {flexInput.isDayOff && (
+                          <svg viewBox="0 0 12 10" fill="none" className="w-3 h-3">
+                            <path d="M1 5l3.5 3.5L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">휴무</span>
+                    </button>
+                    <div className={`flex gap-3 mb-1 transition-opacity ${flexInput.isDayOff ? "opacity-40 pointer-events-none" : ""}`}>
                       <div className="flex-1">
                         <label className="text-xs text-gray-500 mb-1.5 block">시작 시간</label>
                         <input type="time" value={flexInput.startTime} onChange={e => setFlexInput(p => ({ ...p, startTime: e.target.value }))} className="w-full h-11 px-4 rounded-xl border border-gray-200 text-sm outline-none focus:border-purple-500 bg-gray-50" />
@@ -1008,7 +1044,7 @@ export default function AttendancePage() {
                       <p className="text-xs text-red-500 mb-4">종료 시간은 시작 시간보다 늦어야 합니다.</p>
                     )}
                     {!flexTimeInvalid && <div className="mb-4" />}
-                    <button onClick={handleFlexSubmit} disabled={!flexInput.startTime || !flexInput.endTime || flexTimeInvalid} className="w-full py-4 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">등록하기</button>
+                    <button onClick={handleFlexSubmit} disabled={!canSubmit} className="w-full py-4 bg-purple-600 text-white rounded-2xl text-sm font-semibold active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">등록하기</button>
                   </div>
                 );
               })()}
