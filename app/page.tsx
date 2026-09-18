@@ -65,8 +65,8 @@ export default function HomePage() {
     return `${h}:${m}`;
   };
 
-  const showToast = (msg: string, type: ToastType = "success") => {
-    setToast({ msg, type });
+  const showToast = (msg: string, type: ToastType = "success", centered = false) => {
+    setToast({ msg, type, centered });
     setTimeout(() => setToast(null), 3000);
   };
 
@@ -256,7 +256,7 @@ export default function HomePage() {
       });
     }
     const label = modal.direction === "in" ? "출근" : "퇴근";
-    showToast(`${label} 시간 수정 요청이 관리자에게 전송되었습니다.`);
+    showToast(`${label} 시간 수정 요청이 관리자에게 전송되었습니다.`, "success", true);
     setEditReason("");
     setEditTime("");
     setEditLunchBreak(true);
@@ -678,7 +678,7 @@ export default function HomePage() {
                     status: "pending",
                   });
                   setSessionEdit(null);
-                  showToast("수정 요청이 전송되었습니다.");
+                  showToast("수정 요청이 전송되었습니다.", "success", true);
                 }}
                 disabled={!sessionEdit.time || !sessionEdit.reason.trim()}
                 className="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-medium disabled:opacity-40">
