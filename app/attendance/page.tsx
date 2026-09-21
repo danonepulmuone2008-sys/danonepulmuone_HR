@@ -109,6 +109,7 @@ export default function AttendancePage() {
   const [tripVacPage, setTripVacPage] = useState(1);
   const [editReqPage, setEditReqPage] = useState(1);
   const [attEditDetailReq, setAttEditDetailReq] = useState<AttEditReq | null>(null);
+  const [companyHolidaySet, setCompanyHolidaySet] = useState<Set<string>>(new Set());
   const PAGE_SIZE = 5;
   const router = useRouter();
   const { user } = useAuth();
@@ -230,7 +231,7 @@ export default function AttendancePage() {
         .neq("user_id", uid).lte("start_date", endDate).gte("end_date", startDate).eq("status", "approved"),
       supabase.from("flex_schedules").select("id, user_id, user_name, date, start_time, end_time, is_day_off")
         .gte("date", startDate).lte("date", endDate),
-      supabase.from("users").select("id, name"),
+      supabase.from("users").select("id, name, is_active, deactivated_at, created_at"),
       supabase.from("vacation_requests").select("id, type, start_date, status, reviewed_by, created_at").eq("user_id", uid).order("created_at", { ascending: false }),
       supabase.from("business_trip_requests").select("id, destination, start_date, status, reviewed_by, created_at").eq("user_id", uid).order("created_at", { ascending: false }),
       supabase.from("attendance_records").select("date, clock_in, clock_out").eq("user_id", uid).gte("date", startDate).lte("date", endDate),
@@ -266,7 +267,7 @@ export default function AttendancePage() {
       if (dateStr >= todayStr) continue;
       const dow = new Date(dateStr + "T00:00:00").getDay();
       if (dow === 0 || dow === 6) continue;
-      if (isHoliday(dateStr)) continue;
+      if (isHoliday(dateStr, companyHolidaySet)) continue;
       if (approvedFullDayVacs.has(dateStr)) continue;
       if (isSessionTracking) {
         const openSession = (sessionRecs ?? []).find(s => s.date === dateStr && s.start_time && !s.end_time);
@@ -279,7 +280,31 @@ export default function AttendancePage() {
     setMissingDays(newMissing);
 
     const nameMap = Object.fromEntries((usersRes.data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
-    const activeIds = new Set(Object.keys(nameMap));
+
+    // 현재 사용자의 가입일
+    const currentUserEntry = (usersRes.data ?? []).find((u: { id: string }) => u.id === uid);
+    const currentUserCreatedAt = currentUserEntry?.created_at ?? "";
+
+    // 비활성화 사용자 맵: user_id → deactivated_at (날짜 문자열 YYYY-MM-DD)
+    const deactivatedDateMap: Record<string, string> = {};
+    for (const u of usersRes.data ?? []) {
+      if (!u.is_active && u.deactivated_at) {
+        deactivatedDateMap[u.id] = u.deactivated_at.slice(0, 10);
+      }
+    }
+
+    // 현재 사용자가 가입한 날보다 이전에 비활성화된 사용자는 기록 자체를 안 보여줌
+    const isUserVisible = (targetUserId: string): boolean => {
+      const deactivatedDate = deactivatedDateMap[targetUserId];
+      if (!deactivatedDate) return true; // 활성 사용자는 항상 표시
+      return currentUserCreatedAt <= deactivatedDate; // 내 가입일 ≤ 비활성화일 → 표시
+    };
+
+    const activeIds = new Set(
+      (usersRes.data ?? [])
+        .filter((u: { id: string }) => isUserVisible(u.id))
+        .map((u: { id: string }) => u.id)
+    );
 
     const map: Record<number, CalEvent[]> = {};
     myVacRes.data?.forEach(v => {
@@ -305,7 +330,10 @@ export default function AttendancePage() {
     const newTeamMap: Record<number, TeamCalEntry[]> = {};
     allVacRes.data?.filter(v => activeIds.has(v.user_id)).forEach(v => {
       const name = nameMap[v.user_id] ?? "팀원";
+      const deactivatedDate = deactivatedDateMap[v.user_id];
       for (let d = new Date(v.start_date + "T00:00:00"); d <= new Date(v.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().slice(0, 10);
+        if (deactivatedDate && dateStr >= deactivatedDate) continue; // 비활성화 이후 제외
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!newTeamMap[day]) newTeamMap[day] = [];
@@ -317,7 +345,10 @@ export default function AttendancePage() {
     });
     allTripRes.data?.filter(t => activeIds.has(t.user_id)).forEach(t => {
       const name = nameMap[t.user_id] ?? "팀원";
+      const deactivatedDate = deactivatedDateMap[t.user_id];
       for (let d = new Date(t.start_date + "T00:00:00"); d <= new Date(t.end_date + "T00:00:00"); d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().slice(0, 10);
+        if (deactivatedDate && dateStr >= deactivatedDate) continue; // 비활성화 이후 제외
         if (d.getFullYear() === calYear && d.getMonth() === calMonth) {
           const day = d.getDate();
           if (!newTeamMap[day]) newTeamMap[day] = [];
@@ -328,7 +359,12 @@ export default function AttendancePage() {
     setTeamMap(newTeamMap);
 
     const newFlexMap: Record<number, FlexEntry[]> = {};
-    flexRes.data?.filter(f => activeIds.has(f.user_id)).forEach(f => {
+    flexRes.data?.filter(f => {
+      if (!activeIds.has(f.user_id)) return false;
+      const deactivatedDate = deactivatedDateMap[f.user_id];
+      if (deactivatedDate && f.date >= deactivatedDate) return false; // 비활성화 이후 날짜 제외
+      return true;
+    }).forEach(f => {
       const day = parseInt(f.date.split("-")[2]);
       if (!newFlexMap[day]) newFlexMap[day] = [];
       newFlexMap[day].push({ id: f.id, userId: f.user_id, userName: f.user_name, startTime: f.start_time, endTime: f.end_time, isDayOff: f.is_day_off ?? false });
@@ -434,10 +470,17 @@ export default function AttendancePage() {
     fetchMonthData(userId);
   }, [userId, fetchMonthData, useSessionTracking]);
 
+  useEffect(() => {
+    fetch(`/api/company-holidays?year=${calYear}`)
+      .then(r => r.json())
+      .then(d => setCompanyHolidaySet(new Set((d.holidays ?? []).map((h: { date: string }) => h.date))))
+      .catch(() => {});
+  }, [calYear]);
+
   const totalHours = weekDays.reduce((sum, d) => sum + d.hours, 0);
   const goalMonday = getMondayOfWeek(new Date());
   goalMonday.setDate(goalMonday.getDate() + weekOffset * 7);
-  const goalHours = getWorkingDaysInWeek(goalMonday) * 5;
+  const goalHours = getWorkingDaysInWeek(goalMonday, companyHolidaySet) * 5;
   const progressPct = Math.min((totalHours / goalHours) * 100, 100);
   const isGoalMet = totalHours >= goalHours;
 
@@ -613,7 +656,8 @@ export default function AttendancePage() {
               <div key={wi} className="grid grid-cols-7">
                 {week.map((day, di) => {
                   const dayStr = day ? `${calYear}-${calMm}-${String(day).padStart(2, "0")}` : "";
-                  const holiday = day ? isHoliday(dayStr) : false;
+                  const isPublicHoliday = day ? isHoliday(dayStr) : false;
+                  const isCompanyHoliday = day ? companyHolidaySet.has(dayStr) : false;
                   const isSunday = di === 0;
                   const isSaturday = di === 6;
                   const events = day ? (eventMap[day] ?? []) : [];
@@ -621,7 +665,7 @@ export default function AttendancePage() {
                   const teamEntries = day ? (teamMap[day] ?? []) : [];
                   const isToday = calYear === currentYear && calMonth === currentMonth && day === todayDate;
                   const isMissing = day ? !!missingDays[dayStr] : false;
-                  const dayColor = isToday ? "" : (holiday || isSunday) ? "text-red-500" : isSaturday ? "text-blue-400" : "text-gray-700";
+                  const dayColor = isToday ? "" : (isPublicHoliday || isSunday) ? "text-red-500" : isCompanyHoliday ? "text-green-700" : isSaturday ? "text-blue-400" : "text-gray-700";
                   return (
                     <div key={di} className="relative flex flex-col items-center py-0.5" onClick={() => { if (day) { setSelectedDay(day); setModalMode("detail"); } }}>
                       <div className={`text-sm rounded-full w-7 h-7 flex items-center justify-center ${isToday ? "bg-blue-600 text-white font-bold" : day ? `${dayColor} hover:bg-gray-100 cursor-pointer` : ""}`}>
@@ -826,6 +870,9 @@ export default function AttendancePage() {
           : modalMode === "attendance-edit" ? (editingAttReqId ? "수정 요청 변경" : "출퇴근 수정 요청")
           : `${calMonth + 1}월 ${selectedDay}일`;
         const modalSub = modalMode === "flex-add" ? "나의 근무 시간을 입력하세요" : modalMode === "attendance-edit" ? "관리자에게 수정을 요청합니다" : "해당 날의 전체 일정";
+        const modalDateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`;
+        const modalIsPublicHol = modalMode === "detail" && isHoliday(modalDateStr);
+        const modalIsCompanyHol = modalMode === "detail" && !modalIsPublicHol && companyHolidaySet.has(modalDateStr);
         return (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-8" onClick={closeModal}>
             <div className="bg-white rounded-t-2xl w-full max-w-[390px] flex flex-col" style={{ maxHeight: "80vh" }} onClick={e => e.stopPropagation()}>
@@ -835,7 +882,11 @@ export default function AttendancePage() {
                     <button onClick={goBack} className="text-gray-400 hover:text-gray-600 mr-1">←</button>
                   )}
                   <div>
-                    <h3 className="text-base font-bold text-gray-900">{modalTitle}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-gray-900">{modalTitle}</h3>
+                      {modalIsPublicHol && <span className="text-xs font-semibold text-red-400">공휴일</span>}
+                      {modalIsCompanyHol && <span className="text-xs font-semibold text-green-700">회사 휴일</span>}
+                    </div>
                     <p className="text-xs text-gray-400 mt-0.5">{modalSub}</p>
                   </div>
                 </div>

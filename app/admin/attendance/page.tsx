@@ -176,6 +176,85 @@ export default function AdminAttendancePage() {
   const [calYear, setCalYear] = useState(CURRENT_YEAR);
   const [calMonth, setCalMonth] = useState(CURRENT_MONTH);
 
+  // 회사 휴일 관리
+  type CompanyHoliday = { id: string; date: string; description: string | null; created_at: string };
+  const [companyHolidays, setCompanyHolidays] = useState<CompanyHoliday[]>([]);
+  const [holidayYear, setHolidayYear] = useState(CURRENT_YEAR);
+  const [newHolidayDate, setNewHolidayDate] = useState("");
+  const [newHolidayDesc, setNewHolidayDesc] = useState("");
+  const [holidaySaving, setHolidaySaving] = useState(false);
+  const [companyHolidaySet, setCompanyHolidaySet] = useState<Set<string>>(new Set());
+
+  const fetchCompanyHolidays = async (yr: number) => {
+    if (!user) return;
+    const res = await fetch(`/api/admin/company-holidays?year=${yr}`, {
+      headers: { Authorization: `Bearer ${user.token}` },
+    });
+    const json = await res.json();
+    if (!json.error) setCompanyHolidays(json.holidays ?? []);
+  };
+
+  const refreshCompanyHolidaySet = async () => {
+    const res = await fetch("/api/company-holidays");
+    const json = await res.json();
+    setCompanyHolidaySet(new Set((json.holidays ?? []).map((h: { date: string }) => h.date)));
+  };
+
+  useEffect(() => {
+    fetchCompanyHolidays(holidayYear);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holidayYear, user]);
+
+  useEffect(() => {
+    refreshCompanyHolidaySet();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function showHolidayToast(msg: string, ok: boolean) {
+    setHolidayToast({ msg, ok });
+    setTimeout(() => setHolidayToast(null), 2500);
+  }
+
+  const handleHolidayAdd = async () => {
+    if (!newHolidayDate || !user) return;
+    setHolidaySaving(true);
+    try {
+      const res = await fetch("/api/admin/company-holidays", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ date: newHolidayDate, description: null }),
+      });
+      const json = await res.json();
+      if (json.error) {
+        showHolidayToast(json.error === "이미 등록된 날짜입니다" ? "이미 등록된 날짜입니다" : "등록에 실패했습니다", false);
+      } else {
+        setNewHolidayDate("");
+        await fetchCompanyHolidays(holidayYear);
+        await refreshCompanyHolidaySet();
+        showHolidayToast("회사 휴일이 등록되었습니다", true);
+      }
+    } finally {
+      setHolidaySaving(false);
+    }
+  };
+
+  const handleHolidayDelete = async (date: string) => {
+    if (!user) return;
+    setHolidayDeleting(true);
+    try {
+      await fetch(`/api/admin/company-holidays?date=${date}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      await fetchCompanyHolidays(holidayYear);
+      await refreshCompanyHolidaySet();
+      showHolidayToast("회사 휴일이 삭제되었습니다", true);
+    } finally {
+      setHolidayDeleting(false);
+      setHolidayDeleteTarget(null);
+    }
+  };
+
   const calMonthStr = `${calYear}-${String(calMonth).padStart(2, "0")}`;
   const calWeeks = buildWeeks(calYear, calMonth);
 
@@ -208,6 +287,9 @@ export default function AdminAttendancePage() {
   const [approvalToast, setApprovalToast] = useState<string | null>(null);
   const [grantToast, setGrantToast] = useState<string | null>(null);
   const [overtimeToast, setOvertimeToast] = useState<string | null>(null);
+  const [holidayToast, setHolidayToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [holidayDeleteTarget, setHolidayDeleteTarget] = useState<string | null>(null);
+  const [holidayDeleting, setHolidayDeleting] = useState(false);
   const APPROVAL_PAGE_SIZE = 5;
   const [viewAttachmentUrl, setViewAttachmentUrl] = useState<string | null>(null);
   const [viewAttachmentMeta, setViewAttachmentMeta] = useState<{ date: string; name: string } | null>(null);
@@ -777,6 +859,42 @@ export default function AdminAttendancePage() {
         </div>
       )}
 
+      {holidayToast && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-none">
+          <div className={`text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg whitespace-nowrap ${holidayToast.ok ? "bg-gray-900" : "bg-red-500"}`}>
+            {holidayToast.msg}
+          </div>
+        </div>
+      )}
+
+      {holidayDeleteTarget && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 px-8">
+          <div className="bg-white rounded-2xl w-full max-w-[300px] overflow-hidden shadow-xl">
+            <div className="px-6 pt-6 pb-4 text-center">
+              <p className="text-sm font-bold text-gray-900 mb-1">회사 휴일 삭제</p>
+              <p className="text-xs text-gray-500">{holidayDeleteTarget}</p>
+              <p className="text-xs text-gray-500 mt-1">삭제하시겠습니까?</p>
+            </div>
+            <div className="flex border-t border-gray-100">
+              <button
+                onClick={() => handleHolidayDelete(holidayDeleteTarget)}
+                disabled={holidayDeleting}
+                className="flex-1 py-3.5 text-sm text-red-500 font-semibold border-r border-gray-100 disabled:opacity-40"
+              >
+                {holidayDeleting ? "삭제 중..." : "삭제"}
+              </button>
+              <button
+                onClick={() => setHolidayDeleteTarget(null)}
+                disabled={holidayDeleting}
+                className="flex-1 py-3.5 text-sm text-gray-500 font-medium disabled:opacity-40"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {approvalToast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-lg pointer-events-none">
           {approvalToast}
@@ -934,6 +1052,20 @@ export default function AdminAttendancePage() {
           {/* 당일 근무 일정 */}
           <div className="bg-white rounded-2xl px-4 pt-3 pb-2 shadow-sm border border-gray-100">
             <p className="text-base font-bold mb-2" style={{ color: "#8dc63f" }}>오늘의 근무일정</p>
+            {(() => {
+              const todayStr = `${CURRENT_YEAR}-${String(CURRENT_MONTH).padStart(2, "0")}-${String(TODAY).padStart(2, "0")}`;
+              const todayIsPublicHoliday = isHoliday(todayStr);
+              const todayIsCompanyHoliday = companyHolidaySet.has(todayStr);
+              if (todayIsPublicHoliday || todayIsCompanyHoliday) {
+                return (
+                  <div className="py-4 flex items-center justify-center">
+                    <span className={`text-sm font-semibold ${todayIsPublicHoliday ? "text-red-400" : "text-green-700"}`}>
+                      {todayIsPublicHoliday ? "공휴일" : "회사 휴일"}
+                    </span>
+                  </div>
+                );
+              }
+              return (
             <div className="flex flex-col gap-1.5">
               {todayScheduleInterns.map((intern: RealIntern, i: number) => {
                 const sched = getSchedule(intern.id, TODAY);
@@ -986,6 +1118,8 @@ export default function AdminAttendancePage() {
                 );
               })}
             </div>
+              );
+            })()}
           </div>
 
           {/* 캘린더 */}
@@ -999,8 +1133,8 @@ export default function AdminAttendancePage() {
               <span className="text-xs text-gray-400">기본: {DEFAULT_START} ~ {DEFAULT_END}</span>
             </div>
             <div className="grid grid-cols-7 text-center mb-1">
-              {CALENDAR_DAYS.map((d) => (
-                <span key={d} className="text-xs text-gray-400 font-medium py-1">{d}</span>
+              {CALENDAR_DAYS.map((d, i) => (
+                <span key={d} className={`text-xs font-medium py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</span>
               ))}
             </div>
             <div className="flex flex-col gap-1">
@@ -1011,6 +1145,12 @@ export default function AdminAttendancePage() {
                     const tooltipAlign =
                       di <= 1 ? "left-0" : di >= 5 ? "right-0" : "left-1/2 -translate-x-1/2";
                     const isToday = calYear === CURRENT_YEAR && calMonth === CURRENT_MONTH && day === TODAY;
+                    const dayStr = day ? `${calYear}-${String(calMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}` : "";
+                    const isPublicHoliday = day ? isHoliday(dayStr) : false;
+                    const isCompanyHoliday = day ? companyHolidaySet.has(dayStr) : false;
+                    const isSunday = di === 0;
+                    const isSaturday = di === 6;
+                    const dayTextColor = isPublicHoliday || isSunday ? "text-red-500" : isCompanyHoliday ? "text-green-700" : isSaturday ? "text-blue-400" : "text-gray-700";
                     return (
                       <div
                         key={di}
@@ -1021,7 +1161,7 @@ export default function AdminAttendancePage() {
                           isToday
                             ? "bg-blue-600 text-white font-bold"
                             : day
-                            ? "text-gray-700 hover:bg-gray-100 cursor-pointer"
+                            ? `${dayTextColor} hover:bg-gray-100 cursor-pointer`
                             : ""
                         }`}>
                           {day ?? ""}
@@ -1083,8 +1223,8 @@ export default function AdminAttendancePage() {
         (() => {
           const currentWeekDates = getWeekDates(weekOffset);
           const weekMonday = new Date(currentWeekDates[0]);
-          const requiredHours = getWorkingDaysInWeek(weekMonday) * 5;
-          const dayIsHoliday = currentWeekDates.map((d) => isHoliday(d));
+          const requiredHours = getWorkingDaysInWeek(weekMonday, companyHolidaySet) * 5;
+          const dayIsHoliday = currentWeekDates.map((d) => isHoliday(d, companyHolidaySet));
           const todayStr = toDateStr(new Date());
 
           return (
@@ -1569,45 +1709,102 @@ export default function AdminAttendancePage() {
       ) : activeTab === "vacation" ? (
         /* 휴가 관리 탭 */
         <div className="flex flex-col gap-3 px-4 pt-3">
-          <button
-            onClick={() => { setBulkOpen(true); setBulkYear(CURRENT_YEAR); setBulkHours(""); setBulkNote(""); setBulkSelected(new Set(vacUsers.map(u => u.id))); }}
-            className="w-full h-11 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-1.5"
-            style={{ backgroundColor: "#8dc63f" }}
-          >
-            일괄 지급
-          </button>
-          {vacUsersLoading ? (
-            <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
-              <p className="text-sm text-gray-400">불러오는 중...</p>
+          {/* 회사 휴일 관리 */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-gray-50">
+              <p className="text-sm font-bold text-gray-800">회사 휴일 관리</p>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setHolidayYear(y => y - 1)} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-sm">‹</button>
+                <span className="text-xs font-semibold text-gray-600 w-10 text-center">{holidayYear}년</span>
+                <button onClick={() => setHolidayYear(y => y + 1)} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full text-sm">›</button>
+              </div>
             </div>
-          ) : vacUsers.length === 0 ? (
-            <div className="bg-white rounded-2xl px-4 py-10 shadow-sm border border-gray-100 flex items-center justify-center">
-              <p className="text-sm text-gray-400">직원이 없습니다</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {vacUsers.map((u, i) => (
-                <div key={u.id} className="bg-white rounded-2xl px-4 py-3.5 shadow-sm border border-gray-100 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                      style={{ backgroundColor: getInternColor(colorMap.get(u.id) ?? i) }}
-                    >
-                      {u.name.slice(0, 1)}
+            <div className="px-4 py-3 flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={newHolidayDate}
+                  onChange={e => setNewHolidayDate(e.target.value)}
+                  className="flex-1 h-9 px-3 rounded-xl border border-gray-200 text-xs outline-none focus:border-green-400 bg-gray-50"
+                />
+                <button
+                  onClick={handleHolidayAdd}
+                  disabled={!newHolidayDate || holidaySaving}
+                  className="h-9 px-4 rounded-xl text-xs font-semibold text-white disabled:opacity-40 whitespace-nowrap flex-shrink-0"
+                  style={{ backgroundColor: "#8dc63f" }}
+                >
+                  {holidaySaving ? "추가 중.." : "추가"}
+                </button>
+              </div>
+              {companyHolidays.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-3">{holidayYear}년 등록된 회사 휴일이 없습니다</p>
+              ) : (
+                <div className="flex flex-col gap-1 mt-1">
+                  {companyHolidays.map(h => (
+                    <div key={h.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-xl">
+                      <div>
+                        <span className="text-xs font-semibold text-gray-800">{h.date}</span>
+                        {h.description && <span className="text-xs text-gray-400 ml-2">{h.description}</span>}
+                      </div>
+                      <button
+                        onClick={() => setHolidayDeleteTarget(h.date)}
+                        className="text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded-lg hover:bg-red-50 transition-colors"
+                      >
+                        삭제
+                      </button>
                     </div>
-                    <span className="text-sm font-semibold text-gray-900">{u.name}</span>
-                  </div>
-                  <button
-                    onClick={() => openGrant(u)}
-                    className="text-xs text-white font-semibold px-3 py-1.5 rounded-lg"
-                    style={{ backgroundColor: "#8dc63f" }}
-                  >
-                    휴가 관리
-                  </button>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+              <p className="text-sm font-bold text-gray-800">직원 휴가 지급</p>
+            </div>
+            <div className="px-4 pt-3 pb-3 border-b border-gray-50">
+              <button
+                onClick={() => { setBulkOpen(true); setBulkYear(CURRENT_YEAR); setBulkHours(""); setBulkNote(""); setBulkSelected(new Set(vacUsers.map(u => u.id))); }}
+                className="w-full h-11 rounded-xl text-sm font-semibold text-white flex items-center justify-center"
+                style={{ backgroundColor: "#8dc63f" }}
+              >
+                일괄 지급
+              </button>
+            </div>
+            {vacUsersLoading ? (
+              <div className="px-4 py-10 flex items-center justify-center">
+                <p className="text-sm text-gray-400">불러오는 중...</p>
+              </div>
+            ) : vacUsers.length === 0 ? (
+              <div className="px-4 py-10 flex items-center justify-center">
+                <p className="text-sm text-gray-400">직원이 없습니다</p>
+              </div>
+            ) : (
+              <div className="flex flex-col divide-y divide-gray-50">
+                {vacUsers.map((u, i) => (
+                  <div key={u.id} className="px-4 py-3.5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                        style={{ backgroundColor: getInternColor(colorMap.get(u.id) ?? i) }}
+                      >
+                        {u.name.slice(0, 1)}
+                      </div>
+                      <span className="text-sm font-semibold text-gray-900">{u.name}</span>
+                    </div>
+                    <button
+                      onClick={() => openGrant(u)}
+                      className="text-xs text-white font-semibold px-3 py-1.5 rounded-lg"
+                      style={{ backgroundColor: "#8dc63f" }}
+                    >
+                      휴가 지급
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
 
@@ -1864,53 +2061,67 @@ export default function AdminAttendancePage() {
               <button onClick={() => setSelectedDay(null)} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xl">×</button>
             </div>
             <div className="px-5 pt-4 pb-6 flex flex-col gap-2 overflow-y-auto">
-              {scheduleInterns.map((intern: RealIntern, i: number) => {
-                const sched = getSchedule(intern.id, selectedDay);
-                if (sched.type === "hidden") return null;
-                return (
-                  <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }}>
-                        {intern.name.slice(0, 1)}
+              {(() => {
+                const selDateStr = `${calYear}-${String(calMonth).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`;
+                const selIsPublicHoliday = isHoliday(selDateStr);
+                const selIsCompanyHoliday = companyHolidaySet.has(selDateStr);
+                if (selIsPublicHoliday || selIsCompanyHoliday) {
+                  return (
+                    <div className="py-6 flex items-center justify-center">
+                      <span className={`text-sm font-semibold ${selIsPublicHoliday ? "text-red-400" : "text-green-700"}`}>
+                        {selIsPublicHoliday ? "공휴일" : "회사 휴일"}
+                      </span>
+                    </div>
+                  );
+                }
+                return scheduleInterns.map((intern: RealIntern, i: number) => {
+                  const sched = getSchedule(intern.id, selectedDay);
+                  if (sched.type === "hidden") return null;
+                  return (
+                    <div key={intern.id} className="flex items-center justify-between py-3 px-4 rounded-xl" style={{ backgroundColor: getInternBgRgba(colorMap.get(intern.id) ?? i) }}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: getInternColor(colorMap.get(intern.id) ?? i) }}>
+                          {intern.name.slice(0, 1)}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900">{intern.name}</span>
                       </div>
-                      <span className="text-sm font-semibold text-gray-900">{intern.name}</span>
+                      <div className="text-right">
+                        {sched.type === "event" ? (
+                          <div>
+                            {sched.event.label.includes("반차") ? (
+                              <>
+                                <p className="text-sm font-semibold text-gray-900">{getHalfDayWorkTime(sched.event.label)}</p>
+                                <p className="text-xs text-green-600 mt-0.5">반차</p>
+                              </>
+                            ) : (
+                              <>
+                                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                                  sched.event.type === "vacation" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                                }`}>
+                                  {sched.event.label}
+                                </span>
+                                {sched.event.destination && (
+                                  <p className="text-xs text-gray-400 mt-1">→ {sched.event.destination}</p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        ) : sched.type === "flex" ? (
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{sched.flex.isDayOff ? "휴무" : `${sched.flex.startTime} ~ ${sched.flex.endTime}`}</p>
+                            <p className="text-xs text-purple-500 mt-0.5">유연근무</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{DEFAULT_START} ~ {DEFAULT_END}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">기본</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      {sched.type === "event" ? (
-                        <div>
-                          {sched.event.label.includes("반차") ? (
-                            <>
-                              <p className="text-sm font-semibold text-gray-900">{getHalfDayWorkTime(sched.event.label)}</p>
-                              <p className="text-xs text-green-600 mt-0.5">반차</p>
-                            </>
-                          ) : (
-                            <>
-                              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                                sched.event.type === "vacation" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                              }`}>
-                                {sched.event.label}
-                              </span>
-                              {sched.event.destination && (
-                                <p className="text-xs text-gray-400 mt-1">→ {sched.event.destination}</p>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      ) : sched.type === "flex" ? (
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{sched.flex.isDayOff ? "휴무" : `${sched.flex.startTime} ~ ${sched.flex.endTime}`}</p>
-                          <p className="text-xs text-purple-500 mt-0.5">유연근무</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{DEFAULT_START} ~ {DEFAULT_END}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">기본</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireAdmin } from "@/lib/auth"
 import { countWorkingDays } from "@/lib/holidays"
+import { fetchCompanyHolidaySet } from "@/lib/companyHolidays.server"
 
 function calcRecordHours(clockIn: string | null, clockOut: string | null, lunchBreak: boolean | null): number {
   if (!clockIn || !clockOut) return 0
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
     let actualEnd: string
 
     if (mode === "monthly") {
-      expectedEnd = endDate  // 월 말일 기준으로 전체 영업일 산정
+      expectedEnd = endDate  // 월 말일 기준으로 전체 근무일 산정
       actualEnd = endDate < todayStr ? endDate : todayStr
     } else {
       const dayOfWeek = nowKST.getUTCDay()
@@ -67,16 +68,18 @@ export async function GET(req: Request) {
       actualEnd = expectedEnd
     }
 
+    const companyHolidays = await fetchCompanyHolidaySet();
+
     // 총근무일 기준: 설정 기간 전체(startDate ~ endDate)의 공휴일 제외 근로일수 × 하루 기본 근무시간
     const totalExpectedHours = startDate > endDate
       ? 0
-      : Math.round(countWorkingDays(startDate, endDate) * dailyWorkHours * 10) / 10
+      : Math.round(countWorkingDays(startDate, endDate, companyHolidays) * dailyWorkHours * 10) / 10
 
     if (startDate > expectedEnd) {
       return NextResponse.json({ configured: true, users: [], startDate, endDate, dailyWorkHours, expectedHours: 0, totalExpectedHours })
     }
 
-    const expectedHours = countWorkingDays(startDate, expectedEnd) * dailyWorkHours
+    const expectedHours = countWorkingDays(startDate, expectedEnd, companyHolidays) * dailyWorkHours
 
     const { data: users } = await supabaseAdmin
       .from("users")
@@ -140,7 +143,7 @@ export async function GET(req: Request) {
         const vacStart = vac.start_date > startDate ? vac.start_date : startDate
         const vacEnd = vac.end_date < actualEnd ? vac.end_date : actualEnd
         if (vacStart <= vacEnd) {
-          vacCreditMap[vac.user_id] = (vacCreditMap[vac.user_id] ?? 0) + countWorkingDays(vacStart, vacEnd) * dailyWorkHours
+          vacCreditMap[vac.user_id] = (vacCreditMap[vac.user_id] ?? 0) + countWorkingDays(vacStart, vacEnd, companyHolidays) * dailyWorkHours
         }
       }
     }

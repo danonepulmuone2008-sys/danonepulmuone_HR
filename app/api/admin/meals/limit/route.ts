@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireAdmin } from "@/lib/auth"
 import { calcBusinessDaysForPolicy } from "@/lib/holidays"
+import { fetchCompanyHolidaySet } from "@/lib/companyHolidays.server"
 
 export async function GET(req: Request) {
   try {
@@ -32,7 +33,8 @@ export async function GET(req: Request) {
 
     // DB 미등록 → holidays.ts 계산 후 자동 저장
     const dailyLimit = 10000
-    const { businessDays, holidayCount } = calcBusinessDaysForPolicy(year, month)
+    const companyHolidays = await fetchCompanyHolidaySet();
+    const { businessDays, holidayCount } = calcBusinessDaysForPolicy(year, month, {}, companyHolidays)
     const monthlyLimit = dailyLimit * businessDays
 
     await supabaseAdmin.from("monthly_meal_limits").upsert(
@@ -65,14 +67,16 @@ export async function PATCH(req: Request) {
     const auth = await requireAdmin(req)
     if (!auth.ok) return auth.response
 
-    const { year, month, dailyLimit, businessDays, holidayCount } = await req.json()
+    const { year, month, dailyLimit } = await req.json()
 
-    if (!year || !month || !dailyLimit || !businessDays) {
+    if (!year || !month || !dailyLimit) {
       return NextResponse.json({ error: "필수 값이 누락됐습니다" }, { status: 400 })
     }
 
-    const targetMonth    = `${year}-${String(month).padStart(2, "0")}-01`
-    const monthlyLimit   = dailyLimit * businessDays
+    const targetMonth = `${year}-${String(month).padStart(2, "0")}-01`
+    const companyHolidays = await fetchCompanyHolidaySet()
+    const { businessDays, holidayCount } = calcBusinessDaysForPolicy(year, month, {}, companyHolidays)
+    const monthlyLimit = dailyLimit * businessDays
 
     const { error } = await supabaseAdmin
       .from("monthly_meal_limits")
@@ -81,7 +85,7 @@ export async function PATCH(req: Request) {
           target_month:       targetMonth,
           daily_meal_limit:   dailyLimit,
           business_days:      businessDays,
-          holiday_count:      holidayCount ?? 0,
+          holiday_count:      holidayCount,
           monthly_meal_limit: monthlyLimit,
           updated_at:         new Date().toISOString(),
         },
@@ -90,7 +94,7 @@ export async function PATCH(req: Request) {
 
     if (error) throw error
 
-    return NextResponse.json({ monthlyLimit, dailyLimit, businessDays })
+    return NextResponse.json({ monthlyLimit, dailyLimit, businessDays, holidayCount })
   } catch (err) {
     console.error("[admin/meals/limit PATCH]", err)
     return NextResponse.json({ error: "저장에 실패했습니다" }, { status: 500 })

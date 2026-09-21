@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import AdminBottomNav from "@/components/AdminBottomNav";
-import { getMonthlyBusinessDays } from "@/lib/holidays";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { useMealStore } from "@/store/mealStore";
@@ -131,9 +130,6 @@ export default function AdminMealsPage() {
   // 한도 편집 상태
   const [showLimitEdit, setShowLimitEdit] = useState(false);
   const [editDailyLimit, setEditDailyLimit] = useState("");
-  const [editBusinessDays, setEditBusinessDays] = useState("");
-  const [editHolidayCount, setEditHolidayCount] = useState("");
-  const [editTotalWeekdays, setEditTotalWeekdays] = useState(0);
   const [savingLimit, setSavingLimit] = useState(false);
 
   const fetchLimit = useCallback(async () => {
@@ -295,20 +291,15 @@ async function saveItemAmount(receiptId: string, itemId: string) {
 
   function openLimitEdit() {
     if (!limitInfo) return;
-    const total = limitInfo.businessDays + limitInfo.holidayCount;
-    setEditTotalWeekdays(total);
     setEditDailyLimit(String(limitInfo.dailyLimit));
-    setEditBusinessDays(String(limitInfo.businessDays));
-    setEditHolidayCount(String(limitInfo.holidayCount));
     setShowLimitEdit(true);
   }
 
   async function saveLimit() {
     const token = await getToken();
     if (!token) return;
-    const dailyLimit   = Number(editDailyLimit);
-    const businessDays = Number(editBusinessDays);
-    if (!dailyLimit || !businessDays) return;
+    const dailyLimit = Number(editDailyLimit);
+    if (!dailyLimit) return;
     setSavingLimit(true);
     try {
       const res = await fetch("/api/admin/meals/limit", {
@@ -317,7 +308,7 @@ async function saveItemAmount(receiptId: string, itemId: string) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ year: viewYear, month: viewMonth, dailyLimit, businessDays, holidayCount: Number(editHolidayCount) || 0 }),
+        body: JSON.stringify({ year: viewYear, month: viewMonth, dailyLimit }),
       });
       if (!res.ok) return;
       await fetchLimit();
@@ -329,7 +320,6 @@ async function saveItemAmount(receiptId: string, itemId: string) {
 
   const totalLimit = limitInfo?.monthlyLimit ?? 0;
   const selectedUser = users.find((u) => u.id === selectedUserId);
-  const previewLimit = Number(editDailyLimit) * Number(editBusinessDays);
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-gray-50">
@@ -742,50 +732,26 @@ async function saveItemAmount(receiptId: string, itemId: string) {
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">영업일 수</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editBusinessDays}
-                    onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditBusinessDays(e.target.value); setEditHolidayCount(String(Math.max(0, editTotalWeekdays - Number(e.target.value)))); } }}
-                    className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
-                    placeholder={String(getMonthlyBusinessDays(viewYear, viewMonth))}
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
+              {limitInfo && (
+                <div className="bg-gray-50 rounded-xl px-4 py-3 text-xs text-gray-500">
+                  근무일 수는 공휴일·회사 휴일을 제외하여 자동 계산됩니다 ({limitInfo.businessDays}일)
                 </div>
-              </div>
+              )}
 
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">공휴일 수</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={editHolidayCount}
-                    onChange={(e) => { if (/\D/.test(e.target.value)) { alertNumeric(); } else { setEditHolidayCount(e.target.value); setEditBusinessDays(String(Math.max(0, editTotalWeekdays - Number(e.target.value)))); } }}
-                    className="w-full h-11 px-4 pr-8 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
-                    placeholder="0"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">일</span>
-                </div>
-              </div>
-
-              {editDailyLimit && editBusinessDays && (
+              {editDailyLimit && limitInfo && (
                 <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center justify-between">
                   <span className="text-xs text-blue-600">
-                    {Number(editDailyLimit).toLocaleString()}원 × {editBusinessDays}일
+                    {Number(editDailyLimit).toLocaleString()}원 × {limitInfo.businessDays}일
                   </span>
                   <span className="text-sm font-bold text-blue-700">
-                    = {previewLimit.toLocaleString()}원
+                    = {(Number(editDailyLimit) * limitInfo.businessDays).toLocaleString()}원
                   </span>
                 </div>
               )}
 
               <button
                 onClick={saveLimit}
-                disabled={savingLimit || !editDailyLimit || !editBusinessDays}
+                disabled={savingLimit || !editDailyLimit}
                 className="w-full h-12 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
                 style={{ backgroundColor: "#8dc63f" }}
               >

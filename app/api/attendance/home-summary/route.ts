@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireUser } from "@/lib/auth"
 import { getWorkingDaysInWeek, isHoliday } from "@/lib/holidays"
+import { fetchCompanyHolidaySet } from "@/lib/companyHolidays.server"
 import { kstMinutesOfDay, overlapHours, toWindow, type HourlyVacWindow } from "@/lib/workHours"
 
 const KST = 9 * 60 * 60 * 1000
@@ -166,7 +167,8 @@ export async function GET(req: Request) {
   weeklyHours += tripTotal + vacTotal
 
   const mondayDate = monday
-  const weeklyGoal = getWorkingDaysInWeek(mondayDate) * 5
+  const companyHolidays = await fetchCompanyHolidaySet()
+  const weeklyGoal = getWorkingDaysInWeek(mondayDate, companyHolidays) * 5
 
   return NextResponse.json({
     profile: {

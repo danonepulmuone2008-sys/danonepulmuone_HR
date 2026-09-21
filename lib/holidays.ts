@@ -47,12 +47,14 @@ const KOREAN_HOLIDAYS: Record<number, string[]> = {
   ],
 };
 
-function getHolidaySet(year: number): Set<string> {
-  return new Set(KOREAN_HOLIDAYS[year] ?? []);
+function getHolidaySet(year: number, extraHolidays?: Set<string>): Set<string> {
+  const base = new Set(KOREAN_HOLIDAYS[year] ?? []);
+  extraHolidays?.forEach(d => base.add(d));
+  return base;
 }
 
-export function getMonthlyBusinessDays(year: number, month: number): number {
-  const holidays = getHolidaySet(year);
+export function getMonthlyBusinessDays(year: number, month: number, extraHolidays?: Set<string>): number {
+  const holidays = getHolidaySet(year, extraHolidays);
   const daysInMonth = new Date(year, month, 0).getDate();
   let count = 0;
 
@@ -69,8 +71,8 @@ export function getMonthlyBusinessDays(year: number, month: number): number {
   return count;
 }
 
-export function getMonthlyHolidayCount(year: number, month: number): number {
-  const holidays = getHolidaySet(year);
+export function getMonthlyHolidayCount(year: number, month: number, extraHolidays?: Set<string>): number {
+  const holidays = getHolidaySet(year, extraHolidays);
   const daysInMonth = new Date(year, month, 0).getDate();
   let count = 0;
   for (let day = 1; day <= daysInMonth; day++) {
@@ -82,15 +84,16 @@ export function getMonthlyHolidayCount(year: number, month: number): number {
   return count;
 }
 
-// meal_policy 옵션을 반영한 한 번의 루프로 영업일·공휴일 수 동시 계산
+// meal_policy 옵션을 반영한 한 번의 루프로 근무일·공휴일 수 동시 계산
 export function calcBusinessDaysForPolicy(
   year: number,
   month: number,
-  opts: { includeHoliday?: boolean; includeWeekend?: boolean } = {}
+  opts: { includeHoliday?: boolean; includeWeekend?: boolean } = {},
+  extraHolidays?: Set<string>
 ): { businessDays: number; holidayCount: number } {
   const includeHoliday = opts.includeHoliday ?? false
   const includeWeekend = opts.includeWeekend ?? false
-  const holidays = includeHoliday ? new Set<string>() : getHolidaySet(year)
+  const holidays = includeHoliday ? new Set<string>() : getHolidaySet(year, extraHolidays)
   const daysInMonth = new Date(year, month, 0).getDate()
   let businessDays = 0
   let holidayCount = 0
@@ -104,14 +107,14 @@ export function calcBusinessDaysForPolicy(
   return { businessDays, holidayCount }
 }
 
-// 영업일 * 10,000원
-export function getMealLimit(year: number, month: number): number {
-  return getMonthlyBusinessDays(year, month) * 10000;
+// 근무일 * 10,000원
+export function getMealLimit(year: number, month: number, extraHolidays?: Set<string>): number {
+  return getMonthlyBusinessDays(year, month, extraHolidays) * 10000;
 }
 
-export function isHoliday(dateStr: string): boolean {
+export function isHoliday(dateStr: string, extraHolidays?: Set<string>): boolean {
   const year = parseInt(dateStr.substring(0, 4));
-  return getHolidaySet(year).has(dateStr);
+  return getHolidaySet(year, extraHolidays).has(dateStr);
 }
 
 export function fmtDate(d: Date): string {
@@ -126,22 +129,22 @@ export function getMondayOfWeek(date: Date): Date {
   return d;
 }
 
-// 해당 주(monday 기준)의 영업일 수 반환 — 공휴일 제외한 월~금
-export function getWorkingDaysInWeek(monday: Date): number {
+// 해당 주(monday 기준)의 근무일 수 반환 — 공휴일 제외한 월~금
+export function getWorkingDaysInWeek(monday: Date, extraHolidays?: Set<string>): number {
   const yearSet = new Map<number, Set<string>>();
   let count = 0;
   for (let i = 0; i < 5; i++) {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
     const yr = d.getFullYear();
-    if (!yearSet.has(yr)) yearSet.set(yr, getHolidaySet(yr));
+    if (!yearSet.has(yr)) yearSet.set(yr, getHolidaySet(yr, extraHolidays));
     if (!yearSet.get(yr)!.has(fmtDate(d))) count++;
   }
   return count;
 }
 
-// 두 날짜 사이의 영업일 수 반환 — 주말·공휴일 제외
-export function countWorkingDays(startDate: string, endDate: string): number {
+// 두 날짜 사이의 근무일 수 반환 — 주말·공휴일 제외
+export function countWorkingDays(startDate: string, endDate: string, extraHolidays?: Set<string>): number {
   const start = new Date(startDate + "T00:00:00");
   const end = new Date(endDate + "T00:00:00");
   const yearSet = new Map<number, Set<string>>();
@@ -151,7 +154,7 @@ export function countWorkingDays(startDate: string, endDate: string): number {
     const dow = d.getDay();
     if (dow !== 0 && dow !== 6) {
       const yr = d.getFullYear();
-      if (!yearSet.has(yr)) yearSet.set(yr, getHolidaySet(yr));
+      if (!yearSet.has(yr)) yearSet.set(yr, getHolidaySet(yr, extraHolidays));
       if (!yearSet.get(yr)!.has(fmtDate(d))) count++;
     }
     d.setDate(d.getDate() + 1);
