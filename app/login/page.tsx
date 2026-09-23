@@ -35,7 +35,14 @@ export default function LoginPage() {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        setLoginError("이메일 또는 비밀번호가 틀렸습니다");
+        const msg = error.message?.toLowerCase() ?? "";
+        if (error.status === 429 || msg.includes("rate limit") || msg.includes("too many")) {
+          setLoginError("로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.");
+        } else if (error.status && error.status >= 500) {
+          setLoginError("서버에 일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        } else {
+          setLoginError("이메일 또는 비밀번호가 틀렸습니다");
+        }
       } else {
         const { data: userData } = await supabase.from("users").select("is_active, role").eq("id", data.user.id).single();
         if (userData?.is_active === false) {
