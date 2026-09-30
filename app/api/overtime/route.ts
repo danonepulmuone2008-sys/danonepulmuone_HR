@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { supabaseAdmin } from "@/lib/supabase-server"
 import { requireUser } from "@/lib/auth"
 import { countWorkingDays } from "@/lib/holidays"
+import { fetchCompanyHolidaySet } from "@/lib/companyHolidays.server"
 
 function calcRecordHours(clockIn: string | null, clockOut: string | null, lunchBreak: boolean | null): number {
   if (!clockIn || !clockOut) return 0
@@ -69,7 +70,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ configured: true, overtimeHours: 0, expectedHours: 0, actualHours: 0, startDate, endDate, dailyWorkHours })
     }
 
-    const expectedHours = countWorkingDays(startDate, effectiveEnd) * dailyWorkHours
+    const companyHolidays = await fetchCompanyHolidaySet()
+    const expectedHours = countWorkingDays(startDate, effectiveEnd, companyHolidays) * dailyWorkHours
 
     const { data: userProfile } = await supabaseAdmin
       .from("users")
@@ -124,7 +126,7 @@ export async function GET(req: Request) {
         const vacStart = vac.start_date > startDate ? vac.start_date : startDate
         const vacEnd = vac.end_date < effectiveEnd ? vac.end_date : effectiveEnd
         if (vacStart <= vacEnd) {
-          vacationCreditHours += countWorkingDays(vacStart, vacEnd) * dailyWorkHours
+          vacationCreditHours += countWorkingDays(vacStart, vacEnd, companyHolidays) * dailyWorkHours
         }
       }
     }
