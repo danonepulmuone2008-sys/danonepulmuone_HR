@@ -79,8 +79,8 @@ type VacUsage = {
 
 type RecordsUser = { id: string; name: string; use_session_tracking?: boolean }
 type EditSession = { id?: string; start: string; end: string; lunch_break: boolean }
-type OvertimeSettings = { daily_work_hours: number; start_date: string; end_date: string; mode: "monthly" | "custom" }
-type OvertimeUser = { id: string; name: string; actualHours: number; expectedHours: number; overtimeHours: number }
+type OvertimePeriod = { id: string; name: string; start_date: string; end_date: string; daily_work_hours: number; created_at: string }
+type OvertimeUser = { id: string; name: string; actualHours: number }
 type RecordsData = {
   users: RecordsUser[]
   weekDates: string[]
@@ -318,17 +318,23 @@ export default function AdminAttendancePage() {
   const [bulkGranting, setBulkGranting] = useState(false);
 
   // 초과근무 상태
-  const [overtimeSettings, setOvertimeSettings] = useState<OvertimeSettings | null>(null);
-  const [overtimeSettingsLoading, setOvertimeSettingsLoading] = useState(false);
-  const [editOvertimeSettings, setEditOvertimeSettings] = useState<OvertimeSettings>({ daily_work_hours: 8, start_date: "", end_date: "", mode: "monthly" });
-  const [overtimeSettingsSaving, setOvertimeSettingsSaving] = useState(false);
-  const [overtimeAllUsers, setOvertimeAllUsers] = useState<OvertimeUser[]>([]);
-  const [overtimeMode, setOvertimeMode] = useState<"monthly" | "custom">("monthly");
-  const [overtimePeriodExpected, setOvertimePeriodExpected] = useState<number>(0);
-  const [overtimeTotalExpected, setOvertimeTotalExpected] = useState<number>(0);
+  const [overtimePeriods, setOvertimePeriods] = useState<OvertimePeriod[]>([]);
+  const [overtimePeriodsLoading, setOvertimePeriodsLoading] = useState(false);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  const [overtimePeriodData, setOvertimePeriodData] = useState<{ users: OvertimeUser[]; periodExpectedHours: number; totalExpectedHours: number } | null>(null);
+  const [overtimePeriodDataLoading, setOvertimePeriodDataLoading] = useState(false);
   const [overtimeView, setOvertimeView] = useState<"period" | "total">("period");
-  const [overtimeAllLoading, setOvertimeAllLoading] = useState(false);
-  const [dailyHoursInput, setDailyHoursInput] = useState("8");
+  const [showPeriodSheet, setShowPeriodSheet] = useState(false);
+  const [editingPeriodId, setEditingPeriodId] = useState<string | null>(null);
+  const [periodForm, setPeriodForm] = useState({ name: "", start_date: "", end_date: "", daily_work_hours: "8" });
+  const [periodFormUserIds, setPeriodFormUserIds] = useState<string[]>([]);
+  const [periodFormOriginalUserIds, setPeriodFormOriginalUserIds] = useState<string[]>([]);
+  const [periodFormUsersLoading, setPeriodFormUsersLoading] = useState(false);
+  const [periodSaving, setPeriodSaving] = useState(false);
+  const [deletingPeriodId, setDeletingPeriodId] = useState<string | null>(null);
+  const [confirmDeletePeriodId, setConfirmDeletePeriodId] = useState<string | null>(null);
+  const [periodPage, setPeriodPage] = useState(0);
+  const [allActiveUsers, setAllActiveUsers] = useState<{ id: string; name: string }[]>([]);
 
   // 근무 기록 수정 상태
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -382,10 +388,16 @@ export default function AdminAttendancePage() {
 
   useEffect(() => {
     if (activeTab !== "records") return;
-    fetchOvertimeSettings();
-    fetchOvertimeAll();
+    fetchOvertimePeriods();
+    fetchAllActiveUsers();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!selectedPeriodId) return;
+    fetchOvertimePeriodData(selectedPeriodId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPeriodId]);
 
   useEffect(() => {
     if (activeTab !== "vacation") return;
@@ -527,68 +539,201 @@ export default function AdminAttendancePage() {
     }
   }
 
-  async function fetchOvertimeSettings() {
+  async function fetchOvertimePeriods() {
     const token = user?.token;
     if (!token) return;
-    setOvertimeSettingsLoading(true);
+    setOvertimePeriodsLoading(true);
     try {
-      const res = await fetch("/api/admin/overtime-settings", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch("/api/admin/overtime-periods", { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
-      const data: OvertimeSettings = await res.json();
-      setOvertimeSettings(data);
-      setEditOvertimeSettings(data);
-      setDailyHoursInput(String(data.daily_work_hours));
+      const data: OvertimePeriod[] = await res.json();
+      setOvertimePeriods(data);
+      // 오늘 포함된 기간 자동 선택, 없으면 첫 번째
+      if (data.length > 0 && !selectedPeriodId) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const active = data.find(p => p.start_date <= todayStr && p.end_date >= todayStr);
+        setSelectedPeriodId(active?.id ?? data[0].id);
+      }
     } catch { /* silent */ }
-    finally { setOvertimeSettingsLoading(false); }
+    finally { setOvertimePeriodsLoading(false); }
   }
 
-  async function fetchOvertimeAll() {
+  async function fetchOvertimePeriodData(periodId: string) {
     const token = user?.token;
     if (!token) return;
-    setOvertimeAllLoading(true);
+    setOvertimePeriodDataLoading(true);
     try {
-      const res = await fetch("/api/admin/overtime", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`/api/admin/overtime?periodId=${periodId}`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
       const data = await res.json();
       if (data.configured) {
-        setOvertimeAllUsers(data.users ?? []);
-        setOvertimeMode(data.mode ?? "monthly");
-        setOvertimePeriodExpected(data.expectedHours ?? 0);
-        setOvertimeTotalExpected(data.totalExpectedHours ?? 0);
+        setOvertimePeriodData({
+          users: data.users ?? [],
+          periodExpectedHours: data.periodExpectedHours ?? 0,
+          totalExpectedHours: data.totalExpectedHours ?? 0,
+        });
       } else {
-        setOvertimeAllUsers([]);
+        setOvertimePeriodData(null);
       }
     } catch { /* silent */ }
-    finally { setOvertimeAllLoading(false); }
+    finally { setOvertimePeriodDataLoading(false); }
   }
 
-  async function saveOvertimeSettings() {
-    const parsed = parseInt(dailyHoursInput, 10);
-    if (!dailyHoursInput.trim() || isNaN(parsed) || parsed <= 0) {
-      setOvertimeToast("숫자를 입력해주세요.");
-      setTimeout(() => setOvertimeToast(null), 3000);
-      return;
-    }
+  async function fetchAllActiveUsers() {
     const token = user?.token;
     if (!token) return;
-    setOvertimeSettingsSaving(true);
     try {
-      const payload = { ...editOvertimeSettings, daily_work_hours: parsed };
-      const res = await fetch("/api/admin/overtime-settings", {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        setOvertimeSettings(payload);
-        setEditOvertimeSettings(payload);
-        fetchOvertimeAll();
-        setOvertimeToast("저장되었습니다.");
-        setTimeout(() => setOvertimeToast(null), 2000);
+      const res = await fetch("/api/admin/interns", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      setAllActiveUsers((data.interns ?? []).filter((u: any) => u.is_active !== false).map((u: any) => ({ id: u.id, name: u.name })));
+    } catch { /* silent */ }
+  }
+
+  async function openPeriodSheet(period?: OvertimePeriod) {
+    const allIds = allActiveUsers.map(u => u.id);
+    if (period) {
+      setEditingPeriodId(period.id);
+      setPeriodForm({ name: period.name, start_date: period.start_date, end_date: period.end_date, daily_work_hours: String(period.daily_work_hours) });
+      const token = user?.token;
+      setPeriodFormUsersLoading(true);
+      setPeriodFormUserIds(allIds);
+      setPeriodFormOriginalUserIds([]);
+      setShowPeriodSheet(true);
+      if (token) {
+        try {
+          const res = await fetch(`/api/admin/overtime-periods/${period.id}/users`, { headers: { Authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            const ids: string[] = await res.json();
+            const effective = ids.length === 0 ? allIds : ids;
+            setPeriodFormUserIds(effective);
+            setPeriodFormOriginalUserIds(ids);
+          }
+        } finally { setPeriodFormUsersLoading(false); }
       }
-    } finally {
-      setOvertimeSettingsSaving(false);
+    } else {
+      setEditingPeriodId(null);
+      setPeriodForm({ name: "", start_date: "", end_date: "", daily_work_hours: "8" });
+      setPeriodFormUserIds([]);
+      setPeriodFormOriginalUserIds([]);
+      setPeriodFormUsersLoading(false);
+      setShowPeriodSheet(true);
     }
+  }
+
+  async function savePeriod() {
+    const token = user?.token;
+    if (!token) return;
+    const { name, start_date, end_date, daily_work_hours } = periodForm;
+    if (!start_date || !end_date || !daily_work_hours) {
+      setOvertimeToast("기간과 하루 근무시간을 입력해주세요.");
+      setTimeout(() => setOvertimeToast(null), 2500);
+      return;
+    }
+    setPeriodSaving(true);
+    try {
+      // 직원 배정 사전 검증 (기간 생성/수정 전)
+      const allIds = allActiveUsers.map(u => u.id);
+      const isSelectingAll = allIds.every(id => periodFormUserIds.includes(id));
+      const toAdd = isSelectingAll ? [] : periodFormUserIds.filter(id => !periodFormOriginalUserIds.includes(id));
+
+      if (toAdd.length > 0) {
+        const validateRes = await fetch("/api/admin/overtime-periods/validate", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userIds: toAdd,
+            startDate: start_date,
+            endDate: end_date,
+            excludePeriodId: editingPeriodId ?? undefined,
+          }),
+        });
+        if (validateRes.ok) {
+          const { conflicts } = await validateRes.json();
+          if (conflicts && conflicts.length > 0) {
+            const names = conflicts.map((c: { userName: string }) => c.userName).join(", ");
+            const msg = `${names}은(는) 겹치는 기간에 이미 배정되어 있어 저장할 수 없습니다.`;
+            setOvertimeToast(msg);
+            setTimeout(() => setOvertimeToast(null), 4000);
+            return;
+          }
+        }
+      }
+
+      const url = editingPeriodId ? `/api/admin/overtime-periods/${editingPeriodId}` : "/api/admin/overtime-periods";
+      const method = editingPeriodId ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name, start_date, end_date, daily_work_hours: Number(daily_work_hours) }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setOvertimeToast(err.error ?? "저장 실패");
+        setTimeout(() => setOvertimeToast(null), 2500);
+        return;
+      }
+      const saved: OvertimePeriod = await res.json();
+
+      // 직원 배정 저장
+      if (isSelectingAll) {
+        // 전체 선택 = all apply → 기존 명시 배정만 삭제
+        await Promise.all(periodFormOriginalUserIds.map(id =>
+          fetch(`/api/admin/overtime-periods/${saved.id}/users`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: id }),
+          })
+        ));
+      } else {
+        const toRemove = periodFormOriginalUserIds.filter(id => !periodFormUserIds.includes(id));
+        await Promise.all([
+          ...toAdd.map(id => fetch(`/api/admin/overtime-periods/${saved.id}/users`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: id }),
+          })),
+          ...toRemove.map(id => fetch(`/api/admin/overtime-periods/${saved.id}/users`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: id }),
+          })),
+        ]);
+      }
+
+      if (editingPeriodId) {
+        setOvertimePeriods(prev => prev.map(p => p.id === editingPeriodId ? saved : p));
+        if (selectedPeriodId === editingPeriodId) fetchOvertimePeriodData(editingPeriodId);
+      } else {
+        setOvertimePeriods(prev => [saved, ...prev]);
+        setSelectedPeriodId(saved.id);
+        setPeriodPage(0);
+      }
+      setShowPeriodSheet(false);
+      setOvertimeToast(editingPeriodId ? "수정되었습니다." : "기간이 추가되었습니다.");
+      setTimeout(() => setOvertimeToast(null), 2000);
+    } finally { setPeriodSaving(false); }
+  }
+
+  async function deletePeriod(periodId: string) {
+    const token = user?.token;
+    if (!token) return;
+    setDeletingPeriodId(periodId);
+    try {
+      const res = await fetch(`/api/admin/overtime-periods/${periodId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { setOvertimeToast("삭제 실패"); setTimeout(() => setOvertimeToast(null), 2000); return; }
+      setOvertimePeriods(prev => prev.filter(p => p.id !== periodId));
+      if (selectedPeriodId === periodId) {
+        const remaining = overtimePeriods.filter(p => p.id !== periodId);
+        setSelectedPeriodId(remaining[0]?.id ?? null);
+        setOvertimePeriodData(null);
+      }
+      setOvertimeToast("삭제되었습니다.");
+      setTimeout(() => setOvertimeToast(null), 2000);
+    } finally { setDeletingPeriodId(null); }
   }
 
   async function fetchRequests(history = false) {
@@ -1339,157 +1484,275 @@ export default function AdminAttendancePage() {
               </div>
 
               {/* 초과근무 섹션 */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                {/* 헤더 */}
-                <div className="px-4 py-3 border-b border-gray-200">
-                  <p className="text-sm font-semibold text-gray-800">초과근무</p>
-                  {overtimeSettings && (overtimeSettings.mode === "monthly" || (overtimeSettings.start_date && overtimeSettings.end_date)) ? (
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {overtimeSettings.mode === "monthly"
-                        ? `${new Date().getFullYear()}년 ${new Date().getMonth() + 1}월 · 하루 ${overtimeSettings.daily_work_hours}시간 기준 · 이번 달 기준`
-                        : `${overtimeSettings.start_date.replace(/-/g, ".")} ~ ${overtimeSettings.end_date.replace(/-/g, ".")} · 하루 ${overtimeSettings.daily_work_hours}시간 기준`}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400 mt-0.5">기간 미설정</p>
-                  )}
-                </div>
-
-                {/* 직원별 표 */}
-                {(overtimeSettingsLoading || overtimeAllLoading) && overtimeAllUsers.length === 0 ? (
-                  <div className="py-8 flex items-center justify-center">
-                    <div className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-blue-500 animate-spin" />
-                  </div>
-                ) : (overtimeMode === "custom" && (!overtimeSettings?.start_date || !overtimeSettings?.end_date)) ? (
-                  <div className="py-8 flex items-center justify-center">
-                    <p className="text-sm text-gray-400">
-                      {user?.role === "admin" ? "아래에서 초과근무 기간을 설정해주세요" : "초과근무 기간이 설정되지 않았습니다"}
-                    </p>
-                  </div>
-                ) : overtimeAllUsers.length === 0 ? (
-                  <div className="py-8 flex items-center justify-center">
-                    <p className="text-sm text-gray-400">데이터 없음</p>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <div className={`transition-opacity duration-150 ${overtimeSettingsLoading || overtimeAllLoading ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-                      {/* 기준 토글 (직접 설정 시에만) */}
-                      {overtimeMode === "custom" && (
-                        <div className="px-4 pt-3 pb-2">
-                          <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium">
-                            {([
-                              { key: "period", label: "이번 주 기준" },
-                              { key: "total",  label: "총 근무일 기준" },
-                            ] as const).map(({ key, label }, i) => (
-                              <button
-                                key={key}
-                                onClick={() => setOvertimeView(key)}
-                                className={`flex-1 py-2 transition-colors ${i > 0 ? "border-l border-gray-200" : ""} ${overtimeView === key ? "bg-blue-500 text-white" : "bg-white text-gray-400"}`}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-2 bg-white border-b border-gray-100">
-                        <span className="text-xs text-gray-500 font-semibold">이름</span>
-                        <span className="text-xs text-gray-500 font-semibold text-right">실근무</span>
-                        <span className="text-xs text-gray-500 font-semibold text-right">기준</span>
-                        <span className="text-xs text-gray-500 font-semibold text-right">초과/미달</span>
-                      </div>
-                      {overtimeAllUsers.map((u) => {
-                        const expected = overtimeMode === "monthly" || overtimeView === "period"
-                          ? overtimePeriodExpected
-                          : overtimeTotalExpected;
-                        const ot = Math.round((u.actualHours - expected) * 10) / 10;
-                        return (
-                          <div key={u.id} className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-3 border-b border-gray-100 items-center">
-                            <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
-                            <span className="text-xs text-gray-600 text-right">{u.actualHours}h</span>
-                            <span className="text-xs text-gray-400 text-right">{expected}h</span>
-                            <span className={`text-xs font-bold text-right ${ot > 0 ? "text-blue-600" : ot < 0 ? "text-orange-500" : "text-gray-400"}`}>
-                              {ot > 0 ? `+${ot}h` : ot < 0 ? `${ot}h` : "−"}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      <div className="border-t border-gray-200" />
-                    </div>
-                    {(overtimeSettingsLoading || overtimeAllLoading) && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
-                      </div>
+              <div className="flex flex-col gap-3">
+                {/* 기간 목록 카드 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-800">초과근무 기간</p>
+                    {user?.role === "admin" && (
+                      <button
+                        onClick={() => openPeriodSheet()}
+                        className="text-xs font-semibold text-blue-600 px-2 py-1"
+                      >
+                        + 기간 추가
+                      </button>
                     )}
                   </div>
-                )}
+                  {overtimePeriodsLoading ? (
+                    <div className="py-6 flex items-center justify-center">
+                      <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                    </div>
+                  ) : overtimePeriods.length === 0 ? (
+                    <div className="py-6 flex items-center justify-center">
+                      <p className="text-sm text-gray-400">{user?.role === "admin" ? "+ 기간 추가를 눌러 시작하세요" : "설정된 기간이 없습니다"}</p>
+                    </div>
+                  ) : (() => {
+                    const PAGE_SIZE = 3;
+                    const totalPages = Math.ceil(overtimePeriods.length / PAGE_SIZE);
+                    const pagePeriods = overtimePeriods.slice(periodPage * PAGE_SIZE, (periodPage + 1) * PAGE_SIZE);
+                    return (
+                      <>
+                        <div className="divide-y divide-gray-100">
+                          {pagePeriods.map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => setSelectedPeriodId(p.id)}
+                              className={`w-full px-4 py-3 flex items-center justify-between text-left transition-colors ${selectedPeriodId === p.id ? "bg-blue-50" : "bg-white"}`}
+                            >
+                              <div>
+                                <p className={`text-xs font-semibold ${selectedPeriodId === p.id ? "text-blue-700" : "text-gray-800"}`}>
+                                  {p.name || `${p.start_date.replace(/-/g, ".")} ~ ${p.end_date.replace(/-/g, ".")}`}
+                                </p>
+                                {p.name && (
+                                  <p className="text-[11px] text-gray-400 mt-0.5">{p.start_date.replace(/-/g, ".")} ~ {p.end_date.replace(/-/g, ".")} · 하루 {p.daily_work_hours}시간</p>
+                                )}
+                              </div>
+                              {user?.role === "admin" && (
+                                <div className="flex items-center gap-2 ml-2" onClick={e => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => openPeriodSheet(p)}
+                                    className="text-[11px] text-gray-400 px-2 py-1 rounded-lg border border-gray-200"
+                                  >
+                                    편집
+                                  </button>
+                                  <button
+                                    onClick={() => setConfirmDeletePeriodId(p.id)}
+                                    disabled={deletingPeriodId === p.id}
+                                    className="text-[11px] text-red-400 px-2 py-1 rounded-lg border border-red-100 disabled:opacity-50"
+                                  >
+                                    삭제
+                                  </button>
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-center gap-3 py-2 border-t border-gray-100">
+                            <button
+                              onClick={() => setPeriodPage(p => Math.max(0, p - 1))}
+                              disabled={periodPage === 0}
+                              className="text-xs text-gray-400 px-2 py-1 disabled:opacity-30"
+                            >
+                              ‹ 이전
+                            </button>
+                            <span className="text-xs text-gray-400">{periodPage + 1} / {totalPages}</span>
+                            <button
+                              onClick={() => setPeriodPage(p => Math.min(totalPages - 1, p + 1))}
+                              disabled={periodPage === totalPages - 1}
+                              className="text-xs text-gray-400 px-2 py-1 disabled:opacity-30"
+                            >
+                              다음 ›
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
 
-                {/* 설정 (admin only) */}
-                {user?.role === "admin" && (
-                  <div className="px-4 py-4 flex flex-col gap-3">
-                    <p className="text-xs font-semibold text-gray-500">세부 설정</p>
+                {/* 선택된 기간 결과 카드 */}
+                {selectedPeriodId && (() => {
+                  const period = overtimePeriods.find(p => p.id === selectedPeriodId);
+                  if (!period) return null;
+                  const expected = overtimeView === "period" ? overtimePeriodData?.periodExpectedHours ?? 0 : overtimePeriodData?.totalExpectedHours ?? 0;
+                  return (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{period.name || `${period.start_date.replace(/-/g, ".")} ~ ${period.end_date.replace(/-/g, ".")}`}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">{period.start_date.replace(/-/g, ".")} ~ {period.end_date.replace(/-/g, ".")} · 하루 {period.daily_work_hours}시간</p>
+                        </div>
+                      </div>
+                      {/* 기준 토글 */}
+                      <div className="px-4 pt-3 pb-2">
+                        <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium">
+                          {([
+                            { key: "period", label: "이번 주 기준" },
+                            { key: "total",  label: "총 근무일 기준" },
+                          ] as const).map(({ key, label }, i) => (
+                            <button
+                              key={key}
+                              onClick={() => setOvertimeView(key)}
+                              className={`flex-1 py-2 transition-colors ${i > 0 ? "border-l border-gray-200" : ""} ${overtimeView === key ? "bg-blue-500 text-white" : "bg-white text-gray-400"}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* 결과 테이블 */}
+                      <div className="relative">
+                        <div className={`transition-opacity duration-150 ${overtimePeriodDataLoading ? "opacity-0" : "opacity-100"}`}>
+                          <div className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-2 bg-white border-b border-gray-100">
+                            <span className="text-xs text-gray-500 font-semibold">이름</span>
+                            <span className="text-xs text-gray-500 font-semibold text-right">실근무</span>
+                            <span className="text-xs text-gray-500 font-semibold text-right">기준</span>
+                            <span className="text-xs text-gray-500 font-semibold text-right">초과/미달</span>
+                          </div>
+                          {(overtimePeriodData?.users ?? []).length === 0 ? (
+                            <div className="py-6 flex items-center justify-center">
+                              <p className="text-sm text-gray-400">데이터 없음</p>
+                            </div>
+                          ) : (overtimePeriodData?.users ?? []).map((u) => {
+                            const ot = Math.round((u.actualHours - expected) * 10) / 10;
+                            return (
+                              <div key={u.id} className="grid grid-cols-[1fr_56px_56px_72px] px-4 py-3 border-b border-gray-100 items-center">
+                                <span className="text-xs font-semibold text-gray-800 truncate">{u.name}</span>
+                                <span className="text-xs text-gray-600 text-right">{u.actualHours}h</span>
+                                <span className="text-xs text-gray-400 text-right">{expected}h</span>
+                                <span className={`text-xs font-bold text-right ${ot > 0 ? "text-blue-600" : ot < 0 ? "text-orange-500" : "text-gray-400"}`}>
+                                  {ot > 0 ? `+${ot}h` : ot < 0 ? `${ot}h` : "−"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {overtimePeriodDataLoading && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* 기간 추가/편집 바텀시트 */}
+              {/* 기간 삭제 확인 모달 */}
+              {confirmDeletePeriodId && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-6" onClick={() => setConfirmDeletePeriodId(null)}>
+                  <div className="bg-white rounded-2xl w-full max-w-[320px] px-6 py-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
                     <div>
-                      <label className="text-xs text-gray-500 mb-1.5 block">하루 기본 근무시간</label>
+                      <p className="text-base font-bold text-gray-900">기간 삭제</p>
+                      <p className="text-sm text-gray-500 mt-1">삭제 후 복구할 수 없습니다. 삭제하시겠습니까?</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { deletePeriod(confirmDeletePeriodId); setConfirmDeletePeriodId(null); }}
+                        disabled={deletingPeriodId === confirmDeletePeriodId}
+                        className="flex-1 py-2.5 bg-red-500 text-white text-sm font-semibold rounded-xl disabled:opacity-60"
+                      >
+                        {deletingPeriodId === confirmDeletePeriodId ? "삭제 중..." : "삭제"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeletePeriodId(null)}
+                        className="flex-1 py-2.5 bg-gray-100 text-gray-600 text-sm font-semibold rounded-xl"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {showPeriodSheet && (
+                <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40" onClick={() => setShowPeriodSheet(false)}>
+                  <div className="bg-white rounded-t-3xl w-full max-w-[390px] px-5 pt-5 pb-8 flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: "85vh" }} onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-base font-bold text-gray-900">{editingPeriodId ? "기간 편집" : "기간 추가"}</p>
+                      <button onClick={() => setShowPeriodSheet(false)} className="text-gray-400 text-xl leading-none">×</button>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">기간 이름 (선택)</label>
+                      <input
+                        type="text"
+                        value={periodForm.name}
+                        onChange={e => setPeriodForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="예: 2026 Q4"
+                        className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">기간</label>
+                      <div className="flex items-center gap-2">
+                        <DatePicker value={periodForm.start_date} onChange={v => setPeriodForm(f => ({ ...f, start_date: v }))} className="flex-1" triggerClass="h-10 px-3" />
+                        <span className="text-xs text-gray-400">~</span>
+                        <DatePicker value={periodForm.end_date} onChange={v => setPeriodForm(f => ({ ...f, end_date: v }))} min={periodForm.start_date || undefined} className="flex-1" triggerClass="h-10 px-3" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">하루 기본 근무시간</label>
                       <div className="flex items-center gap-2">
                         <input
                           type="text"
                           inputMode="numeric"
-                          value={dailyHoursInput}
-                          onChange={e => {
-                            const raw = e.target.value;
-                            const filtered = raw.replace(/[^0-9]/g, "");
-                            if (filtered !== raw) {
-                              setOvertimeToast("숫자를 입력해주세요.");
-                              setTimeout(() => setOvertimeToast(null), 3000);
-                            }
-                            setDailyHoursInput(filtered);
-                          }}
-                          className="w-20 h-9 px-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-500 bg-gray-50"
+                          value={periodForm.daily_work_hours}
+                          onChange={e => setPeriodForm(f => ({ ...f, daily_work_hours: e.target.value.replace(/[^0-9]/g, "") }))}
+                          className="w-20 h-10 px-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-blue-400 bg-gray-50"
                         />
                         <span className="text-sm text-gray-500">시간</span>
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 mb-1.5 block">산정 기간</label>
-                      <div className="flex rounded-xl overflow-hidden border border-gray-200 text-xs font-medium mb-2">
-                        {(["monthly", "custom"] as const).map((m, i) => (
-                          <button
-                            key={m}
-                            onClick={() => setEditOvertimeSettings(prev => ({ ...prev, mode: m }))}
-                            className={`flex-1 py-2 transition-colors ${i > 0 ? "border-l border-gray-200" : ""} ${editOvertimeSettings.mode === m ? "bg-blue-500 text-white" : "bg-white text-gray-400"}`}
-                          >
-                            {m === "monthly" ? "월단위" : "직접 설정"}
-                          </button>
-                        ))}
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-gray-500">직원 배정 <span className="text-gray-400 font-normal">(미선택 시 전체 적용)</span></label>
+                        <button
+                          onClick={() => {
+                            const allIds = allActiveUsers.map(u => u.id);
+                            const isAllSelected = allIds.every(id => periodFormUserIds.includes(id));
+                            setPeriodFormUserIds(isAllSelected ? [] : allIds);
+                          }}
+                          className="text-[11px] text-blue-500 font-medium"
+                        >
+                          {allActiveUsers.every(u => periodFormUserIds.includes(u.id)) ? "전체 해제" : "전체 선택"}
+                        </button>
                       </div>
-                      {editOvertimeSettings.mode === "custom" && (
-                        <div className="flex items-center gap-2">
-                          <DatePicker
-                            value={editOvertimeSettings.start_date}
-                            onChange={v => setEditOvertimeSettings(prev => ({ ...prev, start_date: v }))}
-                            className="flex-1"
-                            triggerClass="h-9 px-3"
-                          />
-                          <span className="text-xs text-gray-400">~</span>
-                          <DatePicker
-                            value={editOvertimeSettings.end_date}
-                            onChange={v => setEditOvertimeSettings(prev => ({ ...prev, end_date: v }))}
-                            min={editOvertimeSettings.start_date || undefined}
-                            className="flex-1"
-                            triggerClass="h-9 px-3"
-                          />
+                      {periodFormUsersLoading ? (
+                        <div className="py-4 flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                        </div>
+                      ) : (
+                        <div className="flex flex-col divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                          {allActiveUsers.map(u => (
+                            <button
+                              key={u.id}
+                              onClick={() => setPeriodFormUserIds(prev =>
+                                prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                              )}
+                              className="flex items-center justify-between px-3 py-2.5 text-left w-full bg-white"
+                            >
+                              <span className="text-sm text-gray-800">{u.name}</span>
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${periodFormUserIds.includes(u.id) ? "border-blue-500 bg-blue-500" : "border-gray-300"}`}>
+                                {periodFormUserIds.includes(u.id) && <span className="text-white text-[10px] font-bold">✓</span>}
+                              </div>
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>
                     <button
-                      onClick={saveOvertimeSettings}
-                      disabled={overtimeSettingsSaving}
-                      className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl disabled:opacity-60 transition-opacity"
+                      onClick={savePeriod}
+                      disabled={periodSaving}
+                      className="w-full py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl disabled:opacity-60"
                     >
-                      {overtimeSettingsSaving ? "저장 중..." : "저장"}
+                      {periodSaving ? "저장 중..." : "저장"}
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
             </div>
           );
         })()

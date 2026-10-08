@@ -114,6 +114,10 @@ export default function AttendancePage() {
   const router = useRouter();
   const { user } = useAuth();
   const { profile: attProfile, loaded: attLoaded, fetchAll: fetchAttAll, vacRemaining, fetchVacRemaining, overtimeData, overtimeLoaded, overtimeWeekData, overtimeWeekLoaded, fetchOvertimeWeek } = useAttendanceStore();
+  const [selectedOvertimePeriodId, setSelectedOvertimePeriodId] = useState<string | null>(null);
+  const [periodOvertimeData, setPeriodOvertimeData] = useState<typeof overtimeData>(null);
+  const [periodOvertimeWeekData, setPeriodOvertimeWeekData] = useState<typeof overtimeWeekData>(null);
+  const [periodOvertimeLoading, setPeriodOvertimeLoading] = useState(false);
   const useSessionTracking = attProfile.use_session_tracking;
   const userId = user?.id ?? null;
 
@@ -435,6 +439,25 @@ export default function AttendancePage() {
     fetchOvertimeWeek(user.token);
   }, [user?.token, overtimeWeekLoaded, fetchOvertimeWeek]);
 
+  // 기간 선택 변경 시 해당 기간 데이터 재조회
+  useEffect(() => {
+    if (!selectedOvertimePeriodId || !user?.token) return;
+    // 이미 선택된 기간과 동일하면 store 데이터 사용
+    if (selectedOvertimePeriodId === overtimeData?.periodId) {
+      setPeriodOvertimeData(overtimeData);
+      setPeriodOvertimeWeekData(overtimeWeekData);
+      return;
+    }
+    setPeriodOvertimeLoading(true);
+    Promise.all([
+      fetch(`/api/overtime?periodId=${selectedOvertimePeriodId}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(r => r.ok ? r.json() : null),
+      fetch(`/api/overtime?basis=week&periodId=${selectedOvertimePeriodId}`, { headers: { Authorization: `Bearer ${user.token}` } }).then(r => r.ok ? r.json() : null),
+    ]).then(([today, week]) => {
+      setPeriodOvertimeData(today);
+      setPeriodOvertimeWeekData(week);
+    }).finally(() => setPeriodOvertimeLoading(false));
+  }, [selectedOvertimePeriodId, user?.token]);
+
   const handleOpenVacDetail = async () => {
     if (!userId) return;
     setShowVacDetail(true);
@@ -581,33 +604,60 @@ export default function AttendancePage() {
               </div>
             ))}
           </div>
-          {overtimeData?.configured && overtimeData.startDate && overtimeData.endDate && (
-            <div className="border-t border-gray-100 mt-4 pt-3.5">
-              <p className="text-xs text-gray-400 mb-3 text-center">
-                초과근무 현황 <span className="font-normal">(기간: {overtimeData.startDate.replace(/-/g, ".")} ~ {overtimeData.endDate.replace(/-/g, ".")})</span>
-              </p>
-              <div className="flex divide-x divide-gray-100">
-                {[
-                  { label: "오늘 기준", data: overtimeData, loaded: overtimeLoaded },
-                  { label: "이번 주 기준", data: overtimeWeekData, loaded: overtimeWeekLoaded },
-                ].map(({ label, data, loaded }) => {
-                  const h = data?.overtimeHours ?? 0;
-                  return (
-                    <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                      <p className="text-[11px] text-gray-400">{label}</p>
-                      {!loaded ? (
-                        <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
-                      ) : (
-                        <p className={`text-sm font-semibold ${h > 0 ? "text-blue-600" : h < 0 ? "text-orange-500" : "text-gray-500"}`}>
-                          {h === 0 ? "초과근무 없음" : h > 0 ? `${h}시간 초과근무` : `${Math.abs(h)}시간 근무 필요`}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+          {overtimeData?.configured && overtimeData.startDate && (() => {
+            const periods = overtimeData.periods ?? [];
+            const activePeriodId = selectedOvertimePeriodId ?? overtimeData.periodId ?? null;
+            const displayData = selectedOvertimePeriodId && selectedOvertimePeriodId !== overtimeData.periodId
+              ? periodOvertimeData
+              : overtimeData;
+            const displayWeekData = selectedOvertimePeriodId && selectedOvertimePeriodId !== overtimeData.periodId
+              ? periodOvertimeWeekData
+              : overtimeWeekData;
+            const displayLoaded = selectedOvertimePeriodId && selectedOvertimePeriodId !== overtimeData.periodId
+              ? !periodOvertimeLoading
+              : overtimeLoaded;
+            return (
+              <div className="border-t border-gray-100 mt-4 pt-3.5">
+                {periods.length > 1 && (
+                  <div className="flex justify-center mb-3">
+                    <select
+                      value={activePeriodId ?? ""}
+                      onChange={e => setSelectedOvertimePeriodId(e.target.value)}
+                      className="text-xs text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 bg-white outline-none focus:border-[#8dc63f] max-w-[240px] w-full"
+                    >
+                      {periods.map(p => {
+                        const label = p.name || `${p.start_date.replace(/-/g, ".")} ~ ${p.end_date.replace(/-/g, ".")}`;
+                        return <option key={p.id} value={p.id}>{label}</option>;
+                      })}
+                    </select>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 mb-3 text-center">
+                  초과근무 현황 <span className="font-normal">(기간: {(displayData?.startDate ?? overtimeData.startDate)?.replace(/-/g, ".")} ~ {(displayData?.endDate ?? overtimeData.endDate)?.replace(/-/g, ".")})</span>
+                </p>
+                <div className="flex divide-x divide-gray-100">
+                  {[
+                    { label: "오늘 기준", data: displayData },
+                    { label: "이번 주 기준", data: displayWeekData },
+                  ].map(({ label, data }) => {
+                    const h = data?.overtimeHours ?? 0;
+                    return (
+                      <div key={label} className="flex-1 flex flex-col items-center gap-1">
+                        <p className="text-[11px] text-gray-400">{label}</p>
+                        {!displayLoaded ? (
+                          <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+                        ) : (
+                          <p className={`text-sm font-semibold ${h > 0 ? "text-blue-600" : h < 0 ? "text-orange-500" : "text-gray-500"}`}>
+                            {h === 0 ? "초과근무 없음" : h > 0 ? `${h}시간 초과근무` : `${Math.abs(h)}시간 근무 필요`}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* 휴가 잔여 시간 카드 */}
