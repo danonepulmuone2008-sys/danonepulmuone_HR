@@ -9,8 +9,17 @@ export interface AttendanceProfile {
   use_session_tracking: boolean
 }
 
+export interface OvertimePeriodSummary {
+  id: string
+  name: string
+  start_date: string
+  end_date: string
+}
+
 export interface OvertimeData {
   configured: boolean
+  periodId?: string
+  periods?: OvertimePeriodSummary[]
   overtimeHours?: number
   actualHours?: number
   expectedHours?: number

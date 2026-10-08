@@ -22,74 +22,86 @@ export async function GET(req: Request) {
     const auth = await requireAdmin(req)
     if (!auth.ok) return auth.response
 
-    const { data: settingsRows } = await supabaseAdmin
-      .from("overtime_settings")
-      .select("key, value")
+    const { searchParams } = new URL(req.url)
+    const periodId = searchParams.get("periodId")
 
-    const settings = Object.fromEntries((settingsRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
-    const dailyWorkHours = Number(settings.daily_work_hours ?? 8)
-    const mode: "monthly" | "custom" = (settings.mode ?? "monthly") as "monthly" | "custom"
-
-    let startDate: string
-    let endDate: string
-
-    if (mode === "monthly") {
-      const nowKST = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
-      const y = nowKST.getUTCFullYear()
-      const m = nowKST.getUTCMonth()
-      const mm = String(m + 1).padStart(2, "0")
-      startDate = `${y}-${mm}-01`
-      endDate = `${y}-${mm}-${String(new Date(Date.UTC(y, m + 1, 0)).getUTCDate()).padStart(2, "0")}`
-    } else {
-      startDate = settings.start_date ?? ""
-      endDate = settings.end_date ?? ""
-      if (!startDate || !endDate) return NextResponse.json({ configured: false })
+    if (!periodId) {
+      return NextResponse.json({ configured: false })
     }
+
+    // 기간 조회
+    const { data: period, error: pErr } = await supabaseAdmin
+      .from("overtime_periods")
+      .select("*")
+      .eq("id", periodId)
+      .single()
+
+    if (pErr || !period) {
+      return NextResponse.json({ configured: false })
+    }
+
+    const { start_date: startDate, end_date: endDate, daily_work_hours: dailyWorkHours } = period
 
     const nowKST = new Date(new Date().getTime() + 9 * 60 * 60 * 1000)
     const kstDateStr = (d: Date) =>
       `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
     const todayStr = kstDateStr(nowKST)
 
-    // 기준(expected): 월단위는 월 전체, 직접설정은 금주까지
-    // 실근무(actual): 항상 오늘까지만 집계
-    let expectedEnd: string
-    let actualEnd: string
+    // 이번 주 기준: 이번 주 일요일까지
+    const dayOfWeek = nowKST.getUTCDay()
+    const endOfWeekKST = new Date(nowKST)
+    endOfWeekKST.setUTCDate(nowKST.getUTCDate() + (dayOfWeek === 0 ? 0 : 7 - dayOfWeek))
+    const endOfWeekStr = kstDateStr(endOfWeekKST)
 
-    if (mode === "monthly") {
-      expectedEnd = endDate  // 월 말일 기준으로 전체 근무일 산정
-      actualEnd = endDate < todayStr ? endDate : todayStr
-    } else {
-      const dayOfWeek = nowKST.getUTCDay()
-      const endOfWeekKST = new Date(nowKST)
-      endOfWeekKST.setUTCDate(nowKST.getUTCDate() + (dayOfWeek === 0 ? 0 : 7 - dayOfWeek))
-      const endOfWeekStr = kstDateStr(endOfWeekKST)
-      expectedEnd = endDate < endOfWeekStr ? endDate : endOfWeekStr
-      actualEnd = expectedEnd
-    }
+    const periodExpectedEnd = endDate < endOfWeekStr ? endDate : endOfWeekStr
+    const actualEnd = endDate < todayStr ? endDate : todayStr
 
-    const companyHolidays = await fetchCompanyHolidaySet();
+    const companyHolidays = await fetchCompanyHolidaySet()
 
-    // 총근무일 기준: 설정 기간 전체(startDate ~ endDate)의 공휴일 제외 근로일수 × 하루 기본 근무시간
+    // 총근무일 기준 기대 시간 (기간 전체)
     const totalExpectedHours = startDate > endDate
       ? 0
       : Math.round(countWorkingDays(startDate, endDate, companyHolidays) * dailyWorkHours * 10) / 10
 
-    if (startDate > expectedEnd) {
-      return NextResponse.json({ configured: true, users: [], startDate, endDate, dailyWorkHours, expectedHours: 0, totalExpectedHours })
+    // 이번 주 기준 기대 시간
+    const periodExpectedHours = startDate > periodExpectedEnd
+      ? 0
+      : Math.round(countWorkingDays(startDate, periodExpectedEnd, companyHolidays) * dailyWorkHours * 10) / 10
+
+    if (startDate > actualEnd) {
+      return NextResponse.json({
+        configured: true, users: [], startDate, endDate, dailyWorkHours,
+        periodExpectedHours, totalExpectedHours,
+      })
     }
 
-    const expectedHours = countWorkingDays(startDate, expectedEnd, companyHolidays) * dailyWorkHours
+    // 배정된 직원 조회 (없으면 전체 활성 직원)
+    const { data: assignedRows } = await supabaseAdmin
+      .from("overtime_period_users")
+      .select("user_id")
+      .eq("period_id", periodId)
 
-    const { data: users } = await supabaseAdmin
+    const assignedIds = (assignedRows ?? []).map((r: { user_id: string }) => r.user_id)
+    const useAllUsers = assignedIds.length === 0
+
+    let usersQuery = supabaseAdmin
       .from("users")
       .select("id, name, use_session_tracking")
       .eq("is_active", true)
       .eq("role", "employee")
       .order("name", { ascending: true })
 
+    if (!useAllUsers) {
+      usersQuery = usersQuery.in("id", assignedIds)
+    }
+
+    const { data: users } = await usersQuery
+
     if (!users || users.length === 0) {
-      return NextResponse.json({ configured: true, users: [], startDate, endDate, dailyWorkHours, expectedHours: Math.round(expectedHours * 10) / 10 })
+      return NextResponse.json({
+        configured: true, users: [], startDate, endDate, dailyWorkHours,
+        periodExpectedHours, totalExpectedHours,
+      })
     }
 
     const userIds = users.map((u) => u.id)
@@ -149,15 +161,8 @@ export async function GET(req: Request) {
     }
 
     const result = users.map((u) => {
-      const actualHours = (attendanceMap[u.id] ?? 0) + (vacCreditMap[u.id] ?? 0)
-      const overtimeHours = Math.round((actualHours - expectedHours) * 10) / 10
-      return {
-        id: u.id,
-        name: u.name,
-        actualHours: Math.round(actualHours * 10) / 10,
-        expectedHours: Math.round(expectedHours * 10) / 10,
-        overtimeHours,
-      }
+      const actualHours = Math.round(((attendanceMap[u.id] ?? 0) + (vacCreditMap[u.id] ?? 0)) * 10) / 10
+      return { id: u.id, name: u.name, actualHours }
     })
 
     return NextResponse.json({
@@ -166,9 +171,8 @@ export async function GET(req: Request) {
       startDate,
       endDate,
       dailyWorkHours,
-      expectedHours: Math.round(expectedHours * 10) / 10,
+      periodExpectedHours,
       totalExpectedHours,
-      mode,
     })
   } catch (err) {
     console.error("[admin/overtime GET]", err)
